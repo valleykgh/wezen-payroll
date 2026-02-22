@@ -1,0 +1,1 @@
+export default function Compliance(){ return <div>Compliance Page</div>; }
