@@ -24,4 +24,9 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   }
+  "scripts": {
+  "build": "next build",
+  "export": "next export",
+  "start": "next start"
+}
 }
