@@ -1,33 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-generator client {
-  provider = "prisma-client-js"
+enum UserRole {
+  ADMIN
+  EMPLOYEE
 }
-model Organization {
-  id Int @id @default(autoincrement())
-  name String
+
+enum TimeEntryStatus {
+  DRAFT
+  APPROVED
+  LOCKED
 }
+
 model User {
-  id Int @id @default(autoincrement())
-  email String @unique
-  password String
-  role String
-  organizationId Int
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  role          UserRole @default(EMPLOYEE)
+  employeeId    String?  @unique
+  employee      Employee? @relation(fields: [employeeId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdTimeEntries	TimeEntry[] @relation("TimeEntryCreatedBy")
 }
-model Contractor {
-  id Int @id @default(autoincrement())
-  name String
-  email String
-  hourlyRate Float
-  stripeAccountId String?
+
+model Employee {
+  id               String   @id @default(cuid())
+  legalName        String
+  preferredName    String?
+  email            String   @unique
+  hourlyRateCents  Int      @default(0)
+  active           Boolean  @default(true)
+  startDate        DateTime?
+  user             User?
+  timeEntries      TimeEntry[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
-model Timesheet {
-  id Int @id @default(autoincrement())
-  contractorId Int
-  hours Float
-  approved Boolean @default(false)
-  paid Boolean @default(false)
+
+model TimeEntry {
+  id            String          @id @default(cuid())
+  employeeId    String
+  employee      Employee        @relation(fields: [employeeId], references: [id])
+  workDate      DateTime
+  startTime     DateTime?
+  endTime       DateTime?
+  minutesWorked Int             @default(0)  // optional: store computed minutes for simplicity
+  breakMinutes  Int             @default(0)
+  notes         String?
+  status        TimeEntryStatus @default(DRAFT)
+  createdById   String?
+  createdBy     User?           @relation("TimeEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([employeeId, workDate])
 }
