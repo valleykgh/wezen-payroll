@@ -1,0 +1,111 @@
+import { PrismaClient } from "@prisma/client";
+import * as bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log("🌱 Seeding database...");
+
+  const ADMIN_ROLE = "ADMIN" as any;
+  const passwordHash = await bcrypt.hash("Admin123!", 10);
+
+  // Admin user
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@wezenstaffing.com" },
+    update: {},
+    create: {
+      email: "admin@wezenstaffing.com",
+      role: ADMIN_ROLE,
+      passwordHash,
+    } as any,
+  });
+
+  // Facility (safe even if Facility.name is NOT unique)
+  let facility = await prisma.facility.findFirst({
+    where: { name: "Vale Healthcare Center" } as any,
+  });
+
+  if (!facility) {
+    facility = await prisma.facility.create({
+      data: { name: "Vale Healthcare Center" } as any,
+    });
+  }
+
+  // Employees
+  const cna = await prisma.employee.upsert({
+    where: { email: "jane.cna@wezenstaffing.com" } as any,
+    update: {
+      legalName: "Jane CNA",
+      preferredName: "Jane",
+      hourlyRateCents: 2500,
+      billingRole: "CNA",
+    } as any,
+    create: {
+      legalName: "Jane CNA",
+      preferredName: "Jane",
+      email: "jane.cna@wezenstaffing.com",
+      hourlyRateCents: 2500,
+      billingRole: "CNA",
+    } as any,
+  });
+
+  const lvn = await prisma.employee.upsert({
+    where: { email: "john.lvn@wezenstaffing.com" } as any,
+    update: {
+      legalName: "John LVN",
+      preferredName: "John",
+      hourlyRateCents: 3500,
+      billingRole: "LVN",
+    } as any,
+    create: {
+      legalName: "John LVN",
+      preferredName: "John",
+      email: "john.lvn@wezenstaffing.com",
+      hourlyRateCents: 3500,
+      billingRole: "LVN",
+    } as any,
+  });
+
+  // Contract: avoid duplicates (create if none exists for this facility)
+  let contract = await prisma.facilityBillingContract.findFirst({
+    where: { facilityId: facility.id } as any,
+    orderBy: { effectiveFrom: "desc" } as any,
+  });
+
+  if (!contract) {
+    contract = await prisma.facilityBillingContract.create({
+      data: {
+        facilityId: facility.id,
+        title: "Default 2026 Contract",
+        effectiveFrom: new Date("2026-01-01"),
+        isLocked: false,
+        lockedById: null,
+      } as any,
+    });
+  }
+
+  // Rates: upsert per (contractId, role) if you have @@unique([contractId, role])
+  // If you DON'T have that unique, replace with deleteMany+createMany.
+  const roles = [
+    { role: "CNA", regRateCents: 4500, otRateCents: 6750, dtRateCents: 9000, holidayRateCents: 9000 },
+    { role: "LVN", regRateCents: 6500, otRateCents: 9750, dtRateCents: 13000, holidayRateCents: 13000 },
+  ];
+
+  // safest generic approach:
+  await prisma.facilityBillingRate.deleteMany({ where: { contractId: contract.id } as any });
+  await prisma.facilityBillingRate.createMany({
+    data: roles.map((r) => ({ contractId: contract.id, ...r })) as any,
+  });
+
+  console.log("✅ Seed complete");
+  console.log({ adminId: admin.id, facilityId: facility.id, cnaId: cna.id, lvnId: lvn.id });
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

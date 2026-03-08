@@ -1,0 +1,60 @@
+import { Router } from "express";
+import { prisma } from "../prisma";
+import { requireAuth, requireAdmin } from "../middleware/authMiddleware";
+
+export const adminRoutes = Router();
+
+adminRoutes.use(requireAuth, requireAdmin);
+
+adminRoutes.post("/admin/employees", async (req, res) => {
+  const { fullName, email, hourlyRateCents } = req.body || {};
+  if (!fullName || !email) return res.status(400).json({ error: "fullName and email required" });
+
+  const employee = await prisma.employee.create({
+    data: {
+      fullName,
+      email,
+      hourlyRateCents: Number(hourlyRateCents || 0),
+    },
+  });
+
+  res.json({ employee });
+});
+
+adminRoutes.post("/admin/time-entries", async (req, res) => {
+  const { employeeId, workDate, minutesWorked, breakMinutes } = req.body || {};
+  if (!employeeId || !workDate || minutesWorked == null) {
+    return res.status(400).json({ error: "employeeId, workDate, minutesWorked required" });
+  }
+
+  const entry = await prisma.timeEntry.create({
+    data: {
+      employeeId,
+      workDate: new Date(workDate),
+      minutesWorked: Number(minutesWorked),
+      breakMinutes: Number(breakMinutes || 0),
+      createdById: req.user!.sub,
+    },
+  });
+
+  res.json({ entry });
+});
+
+adminRoutes.get("/admin/time-entries", async (req, res) => {
+  const { employeeId, from, to } = req.query as any;
+
+  const where: any = {};
+  if (employeeId) where.employeeId = employeeId;
+  if (from || to) {
+    where.workDate = {};
+    if (from) where.workDate.gte = new Date(from);
+    if (to) where.workDate.lte = new Date(to);
+  }
+
+  const entries = await prisma.timeEntry.findMany({
+    where,
+    orderBy: { workDate: "desc" },
+  });
+
+  res.json({ entries });
+});

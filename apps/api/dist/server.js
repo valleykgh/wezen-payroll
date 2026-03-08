@@ -6,10 +6,63 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const authRoutes_1 = require("./routes/authRoutes");
+const meRoutes_1 = require("./routes/meRoutes");
+const adminTimeRoutes_1 = require("./routes/adminTimeRoutes");
+const employeeRoutes_1 = require("./routes/employeeRoutes");
+const adminInviteRoutes_1 = require("./routes/adminInviteRoutes");
+// import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)());
+console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
+/**
+ * CORS
+ * Avoid app.options("*", cors()) with default settings,
+ * because that overrides your restricted origin list.
+ */
+const corsOptions = {
+    origin: [
+        "https://payroll.wezenstaffing.com",
+        "https://dcvnabxhc4tbc.cloudfront.net",
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    // credentials: true, // enable only if you use cookies
+};
+app.use((0, cors_1.default)(corsOptions));
+app.options("*", (0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
-const port = Number(process.env.PORT || 4000);
-app.listen(port, () => console.log(`API running on port ${port}`));
+/**
+ * Public routes (NO auth)
+ * Keep these BEFORE mounting protected routers.
+ */
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        buildId: process.env.BUILD_ID ?? "no-build-id",
+    });
+});
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        buildId: process.env.BUILD_ID ?? "no-build-id",
+    });
+});
+/**
+ * API routes
+ * Mount under /api so /health is never protected by mistake.
+ */
+app.use("/api/auth", authRoutes_1.authRoutes);
+app.use("/api", meRoutes_1.meRoutes);
+app.use("/api", employeeRoutes_1.employeeRoutes);
+app.use("/api/admin", adminTimeRoutes_1.adminTimeRoutes);
+app.use("/api/admin", adminInviteRoutes_1.adminInviteRoutes);
+// app.use("/api", adminRoutes);
+/**
+ * 404 fallback
+ */
+app.use((req, res) => {
+    res.status(404).json({ error: "Not found" });
+});
+const port = Number(process.env.PORT || 4001);
+app.listen(port, "0.0.0.0", () => console.log(`API running on port ${port}`));
