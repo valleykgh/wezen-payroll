@@ -34,7 +34,17 @@ type PaySummary = {
     payableMinutes: number;     // worked - breaks
     totalHours: number;         // payableHours decimal (2 dp)
     grossPayCents: number;
+    adjustmentsCents?: number;
+    loanDeductionCents?: number;
+    netPayCents?: number;
   };
+    adjustments?: Array<{
+    amountCents: number;
+    reason?: string | null;
+  }>;
+  loanDeductions?: Array<{
+    amountCents: number;
+  }>;
 };
 
 async function apiFetch(path: string, token: string, init?: RequestInit) {

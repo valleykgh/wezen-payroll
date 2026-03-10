@@ -137,39 +137,38 @@ router.get("/billing-export", async (req, res) => {
     const dates = listDatesInclusive(from, to);
     const billingTitleOrder = ["CNA", "LVN", "RN"];
 
-    const employeeMap = new Map<
-      string,
-      {
-        employeeId: string;
-        name: string;
-        title: string;
-        rateToBill: number;
-        entries: any[];
-        byDate: Map<
-          string,
-          {
-            date: string;
-            entries: any[];
-            workedMinutes: number;
-            breakMinutes: number;
-            payableMinutes: number;
-            regularMinutes: number;
-            overtimeMinutes: number;
-            doubleMinutes: number;
-            billAmount: number;
-          }
-        >;
-        totals: {
-          holidayHours: number;
-          totalHours: number;
-          regularHours: number;
-          overtimeHours: number;
-          doubleHours: number;
-          holidayPay: number;
-          amountToBill: number;
-        };
-      }
-    >();
+    type BillingEmployee = {
+  employeeId: string;
+  name: string;
+  title: string;
+  rateToBill: number;
+  entries: any[];
+  byDate: Map<
+    string,
+    {
+      date: string;
+      entries: any[];
+      workedMinutes: number;
+      breakMinutes: number;
+      payableMinutes: number;
+      regularMinutes: number;
+      overtimeMinutes: number;
+      doubleMinutes: number;
+      billAmount: number;
+    }
+  >;
+  totals: {
+    holidayHours: number;
+    totalHours: number;
+    regularHours: number;
+    overtimeHours: number;
+    doubleHours: number;
+    holidayPay: number;
+    amountToBill: number;
+  };
+};
+
+    const employeeMap = new Map<string, BillingEmployee>();
 
     for (const e of entries) {
       const employeeId = String(e.employeeId);
@@ -317,7 +316,8 @@ router.get("/billing-export", async (req, res) => {
     styleHeaderRow(totalSheet, totalHeaderRow);
     totalSheet.views = [{ state: "frozen", ySplit: totalHeaderRow }];
 
-    const employeesByTitle = new Map<string, typeof employees>();
+    const employeesByTitle = new Map<string, typeof employees[number][]>();
+
     for (const emp of employees) {
       const title = String(emp.title || "UNASSIGNED").toUpperCase();
       const list = employeesByTitle.get(title) || [];
@@ -343,8 +343,8 @@ router.get("/billing-export", async (req, res) => {
     let groupGrandAmount = 0;
 
     for (const title of sortedTitles) {
-      const group = (employeesByTitle.get(title) || []).sort((a, b) => a.name.localeCompare(b.name));
-
+      const group = (employeesByTitle.get(title) || []) as typeof employees[number][];
+	group.sort((a, b) => a.name.localeCompare(b.name));
       const titleRow = totalSheet.addRow({
         name: title,
       });

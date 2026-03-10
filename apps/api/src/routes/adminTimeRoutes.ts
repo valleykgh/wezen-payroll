@@ -1,5 +1,5 @@
 import express from "express";
-
+import adminUserRoutes from "./admin/adminUsers";
 import billingExportRoutes from "./admin/billingExport";
 import employeeRoutes from "./admin/employees";
 import facilityRoutes from "./admin/facilities";
@@ -15,7 +15,7 @@ import payrollFinalizeRoutes from "./admin/payrollFinalize";
 import payrollRunRoutes from "./admin/payrollRuns";
 
 export const adminTimeRoutes = express.Router();
-
+adminTimeRoutes.use(adminUserRoutes);
 adminTimeRoutes.use(billingExportRoutes);
 adminTimeRoutes.use(employeeRoutes);
 adminTimeRoutes.use(facilityRoutes);

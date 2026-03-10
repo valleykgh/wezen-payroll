@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 import { setSession, AuthedUser } from "../../lib/auth";
 
-type LoginResp = { token: string; user: AuthedUser; mustChangePassword?: boolean };
+type LoginResp = {
+  token: string;
+  user: AuthedUser;
+  mustChangePassword?: boolean;
+};
 
-export default function EmployeeLoginPage() {
+function EmployeeLoginPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const next = sp.get("next") || "/employee";
@@ -21,6 +25,7 @@ export default function EmployeeLoginPage() {
     e.preventDefault();
     setErr(null);
     setBusy(true);
+
     try {
       const data = await apiFetch<LoginResp>("/api/auth/login", {
         method: "POST",
@@ -33,8 +38,6 @@ export default function EmployeeLoginPage() {
       }
 
       setSession(data.token, data.user);
-
-      // Optional: if mustChangePassword true, route to change-password UI later
       router.replace(next);
     } catch (e: any) {
       setErr(e?.message || "Login failed");
@@ -44,35 +47,64 @@ export default function EmployeeLoginPage() {
   }
 
   return (
-    <div style={{ maxWidth: 420 }}>
-      <h2 style={{ margin: "8px 0 12px" }}>Employee Login</h2>
+    <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
+      <h1 style={{ marginBottom: 8 }}>Employee Login</h1>
+      <p style={{ color: "#666", marginTop: 0, marginBottom: 20 }}>
+        Sign in to access your employee portal.
+      </p>
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Email</div>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: 8 }} />
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>Email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+          />
         </label>
 
-        <label>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Password</div>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>Password</span>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
+            required
+            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
           />
         </label>
 
-        {err && <div style={{ color: "crimson" }}>{err}</div>}
+        {err ? (
+          <div style={{ color: "#b00020", fontSize: 14 }}>
+            {err}
+          </div>
+        ) : null}
 
-        <button disabled={busy} style={{ padding: 10 }}>
-          {busy ? "Signing in…" : "Sign in"}
+        <button
+          type="submit"
+          disabled={busy}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid #111",
+            background: "#111",
+            color: "#fff",
+            cursor: busy ? "not-allowed" : "pointer",
+          }}
+        >
+          {busy ? "Signing in..." : "Sign In"}
         </button>
-
-        <div style={{ fontSize: 12, opacity: 0.8 }}>
-          Admin? Go to <a href="/admin/login">Admin Login</a>
-        </div>
       </form>
     </div>
+  );
+}
+
+export default function EmployeeLoginPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Loading...</div>}>
+      <EmployeeLoginPageInner />
+    </Suspense>
   );
 }

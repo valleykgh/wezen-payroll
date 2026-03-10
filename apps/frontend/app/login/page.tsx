@@ -1,25 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-function normalizeApiBase(raw?: string) {
-  const v = (raw || "").trim();
-  if (!v) return "http://localhost:4000";
-  // If user set "http://localhost" with no port, default to 4000 for dev.
-  if (v === "http://localhost" || v === "https://localhost") return "http://localhost:4000";
-  return v.replace(/\/+$/, "");
+function normalizeApiBase(v?: string) {
+  const raw = String(v || "").trim();
+  if (!raw) return "http://localhost:4000";
+  return raw.replace(/\/+$/, "");
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const mode = (sp.get("mode") || "employee").toLowerCase() === "admin" ? "admin" : "employee";
-  const API_BASE = useMemo(() => normalizeApiBase(process.env.NEXT_PUBLIC_API_URL), []);
+  const mode =
+    (sp.get("mode") || "employee").toLowerCase() === "admin" ? "admin" : "employee";
 
-  const [email, setEmail] = useState(mode === "admin" ? "admin@wezenstaffing.com" : "");
-  const [password, setPassword] = useState(mode === "admin" ? "ChangeMe123!" : "");
+  const API_BASE = useMemo(
+    () => normalizeApiBase(process.env.NEXT_PUBLIC_API_URL),
+    []
+  );
+
+  const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -42,16 +45,19 @@ export default function LoginPage() {
       const role = String(j.user.role || "").toUpperCase();
 
       if (mode === "admin") {
-        if (role !== "ADMIN") throw new Error("This is the ADMIN login page. Please use an Admin account.");
+        if (role !== "ADMIN") {
+          throw new Error("This is the ADMIN login page. Please use an Admin account.");
+        }
         localStorage.setItem("admin_token", j.token);
-        // optional: clear employee token so roles don’t mix
         localStorage.removeItem("emp_token");
         router.push("/admin/time-entry");
         return;
       }
 
-      // employee mode
-      if (role !== "EMPLOYEE") throw new Error("This is the EMPLOYEE login page. Please use an Employee account.");
+      if (role !== "EMPLOYEE") {
+        throw new Error("This is the EMPLOYEE login page. Please use an Employee account.");
+      }
+
       localStorage.setItem("emp_token", j.token);
       localStorage.removeItem("admin_token");
       router.push("/employee");
@@ -77,9 +83,13 @@ export default function LoginPage() {
         <label style={{ display: "grid", gap: 6 }}>
           <span>Email</span>
           <input
+            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
+            autoComplete="off"
+	    autoCorrect="off"
+	    autoCapitalize="none"
+            spellCheck={false}
             style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
           />
         </label>
@@ -90,13 +100,15 @@ export default function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
+            autoComplete="new-password"
             style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
           />
         </label>
 
         {err ? (
-          <div style={{ color: "crimson", fontSize: 13, whiteSpace: "pre-wrap" }}>{err}</div>
+          <div style={{ color: "crimson", fontSize: 13, whiteSpace: "pre-wrap" }}>
+            {err}
+          </div>
         ) : null}
 
         <button
@@ -120,5 +132,13 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Loading...</div>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

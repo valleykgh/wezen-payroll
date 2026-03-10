@@ -202,21 +202,11 @@ router.post("/payroll-runs/finalize", async (req, res) => {
   },
 });
 
-const earlyPaymentByEmployee = new Map<
-  string,
-  {
-    id: string;
-    employeeId: string;
-    amountCents: number;
-    paidAt: Date;
-    note: string | null;
-    payrollRunId: string | null;
-  }
->();
+const earlyPaymentByEmployee = new Map<string, (typeof earlyPayments)[number]>();
+
 for (const p of earlyPayments) {
   earlyPaymentByEmployee.set(String(p.employeeId), p);
 }
-
 
 
 const createdById = (req as any).user?.id || null;   
@@ -357,16 +347,7 @@ const loanDeductionCents = loanDeductions.reduce(
   0
 );
 
-const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) as
-    | {
-        id: string;
-        employeeId: string;
-        amountCents: number;
-        paidAt: Date;
-        note: string | null;
-        payrollRunId: string | null;
-      }
-    | null;
+const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) || null;
 
 const paidEarly = !!earlyPayment;
 const paidEarlyAmountCents = Number(earlyPayment?.amountCents || 0);

@@ -710,7 +710,7 @@ export default function PayrollRunDetailPage() {
     Existing Payroll Adjustments
   </div>
 
-  {selectedEmployee.employee?.payrollAdjustments?.length > 0 ? (
+    {(selectedEmployee.employee?.payrollAdjustments?.length ?? 0) > 0 ? (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
@@ -723,8 +723,8 @@ export default function PayrollRunDetailPage() {
         </thead>
 
         <tbody>
-          {selectedEmployee.employee.payrollAdjustments.map((adj) => (
-            <tr key={adj.id}>
+            {(selectedEmployee.employee?.payrollAdjustments ?? []).map((adj) => (
+	    <tr key={adj.id}>
               <td style={td}>{dateOnly(adj.createdAt)}</td>
               <td style={td}><b>{dollars(adj.amountCents)}</b></td>
               <td style={td}>{adj.reason || "-"}</td>

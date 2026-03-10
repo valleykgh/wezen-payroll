@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 
 export type JwtPayload = {
-  sub: string; // userId
-  role: "ADMIN" | "EMPLOYEE";
+  sub: string;
+  role: "SUPER_ADMIN" | "PAYROLL_ADMIN" | "HR_ADMIN" | "EMPLOYEE";
   employeeId?: string | null;
 };
 

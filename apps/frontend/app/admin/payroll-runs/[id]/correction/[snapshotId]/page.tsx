@@ -228,8 +228,9 @@ export default function PayrollCorrectionPage() {
       qs.set("punches", JSON.stringify(correctedPayload.punches));
       qs.set("breaks", JSON.stringify(correctedPayload.breaks));
 
-      qs.set("employeeId", snapshot.employeeId);
-const apiUrl = `/api/admin/payroll-correction/calc?${qs.toString()}`;
+      if (!snapshot) return;
+qs.set("employeeId", snapshot.employeeId);
+      const apiUrl = `/api/admin/payroll-correction/calc?${qs.toString()}`;
       const resp = await apiFetch<CalcResp>(apiUrl);
       setCalc(resp);
     } catch (e: any) {

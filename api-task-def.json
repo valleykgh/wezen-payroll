@@ -1,0 +1,75 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-api:6f913ca",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 4000,
+          "hostPort": 4000,
+          "protocol": "tcp",
+          "name": "api-4000-tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "ADOBE_API_TOKEN",
+          "value": "placeholder token"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "DATABASE_URL",
+          "value": "postgresql://postgres:Jasnain0810@wezen-payroll-cluster.cluster-cv6eusgm4y6i.us-west-1.rds.amazonaws.com:5432/payroll"
+        },
+        {
+          "name": "BUILD_ID",
+          "value": "<TAG>"
+        },
+        {
+          "name": "PORT",
+          "value": "4000"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "v3ry-l0ng-r4nd0m-jwt-s3cr3t-ChangeThis!"
+        }
+      ],
+      "environmentFiles": [],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "ulimits": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wezen-payroll-api-task",
+          "awslogs-create-group": "true",
+          "awslogs-region": "us-west-1",
+          "awslogs-stream-prefix": "ecs"
+        },
+        "secretOptions": []
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "wezen-payroll-api-task",
+  "taskRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "placementConstraints": [],
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "enableFaultInjection": false
+}

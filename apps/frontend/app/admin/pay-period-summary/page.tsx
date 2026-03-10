@@ -233,10 +233,9 @@ export default function PayPeriodSummaryPage() {
       r.bill += baseBill;
     }
 
-    const groups = Array.from(byFac.values()).map((g) => {
-      const rows = Array.from(g.rowsByEmp.values()).map((r) => {
-        const ps = paySummaries?.[r.employeeId];
-
+        const groups = Array.from(byFac.values()).map((g: any) => {
+  const rows = Array.from(g.rowsByEmp.values() as Iterable<any>).map((r: any) => {
+    const ps = paySummaries?.[r.employeeId];
         const grossCents = ps?.totals?.grossPayCents;
         const adjCents = ps?.totals?.adjustmentsCents;
         const netCents = ps?.totals?.netPayCents;

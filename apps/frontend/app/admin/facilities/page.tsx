@@ -113,19 +113,23 @@ export default function FacilitiesAdminPage() {
   }, [selectedFacility]);
 
   function setRateDraft(title: string, patch: Partial<RateDraft>) {
-    setRateDrafts((prev) => ({
+  setRateDrafts((prev) => {
+    const current: RateDraft = prev[title] || {
+      effectiveFrom: "",
+      regRate: "",
+      otRate: "",
+      dtRate: "",
+    };
+
+    return {
       ...prev,
       [title]: {
-        effectiveFrom: "",
-        regRate: "",
-        otRate: "",
-        dtRate: "",
-        ...(prev[title] || {}),
+        ...current,
         ...patch,
       },
-    }));
-  }
-
+    };
+  });
+}
   async function createFacility() {
     setErr("");
     setOk("");
