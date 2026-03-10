@@ -202,9 +202,22 @@ router.post("/payroll-runs/finalize", async (req, res) => {
   },
 });
 
-const earlyPaymentByEmployee = new Map(
-  earlyPayments.map((p) => [String(p.employeeId), p])
-);
+const earlyPaymentByEmployee = new Map<
+  string,
+  {
+    id: string;
+    employeeId: string;
+    amountCents: number;
+    paidAt: Date;
+    note: string | null;
+    payrollRunId: string | null;
+  }
+>();
+for (const p of earlyPayments) {
+  earlyPaymentByEmployee.set(String(p.employeeId), p);
+}
+
+
 
 const createdById = (req as any).user?.id || null;   
 
@@ -334,10 +347,27 @@ const createdById = (req as any).user?.id || null;
           select: { amountCents: true },
         });
 
-        const adjustmentsCents = adjustments.reduce((s, a) => s + Number(a.amountCents || 0), 0);
-const loanDeductionCents = loanDeductions.reduce((s, d) => s + Number(d.amountCents || 0), 0);
+const adjustmentsCents = adjustments.reduce(
+  (sum: number, adj: { amountCents: number }) => sum + Number(adj.amountCents || 0),
+  0
+);
 
-const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) || null;
+const loanDeductionCents = loanDeductions.reduce(
+  (sum: number, d: { amountCents: number }) => sum + Number(d.amountCents || 0),
+  0
+);
+
+const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) as
+    | {
+        id: string;
+        employeeId: string;
+        amountCents: number;
+        paidAt: Date;
+        note: string | null;
+        payrollRunId: string | null;
+      }
+    | null;
+
 const paidEarly = !!earlyPayment;
 const paidEarlyAmountCents = Number(earlyPayment?.amountCents || 0);
 
