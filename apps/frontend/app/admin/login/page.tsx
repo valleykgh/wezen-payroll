@@ -12,8 +12,8 @@ export default function AdminLoginPage() {
   const sp = useSearchParams();
   const next = sp.get("next") || "/admin";
 
-  const [email, setEmail] = useState("admin@wezenstaffing.com");
-  const [password, setPassword] = useState("Admin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -27,7 +27,15 @@ export default function AdminLoginPage() {
         auth: false,
         body: JSON.stringify({ email, password }),
       });
-	if (data.user.role !== "ADMIN" && data.user.role !== "SUPER_ADMIN") {
+
+      const role = String(data.user.role || "").toUpperCase();
+      const isAdminRole =
+        role === "ADMIN" ||
+        role === "SUPER_ADMIN" ||
+        role === "PAYROLL_ADMIN" ||
+        role === "HR_ADMIN";
+
+      if (!isAdminRole) {
         throw new Error("This login is for ADMIN users only.");
       }
 
@@ -44,10 +52,19 @@ export default function AdminLoginPage() {
     <div style={{ maxWidth: 420 }}>
       <h2 style={{ margin: "8px 0 12px" }}>Admin Login</h2>
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+      <form onSubmit={onSubmit} autoComplete="off" style={{ display: "grid", gap: 10 }}>
         <label>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Email</div>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: 8 }} />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            style={{ width: "100%", padding: 8 }}
+          />
         </label>
 
         <label>
@@ -56,6 +73,7 @@ export default function AdminLoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
             style={{ width: "100%", padding: 8 }}
           />
         </label>
