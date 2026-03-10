@@ -1,11 +1,14 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../../prisma";
-import { requireAuth } from "../../middleware/authMiddleware";
-import { requireRole } from "../../middleware/requireRole";
+import { requireAuth, requireRole, AuthRequest } from "../../middleware/authMiddleware";
 
 const router = Router();
 
+/**
+ * SUPER_ADMIN only for now.
+ * Later we can relax list/view to HR_ADMIN if desired.
+ */
 router.use(requireAuth, requireRole("SUPER_ADMIN"));
 
 router.get("/users", async (_req, res) => {
@@ -23,6 +26,14 @@ router.get("/users", async (_req, res) => {
         lastLoginAt: true,
         employeeId: true,
         createdAt: true,
+        employee: {
+          select: {
+            id: true,
+            legalName: true,
+            preferredName: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -33,7 +44,7 @@ router.get("/users", async (_req, res) => {
   }
 });
 
-router.post("/users", async (req, res) => {
+router.post("/users", async (req: AuthRequest, res) => {
   try {
     const {
       name,
@@ -45,17 +56,38 @@ router.post("/users", async (req, res) => {
       employeeId,
     } = req.body || {};
 
-    if (!email || !role || !temporaryPassword) {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const normalizedRole = String(role || "").trim().toUpperCase();
+
+    if (!normalizedEmail || !normalizedRole || !temporaryPassword) {
       return res.status(400).json({ error: "email, role, temporaryPassword required" });
+    }
+
+    if (
+      normalizedRole !== "SUPER_ADMIN" &&
+      normalizedRole !== "PAYROLL_ADMIN" &&
+      normalizedRole !== "HR_ADMIN" &&
+      normalizedRole !== "EMPLOYEE"
+    ) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: "Email already in use" });
     }
 
     const passwordHash = await bcrypt.hash(String(temporaryPassword), 10);
 
     const user = await prisma.user.create({
       data: {
-        name: name ? String(name) : null,
-        email: String(email).toLowerCase(),
-        role,
+        name: name ? String(name).trim() : null,
+        email: normalizedEmail,
+        role: normalizedRole as any,
         passwordHash,
         active: active !== false,
         mustChangePassword: mustChangePassword !== false,
@@ -80,20 +112,47 @@ router.post("/users", async (req, res) => {
   }
 });
 
-router.patch("/users/:id", async (req, res) => {
+router.patch("/users/:id", async (req: AuthRequest, res) => {
   try {
     const id = String(req.params.id || "");
     const { name, role, active, employeeId, mustChangePassword } = req.body || {};
 
+    if (!id) return res.status(400).json({ error: "User id required" });
+
+    const data: Record<string, any> = {};
+
+    if (name !== undefined) {
+      data.name = name ? String(name).trim() : null;
+    }
+
+    if (role !== undefined) {
+      const normalizedRole = String(role).trim().toUpperCase();
+      if (
+        normalizedRole !== "SUPER_ADMIN" &&
+        normalizedRole !== "PAYROLL_ADMIN" &&
+        normalizedRole !== "HR_ADMIN" &&
+        normalizedRole !== "EMPLOYEE"
+      ) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+      data.role = normalizedRole;
+    }
+
+    if (active !== undefined) {
+      data.active = !!active;
+    }
+
+    if (employeeId !== undefined) {
+      data.employeeId = employeeId || null;
+    }
+
+    if (mustChangePassword !== undefined) {
+      data.mustChangePassword = !!mustChangePassword;
+    }
+
     const user = await prisma.user.update({
       where: { id },
-      data: {
-        ...(name !== undefined ? { name: name ? String(name) : null } : {}),
-        ...(role !== undefined ? { role } : {}),
-        ...(active !== undefined ? { active: !!active } : {}),
-        ...(employeeId !== undefined ? { employeeId: employeeId || null } : {}),
-        ...(mustChangePassword !== undefined ? { mustChangePassword: !!mustChangePassword } : {}),
-      },
+      data,
       select: {
         id: true,
         name: true,
@@ -108,15 +167,19 @@ router.patch("/users/:id", async (req, res) => {
     res.json({ user });
   } catch (e: any) {
     console.error("PATCH /api/admin/users/:id failed:", e);
-    res.status(500).json({ error: e?.message || "Failed to update user" });
+    if (e?.code === "P2025") {
+    return res.status(404).json({ error: "User not found" });
+  }
+   return res.status(500).json({ error: e?.message || "Failed to reset password" });
   }
 });
 
-router.post("/users/:id/reset-password", async (req, res) => {
+router.post("/users/:id/reset-password", async (req: AuthRequest, res) => {
   try {
     const id = String(req.params.id || "");
     const { temporaryPassword } = req.body || {};
 
+    if (!id) return res.status(400).json({ error: "User id required" });
     if (!temporaryPassword) {
       return res.status(400).json({ error: "temporaryPassword required" });
     }
@@ -135,7 +198,10 @@ router.post("/users/:id/reset-password", async (req, res) => {
     res.json({ ok: true });
   } catch (e: any) {
     console.error("POST /api/admin/users/:id/reset-password failed:", e);
-    res.status(500).json({ error: e?.message || "Failed to reset password" });
+    if (e?.code === "P2025") {
+    return res.status(404).json({ error: "User not found" });
+  }
+    return res.status(500).json({ error: e?.message || "Failed to reset password" });
   }
 });
 

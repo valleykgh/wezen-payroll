@@ -7,6 +7,7 @@ import { meRoutes } from "./routes/meRoutes";
 import { adminTimeRoutes } from "./routes/adminTimeRoutes";
 import { employeeRoutes } from "./routes/employeeRoutes";
 import { adminInviteRoutes } from "./routes/adminInviteRoutes";
+import adminRoutes from "./routes/admin";
 // import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 
 dotenv.config();
@@ -71,6 +72,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api", meRoutes);
 app.use("/api", employeeRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/admin", adminTimeRoutes);
 app.use("/api/admin", adminInviteRoutes);
 // app.use("/api", adminRoutes);

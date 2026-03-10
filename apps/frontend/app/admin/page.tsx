@@ -8,6 +8,7 @@ export default function AdminHomePage() {
         <Link href="/admin/time-entry" style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10, textDecoration: "none" }}>
           Time Entry
         </Link>
+        <Link href="/admin/users">Admin Users</Link>
       </div>
       <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>
         You can create employees, invite them, and enter time from the Time Entry tool.

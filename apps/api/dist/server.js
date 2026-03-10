@@ -4,13 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = require("./routes/authRoutes");
 const meRoutes_1 = require("./routes/meRoutes");
 const adminTimeRoutes_1 = require("./routes/adminTimeRoutes");
 const employeeRoutes_1 = require("./routes/employeeRoutes");
 const adminInviteRoutes_1 = require("./routes/adminInviteRoutes");
+const admin_1 = __importDefault(require("./routes/admin"));
 // import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -20,27 +20,26 @@ console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
  * Avoid app.options("*", cors()) with default settings,
  * because that overrides your restricted origin list.
  */
-const allowedOrigins = [
+const allowedOrigins = new Set([
     "https://payroll.wezenstaffing.com",
     "https://api.payroll.wezenstaffing.com",
     "https://dcvnabxhc4tbc.cloudfront.net",
     "http://localhost:3000",
     "http://localhost:4001",
-];
-const corsOptions = {
-    origin(origin, callback) {
-        if (!origin)
-            return callback(null, true);
-        if (allowedOrigins.includes(origin))
-            return callback(null, true);
-        return callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    credentials: false,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-};
-app.use((0, cors_1.default)(corsOptions));
-app.options("*", (0, cors_1.default)(corsOptions));
+]);
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.has(origin)) {
+        res.header("Access-Control-Allow-Origin", origin);
+    }
+    res.header("Vary", "Origin");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(204);
+    }
+    next();
+});
 app.use(express_1.default.json());
 /**
  * Public routes (NO auth)
@@ -65,6 +64,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes_1.authRoutes);
 app.use("/api", meRoutes_1.meRoutes);
 app.use("/api", employeeRoutes_1.employeeRoutes);
+app.use("/api/admin", admin_1.default);
 app.use("/api/admin", adminTimeRoutes_1.adminTimeRoutes);
 app.use("/api/admin", adminInviteRoutes_1.adminInviteRoutes);
 // app.use("/api", adminRoutes);

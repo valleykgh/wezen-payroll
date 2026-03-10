@@ -8,7 +8,7 @@
   "containerDefinitions": [
     {
       "name": "frontend",
-      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-frontend:latest",
+      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-frontend:5da4cf4",
       "essential": true,
       "portMappings": [
         {
