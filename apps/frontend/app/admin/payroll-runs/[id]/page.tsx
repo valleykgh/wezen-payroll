@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "../../../lib/api";
 
 type PayrollRunEmployeeRow = {
@@ -28,7 +28,7 @@ type PayrollRunEmployeeRow = {
     preferredName?: string | null;
     email?: string | null;
     hourlyRateCents?: number | null;
-    ayrollAdjustments?: Array<{
+    payrollAdjustments?: Array<{
     id: string;
     amountCents: number;
     reason?: string | null;
@@ -146,7 +146,7 @@ function statusStyle(status: PayrollRunDetail["status"]): React.CSSProperties {
 export default function PayrollRunDetailPage() {
   const params = useParams<{ id: string }>();
   const id = String(params?.id || "");
-
+  const router = useRouter();
   const [run, setRun] = useState<PayrollRunDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -803,8 +803,43 @@ export default function PayrollRunDetailPage() {
 </td>
 
 <td style={td}>
-  <button>...</button>
+  {Array.isArray(s.corrections) && s.corrections.length > 0 ? (
+    <button
+      type="button"
+      disabled
+      style={{
+        padding: "6px 10px",
+        borderRadius: 8,
+        border: "1px solid #d1d5db",
+        background: "#f3f4f6",
+        color: "#9ca3af",
+        cursor: "not-allowed",
+        fontWeight: 700,
+      }}
+      title="This snapshot already has a correction"
+    >
+      Already Corrected
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => router.push(`/admin/payroll-runs/${run.id}/correction/${s.id}`)}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 8,
+        border: "1px solid #2563eb",
+        background: "#eff6ff",
+        color: "#1d4ed8",
+        cursor: "pointer",
+        fontWeight: 700,
+      }}
+      title="Create correction from this frozen snapshot"
+    >
+      Correct
+    </button>
+  )}
 </td>
+
    				</tr>
                          	 );
                        		 })}

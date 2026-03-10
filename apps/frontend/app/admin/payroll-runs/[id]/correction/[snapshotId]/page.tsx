@@ -255,32 +255,63 @@ const apiUrl = `/api/admin/payroll-correction/calc?${qs.toString()}`;
   const originalPayableMinutes = Number(original.payableMinutes || 0);
   const correctedPayableMinutes = Number(calc?.input?.payableMinutes || 0);
 
-  const correctionDeltaCents = correctedGrossPayCents - originalGrossPayCents;
-    const correctionDirection =
-    correctionDeltaCents > 0
-      ? "UNDERPAID"
-      : correctionDeltaCents < 0
-      ? "OVERPAID"
-      : "NO_CHANGE";
+    const correctionDeltaCents = calc
+  ? correctedGrossPayCents - originalGrossPayCents
+  : 0;
+
+    const correctionDirection = !calc
+  ? "PENDING"
+  : correctionDeltaCents > 0
+  ? "UNDERPAID"
+  : correctionDeltaCents < 0
+  ? "OVERPAID"
+  : "NO_CHANGE";
+  
+  const correctionBannerText =
+  correctionDirection === "PENDING"
+    ? "Enter corrected times to calculate pay difference"
+    : correctionDirection === "UNDERPAID"
+    ? "Employee was underpaid"
+    : correctionDirection === "OVERPAID"
+    ? "Employee was overpaid"
+    : "No pay difference detected";
+
+const correctionBannerSubtext =
+  correctionDirection === "PENDING"
+    ? "No corrected calculation has been created yet."
+    : correctionDirection === "UNDERPAID"
+    ? `Corrected pay is ${dollars(Math.abs(correctionDeltaCents))} higher than the original paid amount.`
+    : correctionDirection === "OVERPAID"
+    ? `Corrected pay is ${dollars(Math.abs(correctionDeltaCents))} lower than the original paid amount.`
+    : "Original and corrected pay are the same.";  
 
   const correctionBannerStyle: React.CSSProperties =
-    correctionDirection === "UNDERPAID"
-      ? {
-          border: "1px solid #bbf7d0",
-          background: "#f0fdf4",
-          color: "#166534",
-        }
-      : correctionDirection === "OVERPAID"
-      ? {
-          border: "1px solid #fecaca",
-          background: "#fef2f2",
-          color: "#991b1b",
-        }
-      : {
-          border: "1px solid #e5e7eb",
-          background: "#f9fafb",
-          color: "#374151",
-        };
+
+  correctionDirection === "PENDING"
+    ? {
+        border: "1px solid #e5e7eb",
+        background: "#f9fafb",
+        color: "#374151",
+      }
+    : correctionDirection === "UNDERPAID"
+    ? {
+        border: "1px solid #bbf7d0",
+        background: "#f0fdf4",
+        color: "#166534",
+      }
+    : correctionDirection === "OVERPAID"
+    ? {
+        border: "1px solid #fecaca",
+        background: "#fef2f2",
+        color: "#991b1b",
+      }
+    : {
+        border: "1px solid #e5e7eb",
+        background: "#f9fafb",
+        color: "#374151",
+      };  
+
+
   async function createAdjustmentFromDelta() {
     if (!snapshot) return;
 
@@ -428,27 +459,16 @@ setOk(`Payroll correction saved and adjustment created: ${dollars(correctionDelt
       marginBottom: 14,
     }}
   >
-    <div style={{ fontWeight: 800, fontSize: 14 }}>
-      {correctionDirection === "UNDERPAID"
-        ? "Employee was underpaid"
-        : correctionDirection === "OVERPAID"
-        ? "Employee was overpaid"
-        : "No pay difference detected"}
-    </div>
+  
+  <div style={{ fontWeight: 800, fontSize: 14 }}>
+  {correctionBannerText}
+</div>
 
-    <div style={{ marginTop: 6, fontSize: 13 }}>
-      {correctionDirection === "UNDERPAID" ? (
-        <>
-          Corrected pay is <b>{dollars(Math.abs(correctionDeltaCents))}</b> higher than the original paid amount.
-        </>
-      ) : correctionDirection === "OVERPAID" ? (
-        <>
-          Corrected pay is <b>{dollars(Math.abs(correctionDeltaCents))}</b> lower than the original paid amount.
-        </>
-      ) : (
-        <>Original and corrected pay are the same.</>
-      )}
-    </div>
+<div style={{ marginTop: 6, fontSize: 13 }}>
+  {correctionBannerSubtext}
+</div>
+
+
   </div>
 
   <div style={{ fontWeight: 800, marginBottom: 10 }}>Corrected Entry</div>
@@ -570,11 +590,13 @@ setOk(`Payroll correction saved and adjustment created: ${dollars(correctionDelt
     }}
   >
     <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Corrected Pay</div>
-    <div style={{ fontSize: 20, fontWeight: 800 }}>{dollars(correctedGrossPayCents)}</div>
-    <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
-      Payable: {minutesToHHMM(correctedPayableMinutes)}
-    </div>
-  </div>
+    <div style={{ fontSize: 20, fontWeight: 800 }}>
+  {calc ? dollars(correctedGrossPayCents) : "—"}
+</div>
+     <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
+  Payable: {calc ? minutesToHHMM(correctedPayableMinutes) : "—"}
+</div>  
+</div>
 
   <div
     style={{
@@ -602,7 +624,7 @@ setOk(`Payroll correction saved and adjustment created: ${dollars(correctionDelt
             : "#374151",
       }}
     >
-      {dollars(correctionDeltaCents)}
+    {calc ? dollars(correctionDeltaCents) : "—"}
     </div>
     <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
       {correctionDirection === "UNDERPAID"

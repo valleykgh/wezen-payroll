@@ -132,10 +132,7 @@ export default function PayPeriodSummaryPage() {
   }
 
   try {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("token")
-        : null;
+    const token = getToken();
 
     if (!token) {
       setErr("Missing token. Please log in again.");

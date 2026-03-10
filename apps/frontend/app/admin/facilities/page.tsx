@@ -24,6 +24,15 @@ type Facility = {
   rates?: FacilityRate[];
 };
 
+type RateDraft = {
+  effectiveFrom: string;
+  regRate: string;
+  otRate: string;
+  dtRate: string;
+};
+
+const TITLES: Array<"CNA" | "LVN" | "RN"> = ["CNA", "LVN", "RN"];
+
 function centsFromDollarsInput(v: string) {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return 0;
@@ -39,26 +48,17 @@ function isoDateOnly(v?: string | null) {
   return String(v).slice(0, 10);
 }
 
-type RateDraft = {
-  effectiveFrom: string;
-  regRate: string;
-  otRate: string;
-  dtRate: string;
-};
-
-const TITLES: Array<"CNA" | "LVN" | "RN"> = ["CNA", "LVN", "RN"];
-
 export default function FacilitiesAdminPage() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [selectedFacilityId, setSelectedFacilityId] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
   const [newFacilityName, setNewFacilityName] = useState("");
-
-  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
-  const [rateDrafts, setRateDrafts] = useState<Record<string, Record<string, RateDraft>>>({});
+  const [renameDraft, setRenameDraft] = useState("");
+  const [rateDrafts, setRateDrafts] = useState<Record<string, RateDraft>>({});
 
   async function loadFacilities() {
     setLoading(true);
@@ -68,31 +68,9 @@ export default function FacilitiesAdminPage() {
       const list = resp.facilities || [];
       setFacilities(list);
 
-      const nextRename: Record<string, string> = {};
-      const nextRateDrafts: Record<string, Record<string, RateDraft>> = {};
-
-      for (const f of list) {
-        nextRename[f.id] = f.name;
-
-        const byTitle: Record<string, RateDraft> = {};
-        for (const title of TITLES) {
-          const latest = (f.rates || [])
-            .filter((r) => r.title === title)
-            .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0];
-
-          byTitle[title] = {
-            effectiveFrom: latest ? isoDateOnly(latest.effectiveFrom) : new Date().toISOString().slice(0, 10),
-            regRate: latest ? dollarsFromCents(latest.regRateCents) : "",
-            otRate: latest ? dollarsFromCents(latest.otRateCents) : "",
-            dtRate: latest ? dollarsFromCents(latest.dtRateCents) : "",
-          };
-        }
-
-        nextRateDrafts[f.id] = byTitle;
+      if (!selectedFacilityId && list.length > 0) {
+        setSelectedFacilityId(list[0].id);
       }
-
-      setRenameDrafts(nextRename);
-      setRateDrafts(nextRateDrafts);
     } catch (e: any) {
       setErr(e?.message || "Failed to load facilities");
     } finally {
@@ -105,25 +83,45 @@ export default function FacilitiesAdminPage() {
   }, []);
 
   const sortedFacilities = useMemo(() => {
-    return [...facilities].sort((a, b) => {
-      if (a.active !== b.active) return a.active ? -1 : 1;
-      return String(a.name).localeCompare(String(b.name));
-    });
+    return [...facilities].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }, [facilities]);
 
-  function setRateDraft(facilityId: string, title: string, patch: Partial<RateDraft>) {
+  const selectedFacility = useMemo(() => {
+    return sortedFacilities.find((f) => f.id === selectedFacilityId) || null;
+  }, [sortedFacilities, selectedFacilityId]);
+
+  useEffect(() => {
+    if (!selectedFacility) return;
+
+    setRenameDraft(selectedFacility.name);
+
+    const nextDrafts: Record<string, RateDraft> = {};
+    for (const title of TITLES) {
+      const latest = (selectedFacility.rates || [])
+        .filter((r) => r.title === title)
+        .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)))[0];
+
+      nextDrafts[title] = {
+        effectiveFrom: latest ? isoDateOnly(latest.effectiveFrom) : new Date().toISOString().slice(0, 10),
+        regRate: latest ? dollarsFromCents(latest.regRateCents) : "",
+        otRate: latest ? dollarsFromCents(latest.otRateCents) : "",
+        dtRate: latest ? dollarsFromCents(latest.dtRateCents) : "",
+      };
+    }
+
+    setRateDrafts(nextDrafts);
+  }, [selectedFacility]);
+
+  function setRateDraft(title: string, patch: Partial<RateDraft>) {
     setRateDrafts((prev) => ({
       ...prev,
-      [facilityId]: {
-        ...(prev[facilityId] || {}),
-        [title]: {
-          effectiveFrom: "",
-          regRate: "",
-          otRate: "",
-          dtRate: "",
-          ...(prev[facilityId]?.[title] || {}),
-          ...patch,
-        },
+      [title]: {
+        effectiveFrom: "",
+        regRate: "",
+        otRate: "",
+        dtRate: "",
+        ...(prev[title] || {}),
+        ...patch,
       },
     }));
   }
@@ -154,11 +152,13 @@ export default function FacilitiesAdminPage() {
     }
   }
 
-  async function renameFacility(facilityId: string) {
+  async function renameFacility() {
+    if (!selectedFacility) return;
+
     setErr("");
     setOk("");
 
-    const name = String(renameDrafts[facilityId] || "").trim();
+    const name = renameDraft.trim();
     if (!name) {
       setErr("Facility name is required.");
       return;
@@ -166,7 +166,7 @@ export default function FacilitiesAdminPage() {
 
     setSaving(true);
     try {
-      await apiFetch(`/api/admin/facilities/${encodeURIComponent(facilityId)}`, {
+      await apiFetch(`/api/admin/facilities/${encodeURIComponent(selectedFacility.id)}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
       });
@@ -179,27 +179,29 @@ export default function FacilitiesAdminPage() {
     }
   }
 
-  async function archiveOrRestoreFacility(facility: Facility) {
+  async function archiveOrRestoreFacility() {
+    if (!selectedFacility) return;
+
     setErr("");
     setOk("");
 
     const pin = window.prompt(
-      `${facility.active ? "Archive" : "Restore"} facility "${facility.name}"\n\nEnter admin PIN:`
+      `${selectedFacility.active ? "Archive" : "Restore"} facility "${selectedFacility.name}"\n\nEnter admin PIN:`
     );
     if (!pin) return;
 
     setSaving(true);
     try {
-      const path = facility.active
-        ? `/api/admin/facilities/${encodeURIComponent(facility.id)}/archive`
-        : `/api/admin/facilities/${encodeURIComponent(facility.id)}/restore`;
+      const path = selectedFacility.active
+        ? `/api/admin/facilities/${encodeURIComponent(selectedFacility.id)}/archive`
+        : `/api/admin/facilities/${encodeURIComponent(selectedFacility.id)}/restore`;
 
       await apiFetch(path, {
         method: "POST",
         body: JSON.stringify({ pin }),
       });
 
-      setOk(facility.active ? "Facility archived." : "Facility restored.");
+      setOk(selectedFacility.active ? "Facility archived." : "Facility restored.");
       await loadFacilities();
     } catch (e: any) {
       setErr(e?.message || "Failed to update facility status");
@@ -208,45 +210,57 @@ export default function FacilitiesAdminPage() {
     }
   }
 
-  async function saveRate(facility: Facility, title: "CNA" | "LVN" | "RN") {
+  async function saveOneRate(title: "CNA" | "LVN" | "RN", pin: string) {
+    if (!selectedFacility) return;
+
+    const draft = rateDrafts[title];
+    if (!draft?.effectiveFrom) {
+      throw new Error(`Effective date is required for ${title}.`);
+    }
+
+    await apiFetch(`/api/admin/facilities/${encodeURIComponent(selectedFacility.id)}/rates`, {
+      method: "POST",
+      body: JSON.stringify({
+        pin,
+        title,
+        effectiveFrom: draft.effectiveFrom,
+        regRateCents: centsFromDollarsInput(draft.regRate),
+        otRateCents: centsFromDollarsInput(draft.otRate),
+        dtRateCents: centsFromDollarsInput(draft.dtRate),
+      }),
+    });
+  }
+
+  async function saveAllRates() {
+    if (!selectedFacility) return;
+
     setErr("");
     setOk("");
 
-    const draft = rateDrafts[facility.id]?.[title];
-    if (!draft) {
-      setErr("Missing rate draft.");
-      return;
-    }
-
-    if (!draft.effectiveFrom) {
-      setErr(`Effective date is required for ${facility.name} / ${title}.`);
-      return;
-    }
+    const pin = window.prompt(
+      `Save all billing rates for "${selectedFacility.name}"\n\nEnter admin PIN:`
+    );
+    if (!pin) return;
 
     setSaving(true);
     try {
-      await apiFetch(`/api/admin/facilities/${encodeURIComponent(facility.id)}/rates`, {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          effectiveFrom: draft.effectiveFrom,
-          regRateCents: centsFromDollarsInput(draft.regRate),
-          otRateCents: centsFromDollarsInput(draft.otRate),
-          dtRateCents: centsFromDollarsInput(draft.dtRate),
-        }),
-      });
+      for (const title of TITLES) {
+        await saveOneRate(title, pin);
+      }
 
-      setOk(`Saved ${title} billing rate for ${facility.name}.`);
+      setOk(`Saved all rates for ${selectedFacility.name}.`);
       await loadFacilities();
     } catch (e: any) {
-      setErr(e?.message || "Failed to save billing rate");
+      setErr(e?.message || "Failed to save rates");
     } finally {
       setSaving(false);
     }
   }
 
-  function renderRateHistory(facility: Facility, title: "CNA" | "LVN" | "RN") {
-    const rows = (facility.rates || [])
+  function renderSavedRates(title: "CNA" | "LVN" | "RN") {
+    if (!selectedFacility) return null;
+
+    const rows = (selectedFacility.rates || [])
       .filter((r) => r.title === title)
       .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)));
 
@@ -255,41 +269,39 @@ export default function FacilitiesAdminPage() {
     }
 
     return (
-      <div style={{ marginTop: 8, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 420 }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-              <th style={{ padding: "6px 4px", fontSize: 12 }}>Effective</th>
-              <th style={{ padding: "6px 4px", fontSize: 12 }}>Reg</th>
-              <th style={{ padding: "6px 4px", fontSize: 12 }}>OT</th>
-              <th style={{ padding: "6px 4px", fontSize: 12 }}>DT</th>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+            <th style={{ padding: "6px 4px", fontSize: 12 }}>Effective From</th>
+            <th style={{ padding: "6px 4px", fontSize: 12 }}>Reg</th>
+            <th style={{ padding: "6px 4px", fontSize: 12 }}>OT</th>
+            <th style={{ padding: "6px 4px", fontSize: 12 }}>DT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
+              <td style={{ padding: "6px 4px", fontSize: 12 }}>{isoDateOnly(r.effectiveFrom)}</td>
+              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.regRateCents)}</td>
+              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.otRateCents)}</td>
+              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.dtRateCents)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} style={{ borderBottom: "1px solid #f5f5f5" }}>
-                <td style={{ padding: "6px 4px", fontSize: 12 }}>{isoDateOnly(r.effectiveFrom)}</td>
-                <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.regRateCents)}</td>
-                <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.otRateCents)}</td>
-                <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.dtRateCents)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     );
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 1300, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
+    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Facilities</h1>
       <div style={{ fontSize: 13, color: "#666" }}>
-        Manage facilities and billing rates by designation.
+        Review facilities and manage billing rates by designation.
       </div>
 
       <div style={{ marginTop: 16, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Create Facility</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
             value={newFacilityName}
             onChange={(e) => setNewFacilityName(e.target.value)}
@@ -310,6 +322,29 @@ export default function FacilitiesAdminPage() {
           >
             Add Facility
           </button>
+        </div>
+      </div>
+
+      {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
+      {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+
+      <div style={{ marginTop: 18, padding: 14, border: "1px solid #ddd", borderRadius: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Select Facility</div>
+            <select
+              value={selectedFacilityId}
+              onChange={(e) => setSelectedFacilityId(e.target.value)}
+              style={{ minWidth: 280, padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+            >
+              {sortedFacilities.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}{f.active ? "" : " (Archived)"}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             disabled={loading || saving}
@@ -324,171 +359,148 @@ export default function FacilitiesAdminPage() {
             Refresh
           </button>
         </div>
-      </div>
 
-      {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-      {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
-
-      <div style={{ marginTop: 18, display: "grid", gap: 16 }}>
-        {sortedFacilities.length === 0 ? (
-          <div style={{ padding: 16, border: "1px solid #eee", borderRadius: 12, color: "#666" }}>
-            {loading ? "Loading facilities..." : "No facilities yet."}
-          </div>
-        ) : (
-          sortedFacilities.map((facility) => (
-            <div
-              key={facility.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: 14,
-                padding: 14,
-                background: facility.active ? "#fff" : "#fafafa",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{facility.name}</div>
-                  <div style={{ fontSize: 12, marginTop: 4, color: facility.active ? "#0a7a2f" : "#b45309" }}>
-                    {facility.active ? "Active" : "Archived"}
-                  </div>
+        {selectedFacility ? (
+          <>
+            <div style={{ marginTop: 18, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedFacility.name}</div>
+                <div style={{ fontSize: 12, marginTop: 4, color: selectedFacility.active ? "#0a7a2f" : "#b45309" }}>
+                  {selectedFacility.active ? "Active" : "Archived"}
                 </div>
+              </div>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    value={renameDrafts[facility.id] || ""}
-                    onChange={(e) =>
-                      setRenameDrafts((prev) => ({ ...prev, [facility.id]: e.target.value }))
-                    }
-                    style={{ minWidth: 220, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                  />
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => renameFacility(facility.id)}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #ccc",
-                      background: "#fff",
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => archiveOrRestoreFacility(facility)}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 10,
-                      border: facility.active ? "1px solid #b91c1c" : "1px solid #0a7a2f",
-                      background: facility.active ? "#fef2f2" : "#f0fdf4",
-                      color: facility.active ? "#b91c1c" : "#0a7a2f",
-                    }}
-                  >
-                    {facility.active ? "Archive" : "Restore"}
-                  </button>
-                </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  style={{ minWidth: 220, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
+                />
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={renameFacility}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #ccc",
+                    background: "#fff",
+                  }}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={archiveOrRestoreFacility}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    border: selectedFacility.active ? "1px solid #b91c1c" : "1px solid #0a7a2f",
+                    background: selectedFacility.active ? "#fef2f2" : "#f0fdf4",
+                    color: selectedFacility.active ? "#b91c1c" : "#0a7a2f",
+                  }}
+                >
+                  {selectedFacility.active ? "Archive" : "Restore"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontWeight: 700, marginBottom: 10 }}>Billing Rates</div>
+
+              <div style={{ display: "grid", gap: 16 }}>
+                {TITLES.map((title) => {
+                  const draft = rateDrafts[title] || {
+                    effectiveFrom: "",
+                    regRate: "",
+                    otRate: "",
+                    dtRate: "",
+                  };
+
+                  return (
+                    <div
+                      key={title}
+                      style={{
+                        border: "1px solid #eee",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "#fcfcfc",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>{title}</div>
+
+                      <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+                        <div>
+                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Effective From</div>
+                          <input
+                            type="date"
+                            value={draft.effectiveFrom}
+                            onChange={(e) => setRateDraft(title, { effectiveFrom: e.target.value })}
+                            style={{ padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Regular Rate ($)</div>
+                          <input
+                            value={draft.regRate}
+                            onChange={(e) => setRateDraft(title, { regRate: e.target.value })}
+                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>OT Rate ($)</div>
+                          <input
+                            value={draft.otRate}
+                            onChange={(e) => setRateDraft(title, { otRate: e.target.value })}
+                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>DT Rate ($)</div>
+                          <input
+                            value={draft.dtRate}
+                            onChange={(e) => setRateDraft(title, { dtRate: e.target.value })}
+                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>Saved Rates</div>
+                        {renderSavedRates(title)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontWeight: 700, marginBottom: 10 }}>Billing Rates</div>
-
-                <div style={{ display: "grid", gap: 14 }}>
-                  {TITLES.map((title) => {
-                    const draft = rateDrafts[facility.id]?.[title] || {
-                      effectiveFrom: "",
-                      regRate: "",
-                      otRate: "",
-                      dtRate: "",
-                    };
-
-                    return (
-                      <div
-                        key={`${facility.id}-${title}`}
-                        style={{
-                          border: "1px solid #eee",
-                          borderRadius: 12,
-                          padding: 12,
-                          background: "#fcfcfc",
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, marginBottom: 10 }}>{title}</div>
-
-                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
-                          <div>
-                            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Effective From</div>
-                            <input
-                              type="date"
-                              value={draft.effectiveFrom}
-                              onChange={(e) =>
-                                setRateDraft(facility.id, title, { effectiveFrom: e.target.value })
-                              }
-                              style={{ padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                            />
-                          </div>
-
-                          <div>
-                            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Regular Rate ($)</div>
-                            <input
-                              value={draft.regRate}
-                              onChange={(e) =>
-                                setRateDraft(facility.id, title, { regRate: e.target.value })
-                              }
-                              placeholder="0.00"
-                              style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                            />
-                          </div>
-
-                          <div>
-                            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>OT Rate ($)</div>
-                            <input
-                              value={draft.otRate}
-                              onChange={(e) =>
-                                setRateDraft(facility.id, title, { otRate: e.target.value })
-                              }
-                              placeholder="0.00"
-                              style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                            />
-                          </div>
-
-                          <div>
-                            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>DT Rate ($)</div>
-                            <input
-                              value={draft.dtRate}
-                              onChange={(e) =>
-                                setRateDraft(facility.id, title, { dtRate: e.target.value })
-                              }
-                              placeholder="0.00"
-                              style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={saving}
-                            onClick={() => saveRate(facility, title)}
-                            style={{
-                              padding: "10px 14px",
-                              borderRadius: 10,
-                              border: "1px solid #111",
-                              background: "#111",
-                              color: "#fff",
-                              height: 40,
-                            }}
-                          >
-                            Save {title} Rate
-                          </button>
-                        </div>
-
-                        {renderRateHistory(facility, title)}
-                      </div>
-                    );
-                  })}
-                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={saveAllRates}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #111",
+                    background: "#111",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
+                  Save All Rates
+                </button>
               </div>
             </div>
-          ))
+          </>
+        ) : (
+          <div style={{ marginTop: 16, color: "#666" }}>
+            {loading ? "Loading facilities..." : "No facility selected."}
+          </div>
         )}
       </div>
     </div>
