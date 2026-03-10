@@ -190,7 +190,23 @@ router.post("/payroll-runs/finalize", async (req, res) => {
       });
     }
 
-    const createdById = (req as any).user?.id || null;
+   const earlyPayments = await prisma.earlyPayrollPayment.findMany({
+  where: {
+    periodStart: fromDt,
+    periodEnd: startOfDayUTC(periodEnd),
+  },
+  select: {
+    id: true,
+    employeeId: true,
+    amountCents: true,
+  },
+});
+
+const earlyPaymentByEmployee = new Map(
+  earlyPayments.map((p) => [String(p.employeeId), p])
+);
+
+const createdById = (req as any).user?.id || null;   
 
     const result = await prisma.$transaction(async (tx) => {
       const payrollRun = await tx.payrollRun.create({
@@ -319,28 +335,42 @@ router.post("/payroll-runs/finalize", async (req, res) => {
         });
 
         const adjustmentsCents = adjustments.reduce((s, a) => s + Number(a.amountCents || 0), 0);
-        const loanDeductionCents = loanDeductions.reduce((s, d) => s + Number(d.amountCents || 0), 0);
-        const netPayCents = totals.grossPayCents + adjustmentsCents - loanDeductionCents;
+const loanDeductionCents = loanDeductions.reduce((s, d) => s + Number(d.amountCents || 0), 0);
 
-        await tx.payrollRunEmployee.create({
-          data: {
-            payrollRunId: payrollRun.id,
-            employeeId: totals.employeeId,
-            regularMinutes: totals.regularMinutes,
-            overtimeMinutes: totals.overtimeMinutes,
-            doubleMinutes: totals.doubleMinutes,
-            breakMinutes: totals.breakMinutes,
-            payableMinutes: totals.payableMinutes,
-            regularPayCents: totals.regularPayCents,
-            overtimePayCents: totals.overtimePayCents,
-            doublePayCents: totals.doublePayCents,
-            grossPayCents: totals.grossPayCents,
-            adjustmentsCents,
-            loanDeductionCents,
-            netPayCents,
-            snapshotVersion: 1,
-          },
-        });
+const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) || null;
+const paidEarly = !!earlyPayment;
+const paidEarlyAmountCents = Number(earlyPayment?.amountCents || 0);
+
+// Full net for the pay period
+const totalNetForPeriodCents =
+  totals.grossPayCents + adjustmentsCents - loanDeductionCents;
+
+// What still needs to be paid now in this finalized run
+const netPayCents = paidEarly
+  ? Math.max(0, totalNetForPeriodCents - paidEarlyAmountCents)
+  : totalNetForPeriodCents;
+
+await tx.payrollRunEmployee.create({
+  data: {
+    payrollRunId: payrollRun.id,
+    employeeId: totals.employeeId,
+    regularMinutes: totals.regularMinutes,
+    overtimeMinutes: totals.overtimeMinutes,
+    doubleMinutes: totals.doubleMinutes,
+    breakMinutes: totals.breakMinutes,
+    payableMinutes: totals.payableMinutes,
+    regularPayCents: totals.regularPayCents,
+    overtimePayCents: totals.overtimePayCents,
+    doublePayCents: totals.doublePayCents,
+    grossPayCents: totals.grossPayCents,
+    adjustmentsCents,
+    loanDeductionCents,
+    netPayCents,
+    paidEarly,
+    paidEarlyAmountCents,
+    snapshotVersion: 1,
+  },
+});
 
         if (adjustments.length > 0) {
           await tx.payrollAdjustment.updateMany({
@@ -352,6 +382,16 @@ router.post("/payroll-runs/finalize", async (req, res) => {
             },
           });
         }
+       if (earlyPayments.length > 0) {
+  await tx.earlyPayrollPayment.updateMany({
+    where: {
+      id: { in: earlyPayments.map((p) => p.id) },
+    },
+    data: {
+      payrollRunId: payrollRun.id,
+    },
+  });
+}
       }
 
       return {

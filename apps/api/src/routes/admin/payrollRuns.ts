@@ -26,29 +26,32 @@ router.get("/payroll-runs", async (req, res) => {
       }
     }
 
-    const runs = await prisma.payrollRun.findMany({
-      where,
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-          },
-        },
-        employees: {
-          select: {
-            id: true,
-            employeeId: true,
-            grossPayCents: true,
-            adjustmentsCents: true,
-            loanDeductionCents: true,
-            netPayCents: true,
-          },
-        },
+
+   const runs = await prisma.payrollRun.findMany({
+  where,
+  include: {
+    createdBy: {
+      select: {
+        id: true,
+        email: true,
+        role: true,
       },
-      orderBy: [{ periodStart: "desc" }, { createdAt: "desc" }],
-    });
+    },
+    employees: {
+      select: {
+        id: true,
+        employeeId: true,
+        grossPayCents: true,
+        adjustmentsCents: true,
+        loanDeductionCents: true,
+        netPayCents: true,
+        paidEarly: true,
+        paidEarlyAmountCents: true,
+      },
+    },
+  },
+  orderBy: [{ periodStart: "desc" }, { createdAt: "desc" }],
+});
 
     const items = runs.map((run) => {
       const employeeCount = run.employees.length;

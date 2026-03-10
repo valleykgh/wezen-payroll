@@ -1,0 +1,35 @@
+# node modules
+node_modules
+**/node_modules
+
+# git
+.git
+.gitignore
+
+# next build
+.next
+apps/frontend/.next
+
+# dist builds
+dist
+apps/api/dist
+
+# logs
+npm-debug.log
+yarn-error.log
+
+# env files
+.env
+.env.*
+apps/api/.env
+apps/frontend/.env.local
+
+# macOS junk
+.DS_Store
+
+# coverage
+coverage
+
+# docker
+Dockerfile*
+docker-compose*

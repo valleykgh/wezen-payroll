@@ -55,6 +55,7 @@ model User {
   createdInvites                 Invite[]                  @relation("InviteCreatedBy")
   lockedFacilityBillingContracts FacilityBillingContract[] @relation("FacilityBillingContractLockedBy")
   payrollRunsCreated             PayrollRun[]              @relation("PayrollRunCreatedBy")
+  earlyPayrollPaymentsCreated    EarlyPayrollPayment[]     @relation("EarlyPayrollPaymentCreatedBy")
   createdAt                      DateTime                  @default(now())
   updatedAt                      DateTime                  @updatedAt
 }
@@ -81,14 +82,14 @@ model Employee {
   payrollCorrections PayrollCorrection[]
   // optional user
   user               User?
-
   // time entries exist even if user doesn't exist / invite not accepted
-  timeEntries TimeEntry[]
+  timeEntries        TimeEntry[]
 
   // invites for this employee
   invites                  Invite[]
   payrollRunEmployees      PayrollRunEmployee[]
   payrollRunEntrySnapshots PayrollRunEntrySnapshot[]
+  earlyPayrollPayments     EarlyPayrollPayment[]
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
 }
@@ -329,13 +330,14 @@ model PayrollRun {
   createdById String?
   createdBy   User?   @relation("PayrollRunCreatedBy", fields: [createdById], references: [id])
 
-  finalizedAt    DateTime?
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
-  adjustments    PayrollAdjustment[]
-  employees      PayrollRunEmployee[]
-  entrySnapshots PayrollRunEntrySnapshot[]
-  corrections    PayrollCorrection[]
+  finalizedAt          DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  adjustments          PayrollAdjustment[]
+  employees            PayrollRunEmployee[]
+  entrySnapshots       PayrollRunEntrySnapshot[]
+  corrections          PayrollCorrection[]
+  earlyPayrollPayments EarlyPayrollPayment[]
 
   @@index([periodStart, periodEnd])
   @@index([status])
@@ -357,11 +359,12 @@ model PayrollRunEmployee {
   doublePayCents   Int @default(0)
   grossPayCents    Int @default(0)
 
-  adjustmentsCents   Int @default(0)
-  loanDeductionCents Int @default(0)
-  netPayCents        Int @default(0)
-
-  snapshotVersion Int @default(1)
+  adjustmentsCents     Int     @default(0)
+  loanDeductionCents   Int     @default(0)
+  netPayCents          Int     @default(0)
+  paidEarly            Boolean @default(false)
+  paidEarlyAmountCents Int     @default(0)
+  snapshotVersion      Int     @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -421,4 +424,26 @@ model PayrollCorrection {
   @@index([payrollRunId])
   @@index([employeeId])
   @@index([workDate])
+}
+
+model EarlyPayrollPayment {
+  id           String   @id @default(cuid())
+  employeeId   String
+  periodStart  DateTime
+  periodEnd    DateTime
+  amountCents  Int
+  note         String?
+  paidAt       DateTime @default(now())
+  createdById  String?
+  payrollRunId String?
+
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  createdBy  User?       @relation("EarlyPayrollPaymentCreatedBy", fields: [createdById], references: [id])
+  payrollRun PayrollRun? @relation(fields: [payrollRunId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([employeeId, periodStart, periodEnd])
 }

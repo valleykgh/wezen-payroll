@@ -22,6 +22,8 @@ type PayrollRunEmployeeRow = {
   loanDeductionCents: number;
   netPayCents: number;
   snapshotVersion: number;
+  paidEarly?: boolean;
+  paidEarlyAmountCents?: number;
   employee?: {
     id: string;
     legalName: string;
@@ -465,10 +467,29 @@ export default function PayrollRunDetailPage() {
   {e.employee?.email || "-"}
 </div>
 
-<div style={{ fontSize: 12, marginTop: 6 }}>
+	<div style={{ fontSize: 12, marginTop: 6 }}>
   Gross: <b>{dollars(e.grossPayCents)}</b> • Net: <b>{dollars(e.netPayCents)}</b>
 </div>
-		    </button>
+
+{e.paidEarly ? (
+  <div style={{ marginTop: 6 }}>
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: "#ecfdf5",
+        color: "#065f46",
+        border: "1px solid #a7f3d0",
+        fontSize: 11,
+        fontWeight: 700,
+      }}
+    >
+      PAID EARLY {dollars(Number(e.paidEarlyAmountCents || 0))}
+    </span>
+  </div>
+) : null}	    
+              </button>
                   );
                 })}
               </div>
@@ -540,7 +561,13 @@ export default function PayrollRunDetailPage() {
                         <div>
                           Loans: <b>{dollars(selectedEmployee.loanDeductionCents)}</b>
                         </div>
-                        <div>
+			  <div>
+         		 Paid Early: <b>{selectedEmployee.paidEarly ? "YES" : "NO"}</b>
+  			</div>
+  			<div>
+   			 Early Amount: <b>{dollars(Number(selectedEmployee.paidEarlyAmountCents || 0))}</b>
+                        </div>
+			<div>
                           Net: <b>{dollars(selectedEmployee.netPayCents)}</b>
                         </div>
                         <div>

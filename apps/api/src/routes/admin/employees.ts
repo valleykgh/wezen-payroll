@@ -305,8 +305,6 @@ router.post("/dev/employee-token", async (req, res) => {
         role: user.role,
         employeeId: user.employeeId,
       },
-      secret,
-      { expiresIn: "30d" }
     );
 
     return res.json({ token });
