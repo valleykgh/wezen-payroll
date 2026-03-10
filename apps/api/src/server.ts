@@ -21,28 +21,29 @@ console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
  * because that overrides your restricted origin list.
  */
 
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "https://payroll.wezenstaffing.com",
   "https://api.payroll.wezenstaffing.com",
   "https://dcvnabxhc4tbc.cloudfront.net",
   "http://localhost:3000",
   "http://localhost:4001",
-];
+]);
 
-const corsOptions: cors.CorsOptions = {
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
-  credentials: false,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-};
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
 
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
 
+  next();
+});
 app.use(express.json());
 
 /**
