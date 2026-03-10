@@ -157,20 +157,21 @@ const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
 const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
 
 // ---- Payroll adjustments (same date window as entries) ----
+
 const adjWhere: any = { employeeId };
 
 if (from || to) {
-  adjWhere.workDate = {};
-  if (from) adjWhere.workDate.gte = startOfDay(from);
-  if (to) adjWhere.workDate.lt = startOfNextDay(to); // exclusive end, same as entries
+  adjWhere.createdAt = {};
+  if (from) adjWhere.createdAt.gte = startOfDay(from);
+  if (to) adjWhere.createdAt.lt = startOfNextDay(to);
 }
 
 const adjustments = await prisma.payrollAdjustment.findMany({
   where: adjWhere,
-  orderBy: { workDate: "asc" },
+  orderBy: { createdAt: "asc" },
   select: {
     id: true,
-    workDate: true,
+    createdAt: true,
     amountCents: true,
   },
 });

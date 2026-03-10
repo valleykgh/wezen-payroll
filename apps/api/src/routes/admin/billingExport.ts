@@ -63,41 +63,31 @@ router.get("/billing-export", async (req, res) => {
         },
       },
       orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
+      include: {
+    employee: {
       select: {
         id: true,
-        employeeId: true,
-        facilityId: true,
-        workDate: true,
-        shiftType: true,
-        status: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        title: true,
+        hourlyRateCents: true,
+      },
+    },
+    breaks: {
+      select: {
+        id: true,
+        timeEntryId: true,
         startTime: true,
         endTime: true,
-        minutesWorked: true,
-        breakMinutes: true,
-        punchesJson: true,
-        breaksJson: true,
-        notes: true,
-        employee: {
-          select: {
-            id: true,
-            legalName: true,
-            preferredName: true,
-            email: true,
-            title: true,
-            hourlyRateCents: true,
-          },
-        },
-        breaks: {
-          select: {
-            startTime: true,
-            endTime: true,
-            minutes: true,
-          },
-        },
-      } as any,
-    });
-
-    const facilityRates = await prisma.facilityRate.findMany({
+        minutes: true,
+        createdAt: true,
+      },
+    },
+  },
+});
+      
+      const facilityRates = await prisma.facilityRate.findMany({
       where: {
         facilityId: String(facilityId),
       },
