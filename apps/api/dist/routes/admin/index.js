@@ -1,0 +1,22 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const facilities_1 = __importDefault(require("./facilities"));
+const employees_1 = __importDefault(require("./employees"));
+const loans_1 = __importDefault(require("./loans"));
+const billingExport_1 = __importDefault(require("./billingExport"));
+const timeEntries_1 = __importDefault(require("./timeEntries"));
+const payroll_1 = __importDefault(require("./payroll"));
+const utils_1 = __importDefault(require("./utils"));
+const router = express_1.default.Router();
+router.use("/", facilities_1.default);
+router.use("/", employees_1.default);
+router.use("/", loans_1.default);
+router.use("/", billingExport_1.default);
+router.use("/", timeEntries_1.default);
+router.use("/", payroll_1.default);
+router.use("/", utils_1.default);
+exports.default = router;

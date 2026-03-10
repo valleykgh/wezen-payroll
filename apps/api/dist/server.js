@@ -20,14 +20,24 @@ console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
  * Avoid app.options("*", cors()) with default settings,
  * because that overrides your restricted origin list.
  */
+const allowedOrigins = [
+    "https://payroll.wezenstaffing.com",
+    "https://api.payroll.wezenstaffing.com",
+    "https://dcvnabxhc4tbc.cloudfront.net",
+    "http://localhost:3000",
+    "http://localhost:4001",
+];
 const corsOptions = {
-    origin: [
-        "https://payroll.wezenstaffing.com",
-        "https://dcvnabxhc4tbc.cloudfront.net",
-    ],
+    origin(origin, callback) {
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin))
+            return callback(null, true);
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: false,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-    // credentials: true, // enable only if you use cookies
 };
 app.use((0, cors_1.default)(corsOptions));
 app.options("*", (0, cors_1.default)(corsOptions));

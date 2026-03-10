@@ -24,6 +24,35 @@ function sumBreakMinutesFromEntry(e) {
     }
     return Number(e.breakMinutes ?? 0);
 }
+async function computeLoanDeductionCentsForPeriod(employeeId, from, to) {
+    // only count loans that still have outstanding > 0
+    const loans = await prisma_1.prisma.employeeLoan.findMany({
+        where: { employeeId },
+        include: { deductions: true },
+        orderBy: { createdAt: "asc" },
+    });
+    // compute how many payroll weeks are in range
+    // simplest: 1 deduction per pay-summary request (weekly payroll)
+    // If your pay-summary is ALWAYS weekly, we just deduct once.
+    // If your pay-summary can be 2 weeks, we deduct per week boundaries (Step 5C).
+    const isRange = Boolean(from || to);
+    // ✅ if your payroll is always weekly, do ONE deduction per loan per period query:
+    const deductOnce = true;
+    let total = 0;
+    for (const l of loans) {
+        const deductedCents = (l.deductions || []).reduce((s, d) => s + Number(d.amountCents ?? 0), 0);
+        const outstanding = Math.max(0, Number(l.principalCents ?? 0) - deductedCents);
+        if (outstanding <= 0)
+            continue;
+        const weekly = Number(l.weeklyDeductionCents ?? 0);
+        if (weekly <= 0)
+            continue;
+        const raw = deductOnce ? weekly : weekly; // we'll expand this in Step 5C
+        const applied = Math.min(outstanding, raw);
+        total += applied;
+    }
+    return total;
+}
 exports.employeeRoutes.get("/employee/time-entries", async (req, res) => {
     try {
         const employeeId = req.user.employeeId;
@@ -98,7 +127,42 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
         const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
         // payroll-safe cents calculation (integer math)
         const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
-        res.json({
+        // ---- Payroll adjustments (same date window as entries) ----
+        const adjWhere = { employeeId };
+        if (from || to) {
+            adjWhere.createdAt = {};
+            if (from)
+                adjWhere.createdAt.gte = startOfDay(from);
+            if (to)
+                adjWhere.createdAt.lt = startOfNextDay(to);
+        }
+        const adjustments = await prisma_1.prisma.payrollAdjustment.findMany({
+            where: adjWhere,
+            orderBy: { createdAt: "asc" },
+            select: {
+                id: true,
+                createdAt: true,
+                amountCents: true,
+            },
+        });
+        const adjustmentsCents = adjustments.reduce((sum, a) => sum + Number(a.amountCents ?? 0), 0);
+        // ---- Loan deductions (same date window as entries) ----
+        const loanWhere = { employeeId };
+        if (from || to) {
+            loanWhere.workDate = {};
+            if (from)
+                loanWhere.workDate.gte = startOfDay(from);
+            if (to)
+                loanWhere.workDate.lt = startOfNextDay(to); // exclusive end
+        }
+        const loanDeductions = await prisma_1.prisma.loanDeduction.findMany({
+            where: loanWhere,
+            select: { amountCents: true },
+        });
+        const loanDeductionCents = loanDeductions.reduce((sum, d) => sum + Number(d.amountCents ?? 0), 0);
+        const netPayCents = grossPayCents + adjustmentsCents - loanDeductionCents;
+        // net = gross + payroll adjustments - loan deductions
+        return res.json({
             employee: {
                 id: employee.id,
                 legalName: employee.legalName,
@@ -107,12 +171,17 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
                 hourlyRateCents: employee.hourlyRateCents,
             },
             totals: {
-                totalWorkedMinutes,
-                totalBreakMinutes,
-                totalPayableMinutes,
-                payableHours,
+                totalMinutes: totalWorkedMinutes,
+                totalBreakMinutes: totalBreakMinutes,
+                payableMinutes: totalPayableMinutes,
+                totalHours: payableHours,
                 grossPayCents,
+                adjustmentsCents,
+                loanDeductionCents,
+                netPayCents,
             },
+            adjustments,
+            // ✅ optional debug goes INSIDE the same JSON response
             debug: {
                 entryCount: entries.length,
             },
@@ -120,6 +189,6 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
     }
     catch (e) {
         console.error("GET /api/employee/pay-summary failed:", e);
-        res.status(500).json({ error: "Failed to compute pay summary" });
+        return res.status(500).json({ error: "Failed to load pay summary" });
     }
 });

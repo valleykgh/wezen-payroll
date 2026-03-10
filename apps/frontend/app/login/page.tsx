@@ -22,7 +22,7 @@ function LoginPageInner() {
   );
 
   const [email, setEmail] = useState("");
-const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -45,9 +45,15 @@ const [password, setPassword] = useState("");
       const role = String(j.user.role || "").toUpperCase();
 
       if (mode === "admin") {
-        if (role !== "ADMIN") {
+        const isAdminRole =
+          role === "SUPER_ADMIN" ||
+          role === "PAYROLL_ADMIN" ||
+          role === "HR_ADMIN";
+
+        if (!isAdminRole) {
           throw new Error("This is the ADMIN login page. Please use an Admin account.");
         }
+
         localStorage.setItem("admin_token", j.token);
         localStorage.removeItem("emp_token");
         router.push("/admin/time-entry");
@@ -79,7 +85,7 @@ const [password, setPassword] = useState("");
         </div>
       </div>
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
+      <form onSubmit={onSubmit} autoComplete="off" style={{ display: "grid", gap: 10 }}>
         <label style={{ display: "grid", gap: 6 }}>
           <span>Email</span>
           <input
@@ -87,8 +93,8 @@ const [password, setPassword] = useState("");
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="off"
-	    autoCorrect="off"
-	    autoCapitalize="none"
+            autoCorrect="off"
+            autoCapitalize="none"
             spellCheck={false}
             style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
           />

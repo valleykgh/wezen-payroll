@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "api",
-      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-api:6f913ca",
+      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-api:f037d32",
       "cpu": 0,
       "portMappings": [
         {

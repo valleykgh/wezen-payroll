@@ -33,6 +33,9 @@ exports.authRoutes.post("/register", async (req, res) => {
             passwordHash,
             role: "EMPLOYEE",
             employeeId: employee.id,
+            active: true,
+            mustChangePassword: false,
+            passwordUpdatedAt: new Date(),
         },
     });
     const token = (0, auth_1.signToken)({ sub: user.id, role: user.role, employeeId: user.employeeId });
@@ -46,23 +49,30 @@ exports.authRoutes.post("/change-password", authMiddleware_1.requireAuth, async 
     try {
         const userId = req.user.id;
         const { currentPassword, newPassword } = req.body || {};
-        if (!newPassword)
-            return res.status(400).json({ error: "newPassword required" });
+        if (!newPassword || String(newPassword).length < 8) {
+            return res.status(400).json({ error: "newPassword must be at least 8 characters" });
+        }
         const user = await prisma_1.prisma.user.findUnique({ where: { id: userId } });
         if (!user)
             return res.status(404).json({ error: "User not found" });
-        // If mustChangePassword is true, allow change without currentPassword
+        if (!user.active)
+            return res.status(403).json({ error: "User is inactive" });
         if (!user.mustChangePassword) {
-            if (!currentPassword)
+            if (!currentPassword) {
                 return res.status(400).json({ error: "currentPassword required" });
+            }
             const ok = await bcrypt_1.default.compare(currentPassword, user.passwordHash);
             if (!ok)
                 return res.status(401).json({ error: "Invalid current password" });
         }
-        const passwordHash = await bcrypt_1.default.hash(newPassword, 10);
+        const passwordHash = await bcrypt_1.default.hash(String(newPassword), 10);
         await prisma_1.prisma.user.update({
             where: { id: userId },
-            data: { passwordHash, mustChangePassword: false },
+            data: {
+                passwordHash,
+                mustChangePassword: false,
+                passwordUpdatedAt: new Date(),
+            },
         });
         res.json({ ok: true });
     }
@@ -73,18 +83,45 @@ exports.authRoutes.post("/change-password", authMiddleware_1.requireAuth, async 
 });
 exports.authRoutes.post("/login", async (req, res) => {
     const { email, password } = req.body || {};
-    if (!email || !password)
+    if (!email || !password) {
         return res.status(400).json({ error: "email and password required" });
-    const user = await prisma_1.prisma.user.findUnique({ where: { email } });
+    }
+    const user = await prisma_1.prisma.user.findUnique({
+        where: { email },
+        select: {
+            id: true,
+            email: true,
+            passwordHash: true,
+            role: true,
+            employeeId: true,
+            active: true,
+            mustChangePassword: true,
+        },
+    });
     if (!user)
         return res.status(401).json({ error: "Invalid credentials" });
+    if (!user.active)
+        return res.status(403).json({ error: "User is inactive" });
     const ok = await bcrypt_1.default.compare(password, user.passwordHash);
     if (!ok)
         return res.status(401).json({ error: "Invalid credentials" });
-    const token = (0, auth_1.signToken)({ sub: user.id, role: user.role, employeeId: user.employeeId });
+    await prisma_1.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+    });
+    const token = (0, auth_1.signToken)({
+        sub: user.id,
+        role: user.role,
+        employeeId: user.employeeId,
+    });
     res.json({
         token,
-        user: { id: user.id, email: user.email, role: user.role, employeeId: user.employeeId },
+        user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            employeeId: user.employeeId,
+        },
         mustChangePassword: user.mustChangePassword,
     });
 });
@@ -125,16 +162,26 @@ exports.authRoutes.post("/accept-invite", async (req, res) => {
                 passwordHash,
                 employeeId,
                 role: "EMPLOYEE",
+                active: true,
                 mustChangePassword: false,
+                passwordUpdatedAt: new Date(),
             },
             create: {
                 email,
                 passwordHash,
                 role: "EMPLOYEE",
                 employeeId,
+                active: true,
                 mustChangePassword: false,
+                passwordUpdatedAt: new Date(),
             },
-            select: { id: true, email: true, role: true, employeeId: true, mustChangePassword: true },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                employeeId: true,
+                mustChangePassword: true,
+            },
         });
         await prisma_1.prisma.invite.update({
             where: { id: invite.id },
