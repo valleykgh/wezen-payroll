@@ -34,6 +34,25 @@ function sumBreakMinutesFromEntry(e: any): number {
   return Number(e.breakMinutes ?? 0);
 }
 
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatDateISO(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+// TODO: replace with Admin/Company settings later
+const COMPANY_INFO = {
+  legalName: "Wezen Staffing",
+  addressLine1: "2498 Livorno Ct",
+  city: "Livermore",
+  state: "CA",
+  zip: "94550",
+};
+
 async function computeLoanDeductionCentsForPeriod(employeeId: string, from?: string, to?: string) {
   // only count loans that still have outstanding > 0
   const loans = await prisma.employeeLoan.findMany({
@@ -230,5 +249,150 @@ return res.json({
   } catch (e) {
     console.error("GET /api/employee/pay-summary failed:", e);
     return res.status(500).json({ error: "Failed to load pay summary" });
+  }
+});
+
+employeeRoutes.get("/employee/paystub", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (!from || !to) {
+      return res.status(400).json({ error: "from and to are required" });
+    }
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        hourlyRateCents: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        zip: true,
+        ssnLast4: true,
+      },
+    });
+
+    if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+    const entryWhere: any = {
+      employeeId,
+      status: APPROVED_STATUS,
+      workDate: {
+        gte: startOfDay(from),
+        lt: startOfNextDay(to),
+      },
+    };
+
+    const entries = await prisma.timeEntry.findMany({
+      where: entryWhere,
+      select: {
+        id: true,
+        workDate: true,
+        minutesWorked: true,
+        breakMinutes: true,
+        breaks: { select: { minutes: true } },
+      },
+      orderBy: { workDate: "asc" },
+    });
+
+    const totalWorkedMinutes = entries.reduce((sum, e: any) => sum + Number(e.minutesWorked ?? 0), 0);
+
+    const totalBreakMinutes = entries.reduce((sum, e: any) => sum + sumBreakMinutesFromEntry(e), 0);
+
+    const totalPayableMinutes = entries.reduce((sum, e: any) => {
+      const worked = Number(e.minutesWorked ?? 0);
+      const breaks = sumBreakMinutesFromEntry(e);
+      return sum + Math.max(0, worked - breaks);
+    }, 0);
+
+    const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
+    const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
+
+    const adjWhere: any = {
+      employeeId,
+      createdAt: {
+        gte: startOfDay(from),
+        lt: startOfNextDay(to),
+      },
+    };
+
+    const adjustments = await prisma.payrollAdjustment.findMany({
+      where: adjWhere,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        createdAt: true,
+        amountCents: true,
+        reason: true,
+      },
+    });
+
+    const adjustmentsCents = adjustments.reduce(
+      (sum, a) => sum + Number(a.amountCents ?? 0),
+      0
+    );
+
+    const loanWhere: any = {
+      employeeId,
+      periodStart: { gte: startOfDay(from) },
+      periodEnd: { lt: startOfNextDay(to) },
+    };
+
+    const loanDeductions = await prisma.loanDeduction.findMany({
+      where: loanWhere,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        amountCents: true,
+        note: true,
+        periodStart: true,
+        periodEnd: true,
+      },
+    });
+
+    const loanDeductionCents = loanDeductions.reduce(
+      (sum, d) => sum + Number(d.amountCents ?? 0),
+      0
+    );
+
+    const netPayCents = grossPayCents + adjustmentsCents - loanDeductionCents;
+
+    // Assumption: pay date is Friday after payroll week end (Sunday)
+    const payDate = formatDateISO(addDays(startOfDay(to), 5));
+
+    return res.json({
+      company: COMPANY_INFO,
+      employee: {
+        ...employee,
+      },
+      payPeriod: {
+        from,
+        to,
+        payDate,
+      },
+      totals: {
+        totalWorkedMinutes,
+        totalBreakMinutes,
+        totalPayableMinutes,
+        payableHours,
+        grossPayCents,
+        adjustmentsCents,
+        loanDeductionCents,
+        netPayCents,
+      },
+      adjustments,
+      loanDeductions,
+      entries,
+    });
+  } catch (e) {
+    console.error("GET /api/employee/paystub failed:", e);
+    return res.status(500).json({ error: "Failed to load paystub" });
   }
 });

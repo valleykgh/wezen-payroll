@@ -1,5 +1,6 @@
 import React from "react";
+import EmployeeGuard from "../components/EmployeeGuard";
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <EmployeeGuard>{children}</EmployeeGuard>;
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
+git add .
+git commit -m "paystub v1 + employee portal improvements"
 AWS_REGION="us-west-1"
 AWS_ACCOUNT_ID="211125653940"
 
@@ -9,7 +10,7 @@ SERVICE_NAME="wezen-payroll-api-service"
 TASK_FAMILY="wezen-payroll-api-task"
 CONTAINER_NAME="api"
 ECR_REPO="wezen-payroll-api"
-
+IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DEF_FILE="$SCRIPT_DIR/api-task-def.json"
 
@@ -41,6 +42,7 @@ aws ecr get-login-password --region "$AWS_REGION" \
 | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 
 echo "2) Building API image for linux/amd64..."
+IMAGE=211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-frontend:$IMAGE_TAG
 docker buildx build \
   --platform linux/amd64 \
   -f apps/api/Dockerfile \

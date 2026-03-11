@@ -9,7 +9,7 @@ const authRoutes_1 = require("./routes/authRoutes");
 const meRoutes_1 = require("./routes/meRoutes");
 const adminTimeRoutes_1 = require("./routes/adminTimeRoutes");
 const employeeRoutes_1 = require("./routes/employeeRoutes");
-const adminInviteRoutes_1 = require("./routes/adminInviteRoutes");
+const adminInviteRoutes_1 = __importDefault(require("./routes/adminInviteRoutes"));
 const admin_1 = __importDefault(require("./routes/admin"));
 // import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 dotenv_1.default.config();
@@ -66,7 +66,7 @@ app.use("/api", meRoutes_1.meRoutes);
 app.use("/api", employeeRoutes_1.employeeRoutes);
 app.use("/api/admin", admin_1.default);
 app.use("/api/admin", adminTimeRoutes_1.adminTimeRoutes);
-app.use("/api/admin", adminInviteRoutes_1.adminInviteRoutes);
+app.use("/api/admin", adminInviteRoutes_1.default);
 // app.use("/api", adminRoutes);
 /**
  * 404 fallback

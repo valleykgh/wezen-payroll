@@ -6,8 +6,9 @@ import { authRoutes } from "./routes/authRoutes";
 import { meRoutes } from "./routes/meRoutes";
 import { adminTimeRoutes } from "./routes/adminTimeRoutes";
 import { employeeRoutes } from "./routes/employeeRoutes";
-import { adminInviteRoutes } from "./routes/adminInviteRoutes";
+import  adminInviteRoutes  from "./routes/adminInviteRoutes";
 import adminRoutes from "./routes/admin";
+import acceptInviteRoutes from "./routes/acceptInviteRoutes";
 // import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 
 dotenv.config();

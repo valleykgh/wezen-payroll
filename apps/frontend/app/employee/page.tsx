@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { getToken } from "../lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001";
-
 type BreakRow = { startTime: string; endTime: string; minutes: number };
 
 type EmpTimeEntry = {
@@ -47,16 +47,71 @@ type PaySummary = {
   }>;
 };
 
+type PaystubData = {
+  company: {
+    legalName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    zip: string;
+    phone?: string;
+  };
+  employee: {
+    id: string;
+    legalName: string;
+    preferredName: string | null;
+    email: string;
+    hourlyRateCents: number;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+    ssnLast4?: string | null;
+  };
+  payPeriod: {
+    from: string;
+    to: string;
+    payDate: string;
+  };
+  totals: {
+    totalWorkedMinutes: number;
+    totalBreakMinutes: number;
+    totalPayableMinutes: number;
+    payableHours: number;
+    grossPayCents: number;
+    adjustmentsCents: number;
+    loanDeductionCents: number;
+    netPayCents: number;
+  };
+  adjustments: Array<{
+    id: string;
+    createdAt: string;
+    amountCents: number;
+    reason?: string | null;
+  }>;
+  loanDeductions: Array<{
+    id: string;
+    amountCents: number;
+    note?: string | null;
+    periodStart: string;
+    periodEnd: string;
+  }>;
+};
+
 async function apiFetch(path: string, token: string, init?: RequestInit) {
+    
   const safeToken = cleanJwt(token);
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers || {}),
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    cache: "no-store",
+const res = await fetch(`${API}${path}`, {
+  ...init,
+  headers: {
+    ...(init?.headers || {}),
+    Authorization: `Bearer ${safeToken}`,
+    "Content-Type": "application/json",
+  },
+
+  cache: "no-store",
   });
   const text = await res.text();
   let json: any = null;
@@ -83,6 +138,35 @@ function toISODate(d: Date) {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
+
+function getPreviousPayrollWeek() {
+  const today = new Date();
+
+  // JS: Sunday=0, Monday=1, ... Saturday=6
+  const day = today.getDay();
+
+  // how many days since this week's Monday
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+
+  // this week's Monday
+  const thisWeekMonday = new Date(today);
+  thisWeekMonday.setHours(0, 0, 0, 0);
+  thisWeekMonday.setDate(today.getDate() - daysSinceMonday);
+
+  // previous week's Monday
+  const prevMonday = new Date(thisWeekMonday);
+  prevMonday.setDate(thisWeekMonday.getDate() - 7);
+
+  // previous week's Sunday
+  const prevSunday = new Date(prevMonday);
+  prevSunday.setDate(prevMonday.getDate() + 6);
+
+  return {
+    from: toISODate(prevMonday),
+    to: toISODate(prevSunday),
+  };
+}
+
 function cleanJwt(raw: string) {
   // Accept either:
   // 1) a raw JWT: "aaa.bbb.ccc"
@@ -91,12 +175,12 @@ function cleanJwt(raw: string) {
     .trim()
     .replace(/^Bearer\s+/i, "");
 }
+
 export default function EmployeePage() {
   const [empToken, setEmpToken] = useState("");
-  const [tokenInput, setTokenInput] = useState("");
 
-  const [from, setFrom] = useState<string>(() => toISODate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)));
-  const [to, setTo] = useState<string>(() => toISODate(new Date()));
+  const [from, setFrom] = useState<string>(() => getPreviousPayrollWeek().from);
+const [to, setTo] = useState<string>(() => getPreviousPayrollWeek().to);
 
   const [entries, setEntries] = useState<EmpTimeEntry[]>([]);
   const [summary, setSummary] = useState<PaySummary | null>(null);
@@ -113,27 +197,14 @@ const [ssnLast4, setSsnLast4] = useState("");
 
 
   useEffect(() => {
-    const saved = localStorage.getItem("emp_token") || "";
-    if (saved) {
-      setEmpToken(saved);
-      setTokenInput(saved);
-    }
-  }, []);
+  const saved = getToken() || "";
+  if (saved) {
+    setEmpToken(saved);
+  }
+}, []);
 
   const canCallApi = useMemo(() => empToken.trim().length > 0, [empToken]);
-function cleanJwt(raw: string) {
-  return String(raw || "")
-    .replace(/^Bearer\s+/i, "")
-    .replace(/[^\w.\-]/g, "")
-    .trim();
-}
 
-  async function onSaveToken() {
-    const t = cleanJwt(tokenInput)
-    setEmpToken(t);
-    localStorage.setItem("emp_token", t);
-    setErr("");
-  }
 
   async function savePaystubInfo() {
   if (!empToken) return;
@@ -162,6 +233,179 @@ function cleanJwt(raw: string) {
   }
 }
 
+async function loadProfile() {
+  if (!empToken) return;
+
+  try {
+    const profile = await apiFetch("/api/employee/profile", empToken, {
+      method: "GET",
+    });
+
+    setAddressLine1(profile?.employee?.addressLine1 || "");
+    setAddressLine2(profile?.employee?.addressLine2 || "");
+    setCity(profile?.employee?.city || "");
+    setState(profile?.employee?.state || "");
+    setZip(profile?.employee?.zip || "");
+    setSsnLast4(profile?.employee?.ssnLast4 || "");
+  } catch (e: any) {
+    console.error(e);
+  }
+}
+
+
+
+function resetToLastPayrollWeek() {
+  const range = getPreviousPayrollWeek();
+  setFrom(range.from);
+  setTo(range.to);
+}
+
+async function viewPaystub() {
+  if (!empToken || !from || !to) return;
+
+  try {
+    setErr("");
+
+    const qs = new URLSearchParams({ from, to });
+    const data = await apiFetch(`/api/employee/paystub?${qs.toString()}`, empToken);
+
+    const paystub = data as PaystubData;
+
+    const employeeAddress = [
+      paystub.employee.addressLine1,
+      paystub.employee.addressLine2,
+      [paystub.employee.city, paystub.employee.state, paystub.employee.zip].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join("<br/>");
+
+    const companyAddress = [
+      paystub.company.addressLine1,
+      paystub.company.addressLine2,
+      [paystub.company.city, paystub.company.state, paystub.company.zip].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join("<br/>");
+
+    const adjustmentsHtml = paystub.adjustments.length
+      ? `<ul>${paystub.adjustments
+          .map(
+            (a) =>
+              `<li>${new Date(a.createdAt).toLocaleDateString()} — ${fmtCents(a.amountCents)}${a.reason ? ` (${a.reason})` : ""}</li>`
+          )
+          .join("")}</ul>`
+      : `<div>None</div>`;
+
+    const deductionsHtml = paystub.loanDeductions.length
+      ? `<ul>${paystub.loanDeductions
+          .map(
+            (d) =>
+              `<li>${fmtCents(d.amountCents)}${d.note ? ` (${d.note})` : ""}</li>`
+          )
+          .join("")}</ul>`
+      : `<div>None</div>`;
+
+    const html = `
+      <html>
+        <head>
+          <title>Paystub</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
+            .row { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+            .box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+            h1, h2, h3 { margin-top: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            .right { text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>${paystub.company.legalName}</h1>
+
+          <div class="row">
+            <div class="box">
+              <h3>Company</h3>
+              <div>${companyAddress}</div>
+              ${paystub.company.phone ? `<div style="margin-top:8px;">${paystub.company.phone}</div>` : ""}
+            </div>
+
+            <div class="box">
+              <h3>Employee</h3>
+              <div><b>${paystub.employee.legalName}</b></div>
+              <div>${employeeAddress || "Address not provided"}</div>
+              <div style="margin-top:8px;">SSN Last 4: ${paystub.employee.ssnLast4 || "—"}</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="box">
+              <h3>Pay Period</h3>
+              <div>From: ${paystub.payPeriod.from}</div>
+              <div>To: ${paystub.payPeriod.to}</div>
+              <div>Pay Date: ${paystub.payPeriod.payDate}</div>
+            </div>
+
+            <div class="box">
+              <h3>Summary</h3>
+              <div>Worked Minutes: ${paystub.totals.totalWorkedMinutes}</div>
+              <div>Break Minutes: ${paystub.totals.totalBreakMinutes}</div>
+              <div>Payable Minutes: ${paystub.totals.totalPayableMinutes}</div>
+              <div>Payable Hours: ${paystub.totals.payableHours}</div>
+            </div>
+          </div>
+
+          <table>
+            <tr>
+              <th>Description</th>
+              <th class="right">Amount</th>
+            </tr>
+            <tr>
+              <td>Gross Pay</td>
+              <td class="right">${fmtCents(paystub.totals.grossPayCents)}</td>
+            </tr>
+            <tr>
+              <td>Adjustments</td>
+              <td class="right">${fmtCents(paystub.totals.adjustmentsCents)}</td>
+            </tr>
+            <tr>
+              <td>Loan Deductions</td>
+              <td class="right">-${fmtCents(paystub.totals.loanDeductionCents)}</td>
+            </tr>
+            <tr>
+              <td><b>Net Pay</b></td>
+              <td class="right"><b>${fmtCents(paystub.totals.netPayCents)}</b></td>
+            </tr>
+          </table>
+
+          <div class="row" style="margin-top: 24px;">
+            <div class="box">
+              <h3>Adjustments</h3>
+              ${adjustmentsHtml}
+            </div>
+            <div class="box">
+              <h3>Deductions</h3>
+              ${deductionsHtml}
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const win = window.open("", "_blank", "width=900,height=1000");
+    if (!win) {
+      throw new Error("Popup blocked. Please allow popups to view paystub.");
+    }
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  } catch (e: any) {
+    console.error(e);
+    setErr(e?.message || "Failed to load paystub");
+  }
+}
+
   async function loadAll() {
     if (!empToken) return;
     setErr("");
@@ -184,36 +428,36 @@ function cleanJwt(raw: string) {
   }
 
   useEffect(() => {
-    if (!empToken) return;
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empToken]);
+  if (!empToken) return;
+
+  loadAll();
+  loadProfile();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [empToken]);
 
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Employee — Time & Pay</h1>
 
       <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 420px" }}>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Employee JWT (paste once)</div>
-            <input
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Bearer token (JWT)"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
-          </div>
-          <button
-            onClick={onSaveToken}
-            style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff" }}
-          >
-            Save Token
-          </button>
-        </div>
 
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
           <div>
+            <button
+  type="button"
+  onClick={resetToLastPayrollWeek}
+  style={{
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #2563eb",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    fontWeight: 700,
+  }}
+>
+  Last Payroll Week
+</button>
             <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>From</div>
             <input value={from} onChange={(e) => setFrom(e.target.value)} type="date" style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
           </div>
@@ -229,6 +473,21 @@ function cleanJwt(raw: string) {
           >
             Load
           </button>
+
+          <button
+  disabled={!canCallApi || loading}
+  onClick={viewPaystub}
+  style={{
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #111",
+    background: "#111",
+    color: "#fff",
+    fontWeight: 700,
+  }}
+>
+  View Paystub
+</button>
         </div>
 
         {err ? <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
@@ -277,8 +536,8 @@ function cleanJwt(raw: string) {
     <ul style={{ margin: 0, paddingLeft: 18 }}>
       {summary.adjustments.map((a: any) => (
         <li key={a.id}>
-          {String(a.workDate).slice(0,10)} — {fmtCents(a.amountCents)} {a.reason ? `(${a.reason})` : ""}
-        </li>
+        {String(a.createdAt).slice(0,10)} — {fmtCents(a.amountCents)} {a.reason ? `(${a.reason})` : ""}
+	</li>
       ))}
     </ul>
   </div>
@@ -387,9 +646,6 @@ function cleanJwt(raw: string) {
         </div>
       </div>
 
-      <div style={{ marginTop: 14, fontSize: 12, opacity: 0.7 }}>
-        API base: <code>{API}</code>
-      </div>
     </div>
   );
 }

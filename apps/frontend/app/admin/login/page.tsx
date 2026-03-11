@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 import { setSession, AuthedUser } from "../../lib/auth";
 
 type LoginResp = { token: string; user: AuthedUser; mustChangePassword?: boolean };
 
-export default function AdminLoginPage() {
+function AdminLoginInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const next = sp.get("next") || "/admin";
@@ -21,6 +21,7 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setErr(null);
     setBusy(true);
+
     try {
       const data = await apiFetch<LoginResp>("/api/auth/login", {
         method: "POST",
@@ -30,7 +31,6 @@ export default function AdminLoginPage() {
 
       const role = String(data.user.role || "").toUpperCase();
       const isAdminRole =
-        role === "ADMIN" ||
         role === "SUPER_ADMIN" ||
         role === "PAYROLL_ADMIN" ||
         role === "HR_ADMIN";
@@ -89,5 +89,13 @@ export default function AdminLoginPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Loading...</div>}>
+      <AdminLoginInner />
+    </Suspense>
   );
 }

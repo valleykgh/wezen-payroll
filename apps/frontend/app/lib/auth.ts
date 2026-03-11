@@ -1,6 +1,6 @@
 // apps/frontend/app/lib/auth.ts
 
-export type Role = "ADMIN" | "SUPER_ADMIN" | "EMPLOYEE";
+export type Role = "ADMIN" | "SUPER_ADMIN" | "PAYROLL_ADMIN" | "HR_ADMIN" | "EMPLOYEE";
 export type AuthedUser = {
   id: string;
   email: string;

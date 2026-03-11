@@ -13,7 +13,7 @@ API_URL="https://api.payroll.wezenstaffing.com"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DEF_FILE="$SCRIPT_DIR/frontend-task-def.json"
-
+IMAGE_TAG=$(git rev-parse --short HEAD)
 TAG="${1:-$(git rev-parse --short HEAD)}"
 IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$TAG"
 
@@ -34,7 +34,7 @@ echo "Image: $IMAGE_URI"
 
 aws ecr get-login-password --region "$AWS_REGION" \
 | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-
+IMAGE=211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-frontend:$IMAGE_TAG
 docker buildx build \
   --platform linux/amd64 \
   -f apps/frontend/Dockerfile \

@@ -1,7 +1,8 @@
 import express from "express";
+import crypto from "crypto";
+import { sendEmployeeInviteEmail } from "../../lib/email";
 import { prisma } from "../../prisma";
 import { signToken } from "../../auth";
-
 const router = express.Router();
 
 function requireFacilityPin(req: any) {
@@ -20,6 +21,8 @@ function requireFacilityPin(req: any) {
     throw err;
   }
 }
+
+// GET /api/admin/employees
 
 // GET /api/admin/employees
 router.get("/employees", async (req, res) => {
@@ -43,6 +46,21 @@ router.get("/employees", async (req, res) => {
         ssnLast4: true,
         createdAt: true,
         updatedAt: true,
+        user: {
+          select: {
+            id: true,
+          },
+        },
+        invites: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            expiresAt: true,
+            usedAt: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
@@ -52,6 +70,10 @@ router.get("/employees", async (req, res) => {
     return res.status(500).json({ error: "Failed to load employees" });
   }
 });
+
+// POST /api/admin/employees
+
+// POST /api/admin/employees
 
 // POST /api/admin/employees
 router.post("/employees", async (req, res) => {
@@ -114,7 +136,36 @@ router.post("/employees", async (req, res) => {
       },
     });
 
-    return res.json({ employee });
+    const token = crypto.randomBytes(32).toString("hex");
+
+    const invite = await prisma.invite.create({
+      data: {
+        employeeId: employee.id,
+        email: employee.email,
+        token,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        createdById: (req as any).user?.id || null,
+      },
+      select: {
+        id: true,
+        token: true,
+        expiresAt: true,
+      },
+    });
+
+    const frontendBase = String(
+  process.env.FRONTEND_URL || "https://payroll.wezenstaffing.com"
+).replace(/\/+$/, "");
+
+const inviteUrl = `${frontendBase}/employee/setup-password?token=${invite.token}`;
+
+    await sendEmployeeInviteEmail({
+      to: employee.email,
+      employeeName: employee.preferredName || employee.legalName,
+      inviteUrl,
+    });
+
+    return res.json({ employee, inviteUrl });
   } catch (e: any) {
     if (e?.code === "P2002") {
       return res.status(409).json({
@@ -123,7 +174,7 @@ router.post("/employees", async (req, res) => {
     }
 
     console.error("POST /api/admin/employees failed:", e);
-    return res.status(500).json({ error: "Failed to create employee" });
+    return res.status(500).json({ error: e?.message || "Failed to create employee" });
   }
 });
 

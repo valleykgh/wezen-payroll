@@ -29,7 +29,19 @@
         {
           "name": "PORT",
           "value": "4000"
-        }
+        },
+	{
+    	  "name": "SES_FROM_EMAIL",
+   	  "value": "noreply@wezenstaffing.com"
+ 	 },
+	{
+	  "name": "FRONTEND_URL",
+ 	  "value": "https://payroll.wezenstaffing.com"
+	},
+        {
+          "name": "ADMIN_OVERRIDE_PIN",
+          "value": "0786"
+	}
 ],
         "secrets": [
   {

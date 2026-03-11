@@ -13,8 +13,16 @@ type Employee = {
   title?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  user?: {
+    id: string;
+  } | null;
+  invites?: Array<{
+    id: string;
+    expiresAt: string;
+    usedAt: string | null;
+    createdAt: string;
+  }>;
 };
-
 function moneyFromCents(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
@@ -139,6 +147,21 @@ export default function AdminEmployeesPage() {
     loadEmployees().catch((e: any) => setErr(e?.message || "Failed to load employees"));
   }, []);
 
+async function sendInvite(employeeId: string) {
+  try {
+    const res = await apiFetch<{ inviteUrl: string }>(
+      `/api/admin/employees/${employeeId}/invite`,
+      {
+        method: "POST",
+      }
+    );
+
+    alert(`Invite link:\n\n${res.inviteUrl}`);
+  } catch (e: any) {
+    console.error(e);
+    alert(e?.message || "Failed to create invite");
+  }
+}
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Employees</h1>
@@ -158,6 +181,7 @@ export default function AdminEmployeesPage() {
               <th style={{ padding: 10 }}>Title</th>
               <th style={{ padding: 10 }}>Rate</th>
               <th style={{ padding: 10 }}>Status</th>
+              <th style={{ padding: 10 }}>Invite</th>
               <th style={{ padding: 10 }}>Updated</th>
               <th style={{ padding: 10 }}>Actions</th>
             </tr>
@@ -165,7 +189,7 @@ export default function AdminEmployeesPage() {
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 12, opacity: 0.7 }}>
+                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
                   No employees found.
                 </td>
               </tr>
@@ -277,6 +301,70 @@ export default function AdminEmployeesPage() {
                       )}
                     </td>
 
+		    <td style={{ padding: 10, fontSize: 13 }}>
+  {emp.user ? (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "4px 10px",
+        borderRadius: 999,
+        background: "#ecfdf5",
+        color: "#047857",
+        border: "1px solid #a7f3d0",
+        fontWeight: 700,
+      }}
+    >
+      ACCEPTED
+    </span>
+  ) : emp.invites?.[0]?.usedAt ? (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "4px 10px",
+        borderRadius: 999,
+        background: "#ecfdf5",
+        color: "#047857",
+        border: "1px solid #a7f3d0",
+        fontWeight: 700,
+      }}
+    >
+      ACCEPTED
+    </span>
+  ) : emp.invites?.[0] ? (
+    new Date(emp.invites[0].expiresAt).getTime() < Date.now() ? (
+      <span
+        style={{
+          display: "inline-block",
+          padding: "4px 10px",
+          borderRadius: 999,
+          background: "#fff7ed",
+          color: "#c2410c",
+          border: "1px solid #fdba74",
+          fontWeight: 700,
+        }}
+      >
+        EXPIRED
+      </span>
+    ) : (
+      <span
+        style={{
+          display: "inline-block",
+          padding: "4px 10px",
+          borderRadius: 999,
+          background: "#eff6ff",
+          color: "#1d4ed8",
+          border: "1px solid #93c5fd",
+          fontWeight: 700,
+        }}
+      >
+        PENDING
+      </span>
+    )
+  ) : (
+    <span style={{ opacity: 0.6 }}>—</span>
+  )}
+</td>
+
                     <td style={{ padding: 10, fontSize: 13, opacity: 0.8 }}>
                       {emp.updatedAt ? new Date(emp.updatedAt).toLocaleString() : "—"}
                     </td>
@@ -330,7 +418,42 @@ export default function AdminEmployeesPage() {
                           </button>
                         )}
 
-                        {emp.active ? (
+
+			{emp.user ? (
+  <button
+    type="button"
+    disabled
+    style={{
+      padding: "8px 12px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: "#f3f4f6",
+      color: "#6b7280",
+      fontWeight: 700,
+      opacity: 0.8,
+    }}
+  >
+    User Exists
+  </button>
+) : (
+  <button
+    type="button"
+    disabled={loading}
+    onClick={() => sendInvite(emp.id)}
+    style={{
+      padding: "8px 12px",
+      borderRadius: 8,
+      border: "1px solid #2563eb",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      fontWeight: 700,
+    }}
+  >
+    Send Invite
+  </button>
+)}			
+
+			 {emp.active ? (
                           <button
                             type="button"
                             disabled={loading}

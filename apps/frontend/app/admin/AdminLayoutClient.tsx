@@ -7,8 +7,7 @@ import { logout } from "../lib/auth";
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
-  const active = pathname === href;
-
+  const active = pathname === href || pathname.startsWith(href + "/");
   return (
     <Link
       href={href}
@@ -43,6 +42,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <NavLink href="/admin" label="Admin Home" />
+          <NavLink href="/admin/users" label="Admin Users" />
           <NavLink href="/admin/time-entry" label="Time Entry" />
           <NavLink href="/admin/time-entries-week" label="Time Entries (Week)" />
  	  <NavLink href="/admin/employees" label="Employees" />
