@@ -32,8 +32,8 @@ function splitDailyBuckets(payableMinutes) {
 }
 router.get("/payroll-runs/preview", async (req, res) => {
     try {
-        const periodStart = String(req.query.periodStart || "").trim();
-        const periodEnd = String(req.query.periodEnd || "").trim();
+        const periodStart = String(req.query.periodStart || req.query.from || "").trim();
+        const periodEnd = String(req.query.periodEnd || req.query.to || "").trim();
         if (!periodStart || !periodEnd) {
             return res.status(400).json({ error: "periodStart and periodEnd required" });
         }

@@ -33,14 +33,18 @@ export default function AdminEmployeesPage() {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
-  const [editingId, setEditingId] = useState<string>("");
   const [form, setForm] = useState({
-    legalName: "",
-    preferredName: "",
-    email: "",
-    title: "CNA",
-    hourlyRateCents: "0",
-  });
+  legalName: "",
+  preferredName: "",
+  email: "",
+  title: "CNA",
+  hourlyRate: "0",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  zip: "",
+});
 
   async function loadEmployees() {
     setErr("");
@@ -55,7 +59,12 @@ export default function AdminEmployeesPage() {
       preferredName: emp.preferredName || "",
       email: emp.email || "",
       title: emp.title || "CNA",
-      hourlyRateCents: String(emp.hourlyRateCents ?? 0),
+      hourlyRate: String((emp.hourlyRateCents || 0) / 100),
+addressLine1: emp.addressLine1 || "",
+addressLine2: emp.addressLine2 || "",
+city: emp.city || "",
+state: emp.state || "",
+zip: emp.zip || "",
     });
   }
 
@@ -83,8 +92,13 @@ export default function AdminEmployeesPage() {
           preferredName: form.preferredName,
           email: form.email,
           title: form.title,
-          hourlyRateCents: Number(form.hourlyRateCents || 0),
-        }),
+          hourlyRateCents: Math.round(Number(form.hourlyRate || 0) * 100),
+          addressLine1: form.addressLine1,
+	  addressLine2: form.addressLine2,
+	  city: form.city,
+	  state: form.state,
+	  zip: form.zip, 
+       }),
       });
 
       setOk("Employee updated.");
@@ -258,9 +272,9 @@ async function sendInvite(employeeId: string) {
                       {isEditing ? (
                         <input
                           value={form.hourlyRateCents}
-                          onChange={(e) => setForm((p) => ({ ...p, hourlyRateCents: e.target.value }))}
-                          placeholder="Hourly cents"
-                          style={{ width: 120, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+                          onChange={(e) => setForm((p) => ({ ...p, hourlyRate: e.target.value }))}
+                          placeholder="Hourly rate ($)"
+			  style={{ width: 120, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
                         />
                       ) : (
                         moneyFromCents(emp.hourlyRateCents)
