@@ -372,18 +372,48 @@ employeeRoutes.get("/employee/paystub", async (req, res) => {
       orderBy: { workDate: "asc" },
     });
 
-    const totalWorkedMinutes = entries.reduce((sum, e: any) => sum + Number(e.minutesWorked ?? 0), 0);
+    let totalWorkedMinutes = 0;
+let totalBreakMinutes = 0;
+let totalPayableMinutes = 0;
 
-    const totalBreakMinutes = entries.reduce((sum, e: any) => sum + sumBreakMinutesFromEntry(e), 0);
+let regularMinutes = 0;
+let overtimeMinutes = 0;
+let doubleMinutes = 0;
 
-    const totalPayableMinutes = entries.reduce((sum, e: any) => {
-      const worked = Number(e.minutesWorked ?? 0);
-      const breaks = sumBreakMinutesFromEntry(e);
-      return sum + Math.max(0, worked - breaks);
-    }, 0);
+for (const e of entries as any[]) {
+  const worked = Number(e.minutesWorked ?? 0);
+  const breaks = sumBreakMinutesFromEntry(e);
+  const payable = Math.max(0, worked - breaks);
 
-    const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
-    const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
+  totalWorkedMinutes += worked;
+  totalBreakMinutes += breaks;
+  totalPayableMinutes += payable;
+
+  const regularCap = 8 * 60;
+  const otCap = 12 * 60;
+
+  const reg = Math.min(payable, regularCap);
+  const ot = Math.max(0, Math.min(payable, otCap) - regularCap);
+  const dt = Math.max(0, payable - otCap);
+
+  regularMinutes += reg;
+  overtimeMinutes += ot;
+  doubleMinutes += dt;
+}
+
+const rateCents = Number(employee.hourlyRateCents || 0);
+
+const regularPayCents = Math.round((regularMinutes * rateCents) / 60);
+const overtimePayCents = Math.round((overtimeMinutes * rateCents * 1.5) / 60);
+const doublePayCents = Math.round((doubleMinutes * rateCents * 2) / 60);
+
+const grossPayCents =
+  regularPayCents +
+  overtimePayCents +
+  doublePayCents;
+
+const payableHours =
+  Math.round((totalPayableMinutes / 60) * 100) / 100;
 
     const adjWhere: any = {
       employeeId,
@@ -448,15 +478,24 @@ employeeRoutes.get("/employee/paystub", async (req, res) => {
         payDate,
       },
       totals: {
-        totalWorkedMinutes,
-        totalBreakMinutes,
-        totalPayableMinutes,
-        payableHours,
-        grossPayCents,
-        adjustmentsCents,
-        loanDeductionCents,
-        netPayCents,
-      },
+  totalWorkedMinutes,
+  totalBreakMinutes,
+  totalPayableMinutes,
+  payableHours,
+
+  regularMinutes,
+  overtimeMinutes,
+  doubleMinutes,
+
+  regularPayCents,
+  overtimePayCents,
+  doublePayCents,
+
+  grossPayCents,
+  adjustmentsCents,
+  loanDeductionCents,
+  netPayCents,
+},
       adjustments,
       loanDeductions,
       entries,

@@ -277,53 +277,39 @@ async function viewPaystub() {
 
     const qs = new URLSearchParams({ from, to });
     const data = await apiFetch(`/api/employee/paystub?${qs.toString()}`, empToken);
-
-    const paystub = data as PaystubData;
+    const paystub = await apiFetch(`/api/employee/paystub?${qs.toString()}`, empToken);
 
     const employeeAddress = [
-      paystub.employee.addressLine1,
-      paystub.employee.addressLine2,
-      [paystub.employee.city, paystub.employee.state, paystub.employee.zip].filter(Boolean).join(", "),
+      paystub?.employee?.addressLine1,
+      paystub?.employee?.addressLine2,
+      [paystub?.employee?.city, paystub?.employee?.state, paystub?.employee?.zip]
+        .filter(Boolean)
+        .join(", "),
     ]
       .filter(Boolean)
       .join("<br/>");
 
     const companyAddress = [
-      paystub.company.addressLine1,
-      paystub.company.addressLine2,
-      [paystub.company.city, paystub.company.state, paystub.company.zip].filter(Boolean).join(", "),
+      paystub?.company?.addressLine1,
+      paystub?.company?.addressLine2,
+      [paystub?.company?.city, paystub?.company?.state, paystub?.company?.zip]
+        .filter(Boolean)
+        .join(", "),
     ]
       .filter(Boolean)
       .join("<br/>");
 
-    const adjustmentsHtml = paystub.adjustments.length
-      ? `<ul>${paystub.adjustments
-          .map(
-            (a) =>
-              `<li>${new Date(a.createdAt).toLocaleDateString()} — ${fmtCents(a.amountCents)}${a.reason ? ` (${a.reason})` : ""}</li>`
-          )
-          .join("")}</ul>`
-      : `<div>None</div>`;
-
-    const deductionsHtml = paystub.loanDeductions.length
-      ? `<ul>${paystub.loanDeductions
-          .map(
-            (d) =>
-              `<li>${fmtCents(d.amountCents)}${d.note ? ` (${d.note})` : ""}</li>`
-          )
-          .join("")}</ul>`
-      : `<div>None</div>`;
 
     const html = `
       <html>
         <head>
           <title>Paystub</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
-            .row { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-            .box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
-            h1, h2, h3 { margin-top: 0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
+            h1, h2, h3 { margin: 0 0 12px 0; }
+            .row { display: flex; gap: 20px; margin-bottom: 20px; }
+            .box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 14px; }
             th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
             .right { text-align: right; }
           </style>
@@ -331,22 +317,20 @@ async function viewPaystub() {
         <body>
           <h1>${paystub.company.legalName}</h1>
 
-          <div class="row">
+	              <div class="row">
             <div class="box">
               <h3>Company</h3>
               <div>${companyAddress}</div>
-              ${paystub.company.phone ? `<div style="margin-top:8px;">${paystub.company.phone}</div>` : ""}
             </div>
-
             <div class="box">
               <h3>Employee</h3>
               <div><b>${paystub.employee.legalName}</b></div>
               <div>${employeeAddress || "Address not provided"}</div>
               <div style="margin-top:8px;">SSN Last 4: ${paystub.employee.ssnLast4 || "—"}</div>
             </div>
-          </div>
+          </div>		
 
-          <div class="row">
+	    <div class="row">
             <div class="box">
               <h3>Pay Period</h3>
               <div>From: ${paystub.payPeriod.from}</div>
@@ -354,56 +338,48 @@ async function viewPaystub() {
               <div>Pay Date: ${paystub.payPeriod.payDate}</div>
             </div>
 
-            <div class="box">
-              <h3>Summary</h3>
-              <div>Worked Minutes: ${paystub.totals.totalWorkedMinutes}</div>
-              <div>Break Minutes: ${paystub.totals.totalBreakMinutes}</div>
-              <div>Payable Minutes: ${paystub.totals.totalPayableMinutes}</div>
-              <div>Payable Hours: ${paystub.totals.payableHours}</div>
+           <div class="box">
+              <h3>Hours Breakdown</h3>
+              <div>Regular Hours: ${((paystub.totals.regularMinutes || 0) / 60).toFixed(2)}</div>
+              <div>OT Hours: ${((paystub.totals.overtimeMinutes || 0) / 60).toFixed(2)}</div>
+              <div>Doubletime Hours: ${((paystub.totals.doubleMinutes || 0) / 60).toFixed(2)}</div>
+              <div><b>Total Payable Hours: ${paystub.totals.payableHours}</b></div>
             </div>
-          </div>
+	  </div>
 
-          <table>
+	  <table>
             <tr>
               <th>Description</th>
               <th class="right">Amount</th>
             </tr>
             <tr>
-              <td>Gross Pay</td>
-              <td class="right">${fmtCents(paystub.totals.grossPayCents)}</td>
+              <td>Regular Pay</td>
+              <td class="right">${fmtCents(paystub.totals.regularPayCents || 0)}</td>
+            </tr>
+            <tr>
+              <td>OT Pay</td>
+              <td class="right">${fmtCents(paystub.totals.overtimePayCents || 0)}</td>
+            </tr>
+            <tr>
+              <td>Doubletime Pay</td>
+              <td class="right">${fmtCents(paystub.totals.doublePayCents || 0)}</td>
             </tr>
             <tr>
               <td>Adjustments</td>
-              <td class="right">${fmtCents(paystub.totals.adjustmentsCents)}</td>
+              <td class="right">${fmtCents(paystub.totals.adjustmentsCents || 0)}</td>
             </tr>
             <tr>
               <td>Loan Deductions</td>
-              <td class="right">-${fmtCents(paystub.totals.loanDeductionCents)}</td>
+              <td class="right">-${fmtCents(paystub.totals.loanDeductionCents || 0)}</td>
             </tr>
             <tr>
               <td><b>Net Pay</b></td>
-              <td class="right"><b>${fmtCents(paystub.totals.netPayCents)}</b></td>
+              <td class="right"><b>${fmtCents(paystub.totals.netPayCents || 0)}</b></td>
             </tr>
           </table>
 
-          <div class="row" style="margin-top: 24px;">
-            <div class="box">
-              <h3>Adjustments</h3>
-              ${adjustmentsHtml}
-            </div>
-            <div class="box">
-              <h3>Deductions</h3>
-              ${deductionsHtml}
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const win = window.open("", "_blank", "width=900,height=1000");
-    if (!win) {
-      throw new Error("Popup blocked. Please allow popups to view paystub.");
-    }
+  const win = window.open("", "_blank", "width=950,height=1000");
+    if (!win) throw new Error("Popup blocked. Please allow popups.");
 
     win.document.open();
     win.document.write(html);
@@ -414,7 +390,6 @@ async function viewPaystub() {
     setErr(e?.message || "Failed to load paystub");
   }
 }
-
   async function loadAll() {
     if (!empToken) return;
     setErr("");
@@ -497,6 +472,22 @@ async function viewPaystub() {
 >
   View Paystub
 </button>
+
+	<button
+  type="button"
+  disabled={!canCallApi || loading}
+  onClick={viewPaystub}
+  style={{
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #111",
+    background: "#111",
+    color: "#fff",
+    fontWeight: 700,
+  }}
+>
+  Download / Print Paystub
+</button>
         </div>
 
         {err ? <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
@@ -516,9 +507,6 @@ async function viewPaystub() {
             </div>
 
             <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
-              <div style={{ fontSize: 13 }}>Worked minutes: <b>{summary.totals.totalMinutes}</b></div>
-              <div style={{ fontSize: 13 }}>Break minutes: <b>{summary.totals.totalBreakMinutes}</b></div>
-              <div style={{ fontSize: 13 }}>Payable minutes: <b>{summary.totals.payableMinutes}</b></div>
               <div style={{ fontSize: 13 }}>Payable hours: <b>{summary.totals.totalHours}</b></div>
             <div style={{ marginTop: 10, fontWeight: 600 }}>Hours Breakdown</div>
 
@@ -644,10 +632,8 @@ async function viewPaystub() {
               <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
                 <th style={{ padding: 8 }}>Date</th>
                 <th style={{ padding: 8 }}>Shift</th>
-                <th style={{ padding: 8 }}>Worked (min)</th>
-                <th style={{ padding: 8 }}>Break (min)</th>
-                <th style={{ padding: 8 }}>Payable (min)</th>
-                <th style={{ padding: 8 }}>Notes</th>
+                <th style={{ padding: 8 }}>Payable Hours</th>
+		<th style={{ padding: 8 }}>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -659,10 +645,8 @@ async function viewPaystub() {
                   <tr key={e.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
                     <td style={{ padding: 8, whiteSpace: "nowrap" }}>{String(e.workDate).slice(0, 10)}</td>
                     <td style={{ padding: 8 }}>{e.shiftType}</td>
-                    <td style={{ padding: 8 }}>{e.minutesWorked}</td>
-                    <td style={{ padding: 8 }}>{breakMin}</td>
-                    <td style={{ padding: 8 }}>{payable}</td>
-                    <td style={{ padding: 8, minWidth: 240 }}>{e.notes || ""}</td>
+                    <td style={{ padding: 8 }}>{(payable / 60).toFixed(2)}</td>
+	            <td style={{ padding: 8, minWidth: 240 }}>{e.notes || ""}</td>
                   </tr>
                 );
               })}
@@ -679,8 +663,8 @@ async function viewPaystub() {
         </div>
 
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-          Payable minutes = worked minutes − stored breaks (preferred) (fallback: entry.breakMinutes).
-        </div>
+        Displayed hours are payable hours for approved payroll.
+	</div>
       </div>
 
     </div>
