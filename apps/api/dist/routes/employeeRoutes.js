@@ -3,11 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.employeeRoutes = void 0;
 const express_1 = require("express");
 const prisma_1 = require("../prisma");
+const paystubPdf_1 = require("../services/paystubPdf");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 exports.employeeRoutes = (0, express_1.Router)();
 exports.employeeRoutes.use(authMiddleware_1.requireAuth);
-// local status value (avoid Prisma enum export issues)
-const APPROVED_STATUS = "APPROVED";
 function startOfDay(dateISO) {
     // dateISO: "YYYY-MM-DD"
     return new Date(`${dateISO}T00:00:00`);
@@ -116,7 +115,10 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
         const employee = await prisma_1.prisma.employee.findUnique({ where: { id: employeeId } });
         if (!employee)
             return res.status(404).json({ error: "Employee not found" });
-        const where = { employeeId, status: APPROVED_STATUS };
+        const where = {
+            employeeId,
+            status: { in: ["APPROVED", "LOCKED"] },
+        };
         if (from || to) {
             where.workDate = {};
             if (from)
@@ -188,11 +190,12 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
         // ---- Loan deductions (same date window as entries) ----
         const loanWhere = { employeeId };
         if (from || to) {
-            loanWhere.workDate = {};
-            if (from)
-                loanWhere.workDate.gte = startOfDay(from);
-            if (to)
-                loanWhere.workDate.lt = startOfNextDay(to); // exclusive end
+            if (from) {
+                loanWhere.periodStart = { gte: startOfDay(from) };
+            }
+            if (to) {
+                loanWhere.periodEnd = { lt: startOfNextDay(to) };
+            }
         }
         const loanDeductions = await prisma_1.prisma.loanDeduction.findMany({
             where: loanWhere,
@@ -211,7 +214,7 @@ exports.employeeRoutes.get("/employee/pay-summary", async (req, res) => {
             },
             totals: {
                 totalMinutes: totalWorkedMinutes,
-                totalBreakMinutes: totalBreakMinutes,
+                totalBreakMinutes,
                 payableMinutes: totalPayableMinutes,
                 totalHours: payableHours,
                 regularMinutes,
@@ -312,15 +315,36 @@ exports.employeeRoutes.get("/employee/paystub", async (req, res) => {
             },
             orderBy: { workDate: "asc" },
         });
-        const totalWorkedMinutes = entries.reduce((sum, e) => sum + Number(e.minutesWorked ?? 0), 0);
-        const totalBreakMinutes = entries.reduce((sum, e) => sum + sumBreakMinutesFromEntry(e), 0);
-        const totalPayableMinutes = entries.reduce((sum, e) => {
+        let totalWorkedMinutes = 0;
+        let totalBreakMinutes = 0;
+        let totalPayableMinutes = 0;
+        let regularMinutes = 0;
+        let overtimeMinutes = 0;
+        let doubleMinutes = 0;
+        for (const e of entries) {
             const worked = Number(e.minutesWorked ?? 0);
             const breaks = sumBreakMinutesFromEntry(e);
-            return sum + Math.max(0, worked - breaks);
-        }, 0);
+            const payable = Math.max(0, worked - breaks);
+            totalWorkedMinutes += worked;
+            totalBreakMinutes += breaks;
+            totalPayableMinutes += payable;
+            const regularCap = 8 * 60;
+            const otCap = 12 * 60;
+            const reg = Math.min(payable, regularCap);
+            const ot = Math.max(0, Math.min(payable, otCap) - regularCap);
+            const dt = Math.max(0, payable - otCap);
+            regularMinutes += reg;
+            overtimeMinutes += ot;
+            doubleMinutes += dt;
+        }
+        const rateCents = Number(employee.hourlyRateCents || 0);
+        const regularPayCents = Math.round((regularMinutes * rateCents) / 60);
+        const overtimePayCents = Math.round((overtimeMinutes * rateCents * 1.5) / 60);
+        const doublePayCents = Math.round((doubleMinutes * rateCents * 2) / 60);
+        const grossPayCents = regularPayCents +
+            overtimePayCents +
+            doublePayCents;
         const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
-        const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
         const adjWhere = {
             employeeId,
             createdAt: {
@@ -374,6 +398,12 @@ exports.employeeRoutes.get("/employee/paystub", async (req, res) => {
                 totalBreakMinutes,
                 totalPayableMinutes,
                 payableHours,
+                regularMinutes,
+                overtimeMinutes,
+                doubleMinutes,
+                regularPayCents,
+                overtimePayCents,
+                doublePayCents,
                 grossPayCents,
                 adjustmentsCents,
                 loanDeductionCents,
@@ -387,6 +417,153 @@ exports.employeeRoutes.get("/employee/paystub", async (req, res) => {
     catch (e) {
         console.error("GET /api/employee/paystub failed:", e);
         return res.status(500).json({ error: "Failed to load paystub" });
+    }
+});
+exports.employeeRoutes.get("/employee/paystub/pdf", async (req, res) => {
+    try {
+        const employeeId = req.user.employeeId;
+        if (!employeeId)
+            return res.status(400).json({ error: "No employeeId on user" });
+        const { from, to } = req.query;
+        if (!from || !to) {
+            return res.status(400).json({ error: "from and to required" });
+        }
+        const employee = await prisma_1.prisma.employee.findUnique({
+            where: { id: employeeId },
+            select: {
+                id: true,
+                legalName: true,
+                preferredName: true,
+                email: true,
+                hourlyRateCents: true,
+                addressLine1: true,
+                addressLine2: true,
+                city: true,
+                state: true,
+                zip: true,
+                ssnLast4: true,
+            },
+        });
+        if (!employee)
+            return res.status(404).json({ error: "Employee not found" });
+        const entryWhere = {
+            employeeId,
+            status: { in: ["APPROVED", "LOCKED"] },
+            workDate: {
+                gte: startOfDay(from),
+                lt: startOfNextDay(to),
+            },
+        };
+        const entries = await prisma_1.prisma.timeEntry.findMany({
+            where: entryWhere,
+            select: {
+                id: true,
+                workDate: true,
+                minutesWorked: true,
+                breakMinutes: true,
+                breaks: { select: { minutes: true } },
+            },
+            orderBy: { workDate: "asc" },
+        });
+        let totalWorkedMinutes = 0;
+        let totalBreakMinutes = 0;
+        let totalPayableMinutes = 0;
+        let regularMinutes = 0;
+        let overtimeMinutes = 0;
+        let doubleMinutes = 0;
+        for (const e of entries) {
+            const worked = Number(e.minutesWorked ?? 0);
+            const breaks = sumBreakMinutesFromEntry(e);
+            const payable = Math.max(0, worked - breaks);
+            totalWorkedMinutes += worked;
+            totalBreakMinutes += breaks;
+            totalPayableMinutes += payable;
+            const regularCap = 8 * 60;
+            const otCap = 12 * 60;
+            const reg = Math.min(payable, regularCap);
+            const ot = Math.max(0, Math.min(payable, otCap) - regularCap);
+            const dt = Math.max(0, payable - otCap);
+            regularMinutes += reg;
+            overtimeMinutes += ot;
+            doubleMinutes += dt;
+        }
+        const rateCents = Number(employee.hourlyRateCents || 0);
+        const regularPayCents = Math.round((regularMinutes * rateCents) / 60);
+        const overtimePayCents = Math.round((overtimeMinutes * rateCents * 1.5) / 60);
+        const doublePayCents = Math.round((doubleMinutes * rateCents * 2) / 60);
+        const grossPayCents = regularPayCents +
+            overtimePayCents +
+            doublePayCents;
+        const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
+        const adjustments = await prisma_1.prisma.payrollAdjustment.findMany({
+            where: {
+                employeeId,
+                createdAt: {
+                    gte: startOfDay(from),
+                    lt: startOfNextDay(to),
+                },
+            },
+            orderBy: { createdAt: "asc" },
+            select: {
+                id: true,
+                createdAt: true,
+                amountCents: true,
+                reason: true,
+            },
+        });
+        const adjustmentsCents = adjustments.reduce((sum, a) => sum + Number(a.amountCents ?? 0), 0);
+        const loanDeductions = await prisma_1.prisma.loanDeduction.findMany({
+            where: {
+                employeeId,
+                periodStart: { gte: startOfDay(from) },
+                periodEnd: { lt: startOfNextDay(to) },
+            },
+            orderBy: { createdAt: "asc" },
+            select: {
+                id: true,
+                amountCents: true,
+                note: true,
+                periodStart: true,
+                periodEnd: true,
+            },
+        });
+        const loanDeductionCents = loanDeductions.reduce((sum, d) => sum + Number(d.amountCents ?? 0), 0);
+        const netPayCents = grossPayCents + adjustmentsCents - loanDeductionCents;
+        const payDate = formatDateISO(addDays(startOfDay(to), 5));
+        const pdf = await (0, paystubPdf_1.generatePaystubPdf)({
+            company: COMPANY_INFO,
+            employee,
+            payPeriod: {
+                from,
+                to,
+                payDate,
+            },
+            totals: {
+                totalWorkedMinutes,
+                totalBreakMinutes,
+                totalPayableMinutes,
+                payableHours,
+                regularMinutes,
+                overtimeMinutes,
+                doubleMinutes,
+                regularPayCents,
+                overtimePayCents,
+                doublePayCents,
+                grossPayCents,
+                adjustmentsCents,
+                loanDeductionCents,
+                netPayCents,
+            },
+            adjustments,
+            loanDeductions,
+        });
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="paystub-${from}-${to}.pdf"`);
+        return res.send(pdf);
+    }
+    catch (e) {
+        console.error("GET /api/employee/paystub/pdf failed:", e);
+        return res.status(500).json({ error: "Failed to generate paystub pdf" });
     }
 });
 exports.employeeRoutes.patch("/employee/profile", async (req, res) => {
