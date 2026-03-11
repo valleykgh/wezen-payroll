@@ -36,7 +36,8 @@ function EmployeeLoginPageInner() {
       if (data.user.role !== "EMPLOYEE") {
         throw new Error("This login is for EMPLOYEE users only.");
       }
-
+      localStorage.removeItem("payroll_token");
+      localStorage.removeItem("payroll_user");
       setSession(data.token, data.user);
       router.replace(next);
     } catch (e: any) {

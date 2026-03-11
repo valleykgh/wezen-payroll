@@ -38,7 +38,8 @@ function AdminLoginInner() {
       if (!isAdminRole) {
         throw new Error("This login is for ADMIN users only.");
       }
-
+      localStorage.removeItem("payroll_token");
+      localStorage.removeItem("payroll_user");
       setSession(data.token, data.user);
       router.replace(next);
     } catch (e: any) {
