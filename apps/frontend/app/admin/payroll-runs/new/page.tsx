@@ -56,6 +56,34 @@ type PreviewResp = {
   };
 };
 
+function toISODate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getPreviousPayrollWeek() {
+  const today = new Date();
+  const day = today.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+
+  const thisWeekMonday = new Date(today);
+  thisWeekMonday.setHours(0, 0, 0, 0);
+  thisWeekMonday.setDate(today.getDate() - daysSinceMonday);
+
+  const prevMonday = new Date(thisWeekMonday);
+  prevMonday.setDate(thisWeekMonday.getDate() - 7);
+
+  const prevSunday = new Date(prevMonday);
+  prevSunday.setDate(prevMonday.getDate() + 6);
+
+  return {
+    periodStart: toISODate(prevMonday),
+    periodEnd: toISODate(prevSunday),
+  };
+}
+
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -103,7 +131,7 @@ export default function AdminFinalizePayrollRunPage() {
 
   const [preset, setPreset] = useState("");
   const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState("");
+const [periodEnd, setPeriodEnd] = useState("");
   const [notes, setNotes] = useState("");
 
   const [loading, setLoading] = useState(false);
