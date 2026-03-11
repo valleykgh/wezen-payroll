@@ -244,6 +244,40 @@ async function sendInvite(employeeId: string) {
                             placeholder="Preferred name"
                             style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
                           />
+			  <input
+  value={form.addressLine1}
+  onChange={(e) => setForm((p) => ({ ...p, addressLine1: e.target.value }))}
+  placeholder="Address line 1"
+  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+/>
+
+<input
+  value={form.addressLine2}
+  onChange={(e) => setForm((p) => ({ ...p, addressLine2: e.target.value }))}
+  placeholder="Address line 2"
+  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+/>
+
+<input
+  value={form.city}
+  onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))}
+  placeholder="City"
+  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+/>
+
+<input
+  value={form.state}
+  onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))}
+  placeholder="State"
+  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+/>
+
+<input
+  value={form.zip}
+  onChange={(e) => setForm((p) => ({ ...p, zip: e.target.value }))}
+  placeholder="Zip"
+  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+/>
                         </div>
                       ) : (
                         <div>
