@@ -10,12 +10,22 @@ type Employee = {
   email: string;
   hourlyRateCents: number;
   active: boolean;
+
   title?: string | null;
+
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+
   createdAt?: string;
   updatedAt?: string;
+
   user?: {
     id: string;
   } | null;
+
   invites?: Array<{
     id: string;
     expiresAt: string;
@@ -23,6 +33,7 @@ type Employee = {
     createdAt: string;
   }>;
 };
+
 function moneyFromCents(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
@@ -32,7 +43,7 @@ export default function AdminEmployeesPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-
+  const [editingId, setEditingId] = useState<string>("");
   const [form, setForm] = useState({
   legalName: "",
   preferredName: "",
@@ -71,13 +82,18 @@ zip: emp.zip || "",
   function cancelEdit() {
     setEditingId("");
     setForm({
-      legalName: "",
-      preferredName: "",
-      email: "",
-      title: "CNA",
-      hourlyRateCents: "0",
-    });
-  }
+  legalName: "",
+  preferredName: "",
+  email: "",
+  title: "CNA",
+  hourlyRate: "0",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  zip: "",
+});  
+}
 
   async function saveEmployee(id: string) {
     try {
@@ -271,7 +287,7 @@ async function sendInvite(employeeId: string) {
                     <td style={{ padding: 10 }}>
                       {isEditing ? (
                         <input
-                          value={form.hourlyRateCents}
+                          value={form.hourlyRate}
                           onChange={(e) => setForm((p) => ({ ...p, hourlyRate: e.target.value }))}
                           placeholder="Hourly rate ($)"
 			  style={{ width: 120, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
