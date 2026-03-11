@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-git add .
-git commit -m "paystub v1 + employee portal improvements"
 AWS_REGION="us-west-1"
 AWS_ACCOUNT_ID="211125653940"
 
