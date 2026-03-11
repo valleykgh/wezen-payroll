@@ -275,18 +275,23 @@ const [periodEnd, setPeriodEnd] = useState("");
       return;
     }
 
-    setSavingEarly(employeeId);
-    try {
-      await apiFetch("/api/admin/early-payroll", {
-        method: "POST",
-        body: JSON.stringify({
-          employeeId,
-          periodStart,
-          periodEnd,
-          amountCents,
-          note: earlyNote.trim() || undefined,
-        }),
-      });
+      const pin = window.prompt("Enter Admin PIN");
+if (!pin) return;
+
+setSavingEarly(employeeId);
+
+try {
+  await apiFetch("/api/admin/early-payroll", {
+    method: "POST",
+    body: JSON.stringify({
+      employeeId,
+      periodStart,
+      periodEnd,
+      amountCents,
+      note: earlyNote.trim() || undefined,
+      pin,
+    }),
+  });
 
       setOk("Early payroll payment saved.");
       cancelEarlyPayEdit();
