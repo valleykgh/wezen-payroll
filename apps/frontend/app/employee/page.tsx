@@ -28,16 +28,25 @@ type PaySummary = {
     email: string;
     hourlyRateCents: number;
   };
-  totals: {
-    totalMinutes: number;       // sum minutesWorked (worked)
-    totalBreakMinutes: number;  // sum breaks
-    payableMinutes: number;     // worked - breaks
-    totalHours: number;         // payableHours decimal (2 dp)
-    grossPayCents: number;
-    adjustmentsCents?: number;
-    loanDeductionCents?: number;
-    netPayCents?: number;
-  };
+    totals: {
+  totalMinutes: number;
+  totalBreakMinutes: number;
+  payableMinutes: number;
+  totalHours: number;
+
+  regularMinutes?: number;
+  overtimeMinutes?: number;
+  doubleMinutes?: number;
+
+  regularPayCents?: number;
+  overtimePayCents?: number;
+  doublePayCents?: number;
+
+  grossPayCents: number;
+  adjustmentsCents: number;
+  loanDeductionCents: number;
+  netPayCents: number;
+};
     adjustments?: Array<{
     amountCents: number;
     reason?: string | null;
@@ -511,9 +520,37 @@ async function viewPaystub() {
               <div style={{ fontSize: 13 }}>Break minutes: <b>{summary.totals.totalBreakMinutes}</b></div>
               <div style={{ fontSize: 13 }}>Payable minutes: <b>{summary.totals.payableMinutes}</b></div>
               <div style={{ fontSize: 13 }}>Payable hours: <b>{summary.totals.totalHours}</b></div>
-            <div style={{ marginTop: 6, fontSize: 13 }}>
-  Gross pay: <b>{fmtCents(summary.totals.grossPayCents)}</b>
+            <div style={{ marginTop: 10, fontWeight: 600 }}>Hours Breakdown</div>
+
+<div style={{ fontSize: 13 }}>
+  Regular Hours: <b>{((summary.totals.regularMinutes || 0) / 60).toFixed(2)}</b>
 </div>
+
+<div style={{ fontSize: 13 }}>
+  OT Hours: <b>{((summary.totals.overtimeMinutes || 0) / 60).toFixed(2)}</b>
+</div>
+
+<div style={{ fontSize: 13 }}>
+  Doubletime Hours: <b>{((summary.totals.doubleMinutes || 0) / 60).toFixed(2)}</b>
+</div>
+
+
+<div style={{ marginTop: 10, fontWeight: 600 }}>Pay Breakdown</div>
+
+<div style={{ fontSize: 13 }}>
+  Regular Pay: <b>{fmtCents(summary.totals.regularPayCents || 0)}</b>
+</div>
+
+<div style={{ fontSize: 13 }}>
+  OT Pay: <b>{fmtCents(summary.totals.overtimePayCents || 0)}</b>
+</div>
+
+<div style={{ fontSize: 13 }}>
+  Doubletime Pay: <b>{fmtCents(summary.totals.doublePayCents || 0)}</b>
+</div>
+	    <div style={{ marginTop: 6, fontSize: 13 }}>
+  	    Gross pay: <b>{fmtCents(summary.totals.grossPayCents)}</b>
+	    </div>
 
 {typeof summary.totals.adjustmentsCents === "number" ? (
   <div style={{ fontSize: 13 }}>
