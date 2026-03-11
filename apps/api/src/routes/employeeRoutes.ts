@@ -97,8 +97,10 @@ employeeRoutes.get("/employee/time-entries", async (req, res) => {
 
     const { from, to } = req.query as { from?: string; to?: string };
 
-    const where: any = { employeeId, status: APPROVED_STATUS };
-
+    const where: any = {
+  employeeId,
+  status: { in: ["APPROVED", "LOCKED"] },
+};
     if (from || to) {
       where.workDate = {};
       if (from) where.workDate.gte = startOfDay(from);
@@ -160,20 +162,48 @@ employeeRoutes.get("/employee/pay-summary", async (req, res) => {
       orderBy: { workDate: "asc" },
     });
 
-    const totalWorkedMinutes = entries.reduce((sum, e: any) => sum + Number(e.minutesWorked ?? 0), 0);
+    let totalWorkedMinutes = 0;
+let totalBreakMinutes = 0;
+let totalPayableMinutes = 0;
 
-    const totalBreakMinutes = entries.reduce((sum, e: any) => sum + sumBreakMinutesFromEntry(e), 0);
+let regularMinutes = 0;
+let overtimeMinutes = 0;
+let doubleMinutes = 0;
 
-    const totalPayableMinutes = entries.reduce((sum, e: any) => {
-      const worked = Number(e.minutesWorked ?? 0);
-      const breaks = sumBreakMinutesFromEntry(e);
-      return sum + Math.max(0, worked - breaks);
-    }, 0);
-// hours for display (0-100 decimal)
-const payableHours = Math.round((totalPayableMinutes / 60) * 100) / 100;
+for (const e of entries as any[]) {
+  const worked = Number(e.minutesWorked ?? 0);
+  const breaks = sumBreakMinutesFromEntry(e);
+  const payable = Math.max(0, worked - breaks);
 
-// payroll-safe cents calculation (integer math)
-const grossPayCents = Math.round((totalPayableMinutes * employee.hourlyRateCents) / 60);
+  totalWorkedMinutes += worked;
+  totalBreakMinutes += breaks;
+  totalPayableMinutes += payable;
+
+  const regularCap = 8 * 60;
+  const otCap = 12 * 60;
+
+  const reg = Math.min(payable, regularCap);
+  const ot = Math.max(0, Math.min(payable, otCap) - regularCap);
+  const dt = Math.max(0, payable - otCap);
+
+  regularMinutes += reg;
+  overtimeMinutes += ot;
+  doubleMinutes += dt;
+}
+
+const rateCents = Number(employee.hourlyRateCents || 0);
+
+const regularPayCents = Math.round((regularMinutes * rateCents) / 60);
+const overtimePayCents = Math.round((overtimeMinutes * rateCents * 1.5) / 60);
+const doublePayCents = Math.round((doubleMinutes * rateCents * 2) / 60);
+
+const grossPayCents =
+  regularPayCents +
+  overtimePayCents +
+  doublePayCents;
+
+const payableHours =
+  Math.round((totalPayableMinutes / 60) * 100) / 100;
 
 // ---- Payroll adjustments (same date window as entries) ----
 
@@ -192,6 +222,7 @@ const adjustments = await prisma.payrollAdjustment.findMany({
     id: true,
     createdAt: true,
     amountCents: true,
+    reason: true,
   },
 });
 
@@ -230,16 +261,25 @@ return res.json({
     hourlyRateCents: employee.hourlyRateCents,
   },
   totals: {
-    totalMinutes: totalWorkedMinutes,
-    totalBreakMinutes: totalBreakMinutes,
-    payableMinutes: totalPayableMinutes,
-    totalHours: payableHours,
-    grossPayCents,
-    adjustmentsCents,
-    loanDeductionCents,
-    netPayCents,
-  },
-  adjustments,
+  totalMinutes: totalWorkedMinutes,
+  totalBreakMinutes: totalBreakMinutes,
+  payableMinutes: totalPayableMinutes,
+  totalHours: payableHours,
+
+  regularMinutes,
+  overtimeMinutes,
+  doubleMinutes,
+
+  regularPayCents,
+  overtimePayCents,
+  doublePayCents,
+
+  grossPayCents,
+  adjustmentsCents,
+  loanDeductionCents,
+  netPayCents,
+},
+   adjustments,
 
   // ✅ optional debug goes INSIDE the same JSON response
   debug: {
@@ -249,6 +289,36 @@ return res.json({
   } catch (e) {
     console.error("GET /api/employee/pay-summary failed:", e);
     return res.status(500).json({ error: "Failed to load pay summary" });
+  }
+});
+
+employeeRoutes.get("/employee/profile", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        zip: true,
+        ssnLast4: true,
+      },
+    });
+
+    if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+    return res.json({ employee });
+  } catch (e) {
+    console.error("GET /api/employee/profile failed:", e);
+    return res.status(500).json({ error: "Failed to load employee profile" });
   }
 });
 
@@ -283,7 +353,7 @@ employeeRoutes.get("/employee/paystub", async (req, res) => {
 
     const entryWhere: any = {
       employeeId,
-      status: APPROVED_STATUS,
+      status: { in: ["APPROVED", "LOCKED"] },
       workDate: {
         gte: startOfDay(from),
         lt: startOfNextDay(to),
@@ -394,5 +464,38 @@ employeeRoutes.get("/employee/paystub", async (req, res) => {
   } catch (e) {
     console.error("GET /api/employee/paystub failed:", e);
     return res.status(500).json({ error: "Failed to load paystub" });
+  }
+});
+
+employeeRoutes.patch("/employee/profile", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+
+    const employee = await prisma.employee.update({
+      where: { id: employeeId },
+      data: {
+        addressLine1: req.body.addressLine1 || null,
+        addressLine2: req.body.addressLine2 || null,
+        city: req.body.city || null,
+        state: req.body.state || null,
+        zip: req.body.zip ? String(req.body.zip).replace(/\D/g, "") : null,
+        ssnLast4: req.body.ssnLast4 ? String(req.body.ssnLast4).replace(/\D/g, "") : null,
+      },
+      select: {
+        id: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        zip: true,
+        ssnLast4: true,
+      },
+    });
+
+    return res.json({ ok: true, employee });
+  } catch (e) {
+    console.error("PATCH /api/employee/profile failed:", e);
+    return res.status(500).json({ error: "Failed to save employee profile" });
   }
 });
