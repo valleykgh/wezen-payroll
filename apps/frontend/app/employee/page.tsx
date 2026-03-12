@@ -268,129 +268,55 @@ function resetToLastPayrollWeek() {
   setFrom(range.from);
   setTo(range.to);
 }
-
-async function viewPaystub() {
-  if (!empToken || !from || !to) return;
-
+  
+async function downloadPaystubPdf() {
   try {
-    setErr("");
+    if (!from || !to) {
+      setErr("Please select a pay period first.");
+      return;
+    }
 
+    const token = getToken();
+    if (!token) {
+      setErr("You are not logged in.");
+      return;
+    }
+
+    const safeToken = cleanJwt(token);
     const qs = new URLSearchParams({ from, to });
-    const data = await apiFetch(`/api/employee/paystub?${qs.toString()}`, empToken);
-    const paystub = await apiFetch(`/api/employee/paystub?${qs.toString()}`, empToken);
+    const url = `${API}/api/employee/paystub/pdf?${qs.toString()}`;
 
-    const employeeAddress = [
-      paystub?.employee?.addressLine1,
-      paystub?.employee?.addressLine2,
-      [paystub?.employee?.city, paystub?.employee?.state, paystub?.employee?.zip]
-        .filter(Boolean)
-        .join(", "),
-    ]
-      .filter(Boolean)
-      .join("<br/>");
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${safeToken}`,
+      },
+    });
 
-    const companyAddress = [
-      paystub?.company?.addressLine1,
-      paystub?.company?.addressLine2,
-      [paystub?.company?.city, paystub?.company?.state, paystub?.company?.zip]
-        .filter(Boolean)
-        .join(", "),
-    ]
-      .filter(Boolean)
-      .join("<br/>");
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Failed to download paystub PDF");
+    }
 
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
 
-    const html = `
-      <html>
-        <head>
-          <title>Paystub</title>
-          <style>
-          body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
-            h1, h2, h3 { margin: 0 0 12px 0; }
-            .row { display: flex; gap: 20px; margin-bottom: 20px; }
-            .box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-            .right { text-align: right; }
-          </style>
-        </head>
-        <body>
-          <h1>${paystub.company.legalName}</h1>
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = `paystub-${from}-${to}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 
-	              <div class="row">
-            <div class="box">
-              <h3>Company</h3>
-              <div>${companyAddress}</div>
-            </div>
-            <div class="box">
-              <h3>Employee</h3>
-              <div><b>${paystub.employee.legalName}</b></div>
-              <div>${employeeAddress || "Address not provided"}</div>
-              <div style="margin-top:8px;">SSN Last 4: ${paystub.employee.ssnLast4 || "—"}</div>
-            </div>
-          </div>		
-
-	    <div class="row">
-            <div class="box">
-              <h3>Pay Period</h3>
-              <div>From: ${paystub.payPeriod.from}</div>
-              <div>To: ${paystub.payPeriod.to}</div>
-              <div>Pay Date: ${paystub.payPeriod.payDate}</div>
-            </div>
-
-           <div class="box">
-              <h3>Hours Breakdown</h3>
-              <div>Regular Hours: ${((paystub.totals.regularMinutes || 0) / 60).toFixed(2)}</div>
-              <div>OT Hours: ${((paystub.totals.overtimeMinutes || 0) / 60).toFixed(2)}</div>
-              <div>Doubletime Hours: ${((paystub.totals.doubleMinutes || 0) / 60).toFixed(2)}</div>
-              <div><b>Total Payable Hours: ${paystub.totals.payableHours}</b></div>
-            </div>
-	  </div>
-
-	  <table>
-            <tr>
-              <th>Description</th>
-              <th class="right">Amount</th>
-            </tr>
-            <tr>
-              <td>Regular Pay</td>
-              <td class="right">${fmtCents(paystub.totals.regularPayCents || 0)}</td>
-            </tr>
-            <tr>
-              <td>OT Pay</td>
-              <td class="right">${fmtCents(paystub.totals.overtimePayCents || 0)}</td>
-            </tr>
-            <tr>
-              <td>Doubletime Pay</td>
-              <td class="right">${fmtCents(paystub.totals.doublePayCents || 0)}</td>
-            </tr>
-            <tr>
-              <td>Adjustments</td>
-              <td class="right">${fmtCents(paystub.totals.adjustmentsCents || 0)}</td>
-            </tr>
-            <tr>
-              <td>Loan Deductions</td>
-              <td class="right">-${fmtCents(paystub.totals.loanDeductionCents || 0)}</td>
-            </tr>
-            <tr>
-              <td><b>Net Pay</b></td>
-              <td class="right"><b>${fmtCents(paystub.totals.netPayCents || 0)}</b></td>
-            </tr>
-          </table>
-
-  const win = window.open("", "_blank", "width=950,height=1000");
-    if (!win) throw new Error("Popup blocked. Please allow popups.");
-
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
+    window.URL.revokeObjectURL(blobUrl);
   } catch (e: any) {
     console.error(e);
-    setErr(e?.message || "Failed to load paystub");
+    setErr(e?.message || "Failed to download paystub PDF");
   }
 }
-  async function loadAll() {
+
+
+   async function loadAll() {
     if (!empToken) return;
     setErr("");
     setLoading(true);
@@ -457,26 +383,10 @@ async function viewPaystub() {
           >
             Load
           </button>
-
           <button
-  disabled={!canCallApi || loading}
-  onClick={viewPaystub}
-  style={{
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid #111",
-    background: "#111",
-    color: "#fff",
-    fontWeight: 700,
-  }}
->
-  View Paystub
-</button>
-
-	<button
   type="button"
   disabled={!canCallApi || loading}
-  onClick={viewPaystub}
+  onClick={downloadPaystubPdf}
   style={{
     padding: "10px 14px",
     borderRadius: 10,
@@ -486,7 +396,7 @@ async function viewPaystub() {
     fontWeight: 700,
   }}
 >
-  Download / Print Paystub
+  Download Paystub PDF
 </button>
         </div>
 
@@ -653,7 +563,7 @@ async function viewPaystub() {
 
               {entries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: 12, opacity: 0.7 }}>
+                  <td colSpan={4} style={{ padding: 12, opacity: 0.7 }}>
                     No approved entries found in this date range.
                   </td>
                 </tr>

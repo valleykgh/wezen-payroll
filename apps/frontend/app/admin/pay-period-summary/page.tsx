@@ -51,9 +51,27 @@ export default function PayPeriodSummaryPage() {
   }
 
   // For now bill mirrors pay (same as your time-entry page)
+
   function computeBillDollarsForEmployee(emp: any, list: any[]) {
-    return computePayDollarsForEmployee(emp, list);
+  let total = 0;
+
+  for (const e of list) {
+    const reg = safeNum(e.buckets?.regular_decimal);
+    const ot = safeNum(e.buckets?.overtime_decimal);
+    const dt = safeNum(e.buckets?.double_decimal);
+
+    const billRateCents =
+      safeNum(e.facilityRate?.regRateCents) ||
+      safeNum(e.regRateCents) ||
+      safeNum(e.billRateCents);
+
+    const hourly = billRateCents / 100;
+
+    total += reg * hourly + ot * hourly * 1.5 + dt * hourly * 2.0;
   }
+
+  return total;
+}
 
   async function loadPaySummariesForEmployeeIds(employeeIds: string[], qs: URLSearchParams, seq: number) {
     const uniqueIds = Array.from(new Set(employeeIds)).filter(Boolean);
@@ -235,23 +253,10 @@ export default function PayPeriodSummaryPage() {
 
         const groups = Array.from(byFac.values()).map((g: any) => {
   const rows = Array.from(g.rowsByEmp.values() as Iterable<any>).map((r: any) => {
-    const ps = paySummaries?.[r.employeeId];
-        const grossCents = ps?.totals?.grossPayCents;
-        const adjCents = ps?.totals?.adjustmentsCents;
-        const netCents = ps?.totals?.netPayCents;
-
-        const pay =
-          typeof netCents === "number"
-            ? netCents / 100
-            : r.payBase;
-
-        return {
-          ...r,
-          pay,
-          grossPay: typeof grossCents === "number" ? grossCents / 100 : null,
-          adjustments: typeof adjCents === "number" ? adjCents / 100 : null,
-          netPay: typeof netCents === "number" ? netCents / 100 : null,
-        };
+      return {
+  ...r,
+  pay: r.payBase
+};
       });
 
       const reg = rows.reduce((s, x) => s + safeNum(x.reg), 0);

@@ -6,18 +6,25 @@ import { apiFetch } from "../../lib/api";
 type Employee = {
   id: string;
   legalName: string;
-  preferredName?: string | null;
-  email?: string | null;
+  preferredName: string | null;
+  email: string;
+  hourlyRateCents: number;
+  title?: string | null;
+  active: boolean;
 };
 
-type PayrollAdjustmentRow = {
+type AdjustmentRow = {
   id: string;
   employeeId: string;
-  payrollRunId?: string | null;
+  reason: string;
   amountCents: number;
-  reason?: string | null;
   createdAt: string;
-  employee?: Employee | null;
+  employee?: {
+    id: string;
+    legalName: string;
+    preferredName: string | null;
+    email: string;
+  } | null;
   payrollRun?: {
     id: string;
     periodStart: string;
@@ -26,93 +33,106 @@ type PayrollAdjustmentRow = {
   } | null;
 };
 
-type EmployeesResp = {
-  employees: Employee[];
-};
-
-type PayrollAdjustmentsResp = {
-  adjustments: PayrollAdjustmentRow[];
-};
-
-function dollars(cents: number) {
+function money(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
-}
-
-function dateOnly(v?: string | null) {
-  if (!v) return "";
-  return new Date(v).toISOString().slice(0, 10);
-}
-
-function employeeLabel(emp?: Employee | null) {
-  if (!emp) return "Unknown";
-  return emp.preferredName ? `${emp.legalName} (${emp.preferredName})` : emp.legalName;
 }
 
 export default function AdminPayrollAdjustmentsPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [items, setItems] = useState<PayrollAdjustmentRow[]>([]);
+  const [adjustments, setAdjustments] = useState<AdjustmentRow[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
   const [employeeId, setEmployeeId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
+  const [workDate, setWorkDate] = useState("");
+  const [hours, setHours] = useState("");
+  const [reasonNote, setReasonNote] = useState("");
 
   async function loadEmployees() {
-    const data = await apiFetch<EmployeesResp>("/api/admin/employees");
-    setEmployees(data.employees || []);
+    const resp = await apiFetch<{ employees: Employee[] }>("/api/admin/employees");
+    setEmployees((resp.employees || []).filter((e) => e.active));
   }
 
   async function loadAdjustments() {
-    setLoading(true);
-    setErr("");
-    try {
-      const data = await apiFetch<PayrollAdjustmentsResp>("/api/admin/payroll-adjustments");
-      setItems(data.adjustments || []);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load payroll adjustments");
-    } finally {
-      setLoading(false);
-    }
+    const resp = await apiFetch<{ adjustments: AdjustmentRow[] }>("/api/admin/payroll-adjustments");
+    setAdjustments(resp.adjustments || []);
   }
 
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([loadEmployees(), loadAdjustments()])
+      .catch((e: any) => setErr(e?.message || "Failed to load payroll adjustments"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === employeeId) || null,
+    [employees, employeeId]
+  );
+
+  const amountPreviewCents = useMemo(() => {
+    const hrs = Number(hours || 0);
+    if (!selectedEmployee || !Number.isFinite(hrs) || hrs <= 0) return 0;
+    return Math.round(hrs * Number(selectedEmployee.hourlyRateCents || 0));
+  }, [hours, selectedEmployee]);
+
+  const computedReason = useMemo(() => {
+    const base = workDate ? `Missed shift for ${workDate}` : "Missed shift";
+    return reasonNote.trim() ? `${base} — ${reasonNote.trim()}` : base;
+  }, [workDate, reasonNote]);
+
   async function createAdjustment() {
-    setErr("");
-    setOk("");
-
-    const amountCents = Math.round(Number(amount || 0) * 100);
-
-    if (!employeeId) {
-      setErr("Please select an employee.");
-      return;
-    }
-
-    if (!Number.isFinite(amountCents) || amountCents === 0) {
-      setErr("Please enter a non-zero amount.");
-      return;
-    }
-
-    if (!reason.trim()) {
-      setErr("Please enter a reason.");
-      return;
-    }
-
-    setSaving(true);
     try {
+      setErr("");
+      setOk("");
+
+      if (!employeeId) {
+        setErr("Please select an employee.");
+        return;
+      }
+
+      if (!workDate) {
+        setErr("Please enter the missed shift date.");
+        return;
+      }
+
+      const hrs = Number(hours || 0);
+      if (!Number.isFinite(hrs) || hrs <= 0) {
+        setErr("Hours must be greater than 0.");
+        return;
+      }
+
+      if (!selectedEmployee) {
+        setErr("Employee not found.");
+        return;
+      }
+
+      const amountCents = Math.round(hrs * selectedEmployee.hourlyRateCents);
+      if (!amountCents) {
+        setErr("Calculated amount is 0.");
+        return;
+      }
+
+      setSaving(true);
+
       await apiFetch("/api/admin/payroll-adjustments", {
         method: "POST",
         body: JSON.stringify({
           employeeId,
+          reason: computedReason,
           amountCents,
-          reason: reason.trim(),
         }),
       });
 
-      setOk("Payroll adjustment created.");
-      setAmount("");
-      setReason("");
+      setOk(`Adjustment created for ${selectedEmployee.legalName}: ${money(amountCents)}.`);
+      setEmployeeId("");
+      setWorkDate("");
+      setHours("");
+      setReasonNote("");
+
       await loadAdjustments();
     } catch (e: any) {
       setErr(e?.message || "Failed to create payroll adjustment");
@@ -121,171 +141,182 @@ export default function AdminPayrollAdjustmentsPage() {
     }
   }
 
-  useEffect(() => {
-    loadEmployees().catch((e: any) => setErr(e?.message || "Failed to load employees"));
-    loadAdjustments();
-  }, []);
-
-  const totals = useMemo(() => {
-    return items.reduce(
-      (acc, x) => {
-        if (x.payrollRunId) acc.applied += 1;
-        else acc.pending += 1;
-        acc.amountCents += Number(x.amountCents || 0);
-        return acc;
-      },
-      { pending: 0, applied: 0, amountCents: 0 }
-    );
-  }, [items]);
-
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: 24 }}>Payroll Adjustments</h1>
-        <div style={{ color: "#666", marginTop: 4 }}>
-          Create and track pending payroll corrections
-        </div>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Payroll Adjustments</h1>
+      <div style={{ color: "#666", marginTop: 6 }}>
+        Use this for missed shifts or retro pay after a payroll week has already been locked.
       </div>
 
       <div
         style={{
           marginTop: 16,
-          padding: 12,
           border: "1px solid #ddd",
-          borderRadius: 10,
-          display: "grid",
-          gridTemplateColumns: "minmax(220px, 1fr) 180px minmax(260px, 2fr) auto",
-          gap: 10,
-          alignItems: "end",
+          borderRadius: 12,
+          padding: 16,
+          background: "#fff",
         }}
       >
-        <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Employee</div>
-          <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          >
-            <option value="">Select employee</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {employeeLabel(e)}{e.email ? ` — ${e.email}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>Add Missed Shift / Retro Pay</div>
 
-        <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Amount ($)</div>
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="e.g. 60 or -30"
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </div>
-
-        <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Reason</div>
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Missed shift correction"
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </div>
-
-        <button
-          onClick={createAdjustment}
-          disabled={saving}
+        <div
           style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid #111",
-            background: "#111",
-            color: "#fff",
-            height: 40,
-            cursor: saving ? "not-allowed" : "pointer",
+            display: "grid",
+            gridTemplateColumns: "1.2fr 180px 140px 1fr",
+            gap: 12,
+            alignItems: "end",
           }}
         >
-          {saving ? "Saving..." : "Create"}
-        </button>
-      </div>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Employee</div>
+            <select
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+            >
+              <option value="">Select employee</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.legalName} ({emp.email}){emp.title ? ` — ${emp.title}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {ok ? <div style={{ marginTop: 12, color: "#0a7a2f" }}>{ok}</div> : null}
-      {err ? <div style={{ marginTop: 12, color: "#b00020" }}>{err}</div> : null}
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Missed Shift Date</div>
+            <input
+              type="date"
+              value={workDate}
+              onChange={(e) => setWorkDate(e.target.value)}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+            />
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Payable Hours</div>
+            <input
+              value={hours}
+              onChange={(e) => setHours(e.target.value)}
+              placeholder="e.g. 8"
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+            />
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Optional Note</div>
+            <input
+              value={reasonNote}
+              onChange={(e) => setReasonNote(e.target.value)}
+              placeholder="e.g. entered after payroll lock"
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #eee",
+            borderRadius: 10,
+            background: "#fafafa",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <div>
+            Hourly Rate: <b>{selectedEmployee ? money(selectedEmployee.hourlyRateCents) : "—"}</b>
+          </div>
+          <div>
+            Reason: <b>{computedReason}</b>
+          </div>
+          <div>
+            Adjustment Amount: <b>{money(amountPreviewCents)}</b>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={createAdjustment}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid #111",
+              background: "#111",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            {saving ? "Saving..." : "Create Adjustment"}
+          </button>
+        </div>
+
+        {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
+        {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+      </div>
 
       <div
         style={{
-          marginTop: 16,
-          padding: 12,
+          marginTop: 18,
           border: "1px solid #ddd",
-          borderRadius: 10,
-          background: "#fafafa",
-          display: "flex",
-          gap: 18,
-          flexWrap: "wrap",
-          fontSize: 13,
+          borderRadius: 12,
+          padding: 16,
+          background: "#fff",
         }}
       >
-        <div>
-          Pending: <b>{totals.pending}</b>
-        </div>
-        <div>
-          Applied: <b>{totals.applied}</b>
-        </div>
-        <div>
-          Total Amount: <b>{dollars(totals.amountCents)}</b>
-        </div>
-      </div>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>Recent Adjustments</div>
 
-      <div style={{ marginTop: 16, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
-          <thead>
-            <tr style={{ background: "#f9fafb" }}>
-              <th style={th}>Created</th>
-              <th style={th}>Employee</th>
-              <th style={th}>Amount</th>
-              <th style={th}>Reason</th>
-              <th style={th}>Status</th>
-              <th style={th}>Applied Payroll Run</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((x) => (
-              <tr key={x.id}>
-                <td style={td}>{dateOnly(x.createdAt)}</td>
-                <td style={td}>{employeeLabel(x.employee)}</td>
-                <td style={td}>
-                  <b>{dollars(x.amountCents)}</b>
-                </td>
-                <td style={td}>{x.reason || "-"}</td>
-                <td style={td}>
-                  {x.payrollRunId ? (
-                    <span style={appliedBadge}>APPLIED</span>
-                  ) : (
-                    <span style={pendingBadge}>PENDING</span>
-                  )}
-                </td>
-                <td style={td}>
-                  {x.payrollRun ? (
-                    `${dateOnly(x.payrollRun.periodStart)} → ${dateOnly(x.payrollRun.periodEnd)}`
-                  ) : (
-                    "-"
-                  )}
-                </td>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+            <thead>
+              <tr style={{ background: "#f9fafb" }}>
+                <th style={th}>Created</th>
+                <th style={th}>Employee</th>
+                <th style={th}>Reason</th>
+                <th style={th}>Amount</th>
+                <th style={th}>Payroll Run</th>
               </tr>
-            ))}
+            </thead>
+            <tbody>
+              {adjustments.map((a) => (
+                <tr key={a.id}>
+                  <td style={td}>{new Date(a.createdAt).toLocaleString()}</td>
+                  <td style={td}>
+                    <div style={{ fontWeight: 600 }}>
+                      {a.employee?.preferredName
+                        ? `${a.employee.legalName} (${a.employee.preferredName})`
+                        : a.employee?.legalName || a.employeeId}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>{a.employee?.email || ""}</div>
+                  </td>
+                  <td style={td}>{a.reason}</td>
+                  <td style={td}>{money(a.amountCents)}</td>
+                  <td style={td}>
+                    {a.payrollRun ? (
+                      <span>
+                        {String(a.payrollRun.periodStart).slice(0, 10)} →{" "}
+                        {String(a.payrollRun.periodEnd).slice(0, 10)} ({a.payrollRun.status})
+                      </span>
+                    ) : (
+                      <span style={{ opacity: 0.7 }}>Pending next payroll</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
 
-            {items.length === 0 ? (
-              <tr>
-                <td style={td} colSpan={6}>
-                  {loading ? "Loading..." : "No payroll adjustments found."}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+              {adjustments.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={td}>
+                    {loading ? "Loading..." : "No adjustments found."}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -303,26 +334,4 @@ const td: React.CSSProperties = {
   borderBottom: "1px solid #eee",
   fontSize: 13,
   verticalAlign: "top",
-};
-
-const pendingBadge: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 8px",
-  borderRadius: 999,
-  background: "#f3f4f6",
-  color: "#374151",
-  border: "1px solid #e5e7eb",
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const appliedBadge: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 8px",
-  borderRadius: 999,
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  border: "1px solid #bfdbfe",
-  fontSize: 12,
-  fontWeight: 700,
 };

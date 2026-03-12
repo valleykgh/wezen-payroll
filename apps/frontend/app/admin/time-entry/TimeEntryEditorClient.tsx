@@ -1300,27 +1300,20 @@ if (resetToDraftCount > 0) {
               }}
             >
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Week Totals</div>
-
-              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13 }}>
-                <div>
-                  Worked: <b>{minutesToHHMM(activeWeekTotals.workedMinutes)}</b>
-                </div>
-                <div>
-                  Break: <b>{minutesToHHMM(activeWeekTotals.breakMinutes)}</b>
-                </div>
-                <div>
-                  Payable: <b>{minutesToHHMM(activeWeekTotals.payableMinutes)}</b>
-                </div>
-                <div>
-                  Reg: <b>{minutesToHHMM(activeWeekTotals.regularMinutes)}</b>
-                </div>
-                <div>
-                  OT: <b>{minutesToHHMM(activeWeekTotals.overtimeMinutes)}</b>
-                </div>
-                <div>
-                  DT: <b>{minutesToHHMM(activeWeekTotals.doubleMinutes)}</b>
-                </div>
-              </div>
+	      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13 }}>
+  <div>
+    Payable: <b>{minutesToHHMM(activeWeekTotals.payableMinutes)}</b>
+  </div>
+  <div>
+    Reg: <b>{minutesToHHMM(activeWeekTotals.regularMinutes)}</b>
+  </div>
+  <div>
+    OT: <b>{minutesToHHMM(activeWeekTotals.overtimeMinutes)}</b>
+  </div>
+  <div>
+    DT: <b>{minutesToHHMM(activeWeekTotals.doubleMinutes)}</b>
+  </div>
+</div>
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -1353,7 +1346,7 @@ if (resetToDraftCount > 0) {
                   </div>
                 ))}
 
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Calculated</div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Pay Summary</div>
 
                 {listDatesInclusive(activeDraft.startDate, activeDraft.endDate).map((date) => {
                   const day = activeDraft.days?.[date] ?? defaultDayDraft(date);
@@ -1522,10 +1515,6 @@ if (resetToDraftCount > 0) {
                               <b>Reg:</b> {calc.buckets.regular_HHMM} &nbsp;
                               <b>OT:</b> {calc.buckets.overtime_HHMM} &nbsp;
                               <b>DT:</b> {calc.buckets.double_HHMM}
-                            </div>
-                            <div style={{ opacity: 0.75, marginTop: 4 }}>
-                              Worked {minutesToHHMM(calc.input.workedMinutes)} • Break{" "}
-                              {minutesToHHMM(calc.input.breakMinutes)}
                             </div>
 
                             {Array.isArray(calc.warnings) && calc.warnings.length > 0 ? (
