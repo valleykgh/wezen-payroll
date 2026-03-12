@@ -24,7 +24,7 @@ async function generatePaystubPdf(data) {
             const chunks = [];
             doc.on("data", (c) => chunks.push(c));
             doc.on("end", () => resolve(Buffer.concat(chunks)));
-            const { company, employee, payPeriod, totals, adjustments, loanDeductions } = data;
+            const { company, employee, payPeriod, totals } = data;
             const pageWidth = doc.page.width;
             const leftX = 40;
             const rightX = 340;
@@ -121,41 +121,15 @@ async function generatePaystubPdf(data) {
                 y += 18;
             }
             y += 8;
-            // Adjustments / deductions
-            doc.font("Helvetica-Bold").fontSize(11);
-            text(doc, "Adjustments & Deductions", leftX, y);
-            y += 18;
-            doc.font("Helvetica").fontSize(10);
-            text(doc, "Adjustments", col1, y);
-            text(doc, money(totals.adjustmentsCents || 0), col4, y, { width: 90, align: "right" });
-            y += 18;
-            text(doc, "Loan Deductions", col1, y);
-            text(doc, `-${money(totals.loanDeductionCents || 0)}`, col4, y, { width: 90, align: "right" });
-            y += 24;
             // Totals box
             doc.rect(330, y - 6, 205, 70).strokeColor("#cccccc").stroke();
             doc.font("Helvetica").fontSize(10);
             text(doc, "Gross Pay", 345, y + 6);
             text(doc, money(totals.grossPayCents || 0), 435, y + 6, { width: 85, align: "right" });
-            text(doc, "Net Pay", 345, y + 28);
+            text(doc, "Amount Paid", 345, y + 28);
             doc.font("Helvetica-Bold").fontSize(12);
             text(doc, money(totals.netPayCents || 0), 425, y + 26, { width: 95, align: "right" });
             y += 90;
-            // Optional notes area
-            if ((adjustments?.length || 0) > 0 || (loanDeductions?.length || 0) > 0) {
-                doc.font("Helvetica-Bold").fontSize(11);
-                text(doc, "Details", leftX, y);
-                y += 18;
-                doc.font("Helvetica").fontSize(9);
-                for (const a of adjustments || []) {
-                    text(doc, `Adjustment • ${String(a.createdAt || "").slice(0, 10)} • ${money(a.amountCents || 0)}${a.reason ? ` • ${a.reason}` : ""}`, leftX, y, { width: 500 });
-                    y += 14;
-                }
-                for (const d of loanDeductions || []) {
-                    text(doc, `Loan deduction • ${money(d.amountCents || 0)}${d.note ? ` • ${d.note}` : ""}`, leftX, y, { width: 500 });
-                    y += 14;
-                }
-            }
             doc.end();
         }
         catch (err) {

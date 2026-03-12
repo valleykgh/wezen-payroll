@@ -7,6 +7,34 @@ const express_1 = __importDefault(require("express"));
 const prisma_1 = require("../../prisma");
 const _shared_1 = require("./_shared");
 const router = express_1.default.Router();
+async function findFacilityRateForEntry(e) {
+    const facilityId = String(e.facilityId || "").trim();
+    const workDate = e.workDate ? new Date(e.workDate) : null;
+    const employeeTitle = String(e.employee?.billingRole || e.employee?.title || "").trim();
+    if (!facilityId || !workDate || !employeeTitle)
+        return null;
+    const rate = await prisma_1.prisma.facilityRate.findFirst({
+        where: {
+            facilityId,
+            discipline: employeeTitle,
+            effectiveFrom: {
+                lte: workDate,
+            },
+        },
+        orderBy: {
+            effectiveFrom: "desc",
+        },
+        select: {
+            id: true,
+            discipline: true,
+            effectiveFrom: true,
+            regRateCents: true,
+            otRateCents: true,
+            dtRateCents: true,
+        },
+    });
+    return rate;
+}
 router.get("/time-entries", async (req, res) => {
     try {
         const { employeeId, from, to, status, q, page = "1", pageSize = "25" } = req.query;
@@ -82,7 +110,7 @@ router.get("/time-entries", async (req, res) => {
                 },
             }),
         ]);
-        const entriesWithComputed = entries.map((e) => {
+        const entriesWithComputed = await Promise.all(entries.map(async (e) => {
             const breaks = Array.isArray(e.breaks) ? e.breaks : [];
             const computedBreakMinutes = breaks.length > 0
                 ? breaks.reduce((sum, b) => sum + Number(b.minutes ?? 0), 0)
@@ -101,6 +129,7 @@ router.get("/time-entries", async (req, res) => {
                 overtime_decimal: (0, _shared_1.minutesToDecimalHours)(b.overtimeMinutes),
                 double_decimal: (0, _shared_1.minutesToDecimalHours)(b.doubleMinutes),
             };
+            const facilityRate = await findFacilityRateForEntry(e);
             return {
                 ...e,
                 computedBreakMinutes,
@@ -108,8 +137,9 @@ router.get("/time-entries", async (req, res) => {
                 totalHours_HHMM: (0, _shared_1.fmtHHMM)(payableMinutes),
                 calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(payableMinutes),
                 buckets,
+                facilityRate,
             };
-        });
+        }));
         return res.json({
             page: pageNum,
             pageSize: take,

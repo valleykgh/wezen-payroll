@@ -22,7 +22,37 @@ import {
 } from "./_shared";
 
 const router = express.Router();
+async function findFacilityRateForEntry(e: any) {
+  const facilityId = String(e.facilityId || "").trim();
+  const workDate = e.workDate ? new Date(e.workDate) : null;
+  const employeeTitle =
+    String(e.employee?.billingRole || e.employee?.title || "").trim();
 
+  if (!facilityId || !workDate || !employeeTitle) return null;
+
+  const rate = await prisma.facilityRate.findFirst({
+    where: {
+      facilityId,
+      discipline: employeeTitle,
+      effectiveFrom: {
+        lte: workDate,
+      },
+    },
+    orderBy: {
+      effectiveFrom: "desc",
+    },
+    select: {
+      id: true,
+      discipline: true,
+      effectiveFrom: true,
+      regRateCents: true,
+      otRateCents: true,
+      dtRateCents: true,
+    },
+  });
+
+  return rate;
+}
 router.get("/time-entries", async (req, res) => {
   try {
     const { employeeId, from, to, status, q, page = "1", pageSize = "25" } =
@@ -103,39 +133,44 @@ router.get("/time-entries", async (req, res) => {
       }),
     ]);
 
-    const entriesWithComputed = entries.map((e: any) => {
-      const breaks = Array.isArray(e.breaks) ? e.breaks : [];
-      const computedBreakMinutes =
-        breaks.length > 0
-          ? breaks.reduce((sum: number, b: any) => sum + Number(b.minutes ?? 0), 0)
-          : Number(e.breakMinutes ?? 0);
+    const entriesWithComputed = await Promise.all(
+  entries.map(async (e: any) => {
+    const breaks = Array.isArray(e.breaks) ? e.breaks : [];
+    const computedBreakMinutes =
+      breaks.length > 0
+        ? breaks.reduce((sum: number, b: any) => sum + Number(b.minutes ?? 0), 0)
+        : Number(e.breakMinutes ?? 0);
 
-      const workedMinutes = Number(e.minutesWorked ?? 0);
-      const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
+    const workedMinutes = Number(e.minutesWorked ?? 0);
+    const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
 
-      const b = splitDailyBuckets(payableMinutes);
+    const b = splitDailyBuckets(payableMinutes);
 
-      const buckets = {
-        regularMinutes: b.regularMinutes,
-        overtimeMinutes: b.overtimeMinutes,
-        doubleMinutes: b.doubleMinutes,
-        regular_HHMM: fmtHHMM(b.regularMinutes),
-        overtime_HHMM: fmtHHMM(b.overtimeMinutes),
-        double_HHMM: fmtHHMM(b.doubleMinutes),
-        regular_decimal: minutesToDecimalHours(b.regularMinutes),
-        overtime_decimal: minutesToDecimalHours(b.overtimeMinutes),
-        double_decimal: minutesToDecimalHours(b.doubleMinutes),
-      };
+    const buckets = {
+      regularMinutes: b.regularMinutes,
+      overtimeMinutes: b.overtimeMinutes,
+      doubleMinutes: b.doubleMinutes,
+      regular_HHMM: fmtHHMM(b.regularMinutes),
+      overtime_HHMM: fmtHHMM(b.overtimeMinutes),
+      double_HHMM: fmtHHMM(b.doubleMinutes),
+      regular_decimal: minutesToDecimalHours(b.regularMinutes),
+      overtime_decimal: minutesToDecimalHours(b.overtimeMinutes),
+      double_decimal: minutesToDecimalHours(b.doubleMinutes),
+    };
 
-      return {
-        ...e,
-        computedBreakMinutes,
-        payableMinutes,
-        totalHours_HHMM: fmtHHMM(payableMinutes),
-        calculatedHours_decimal: minutesToDecimalHours(payableMinutes),
-        buckets,
-      };
-    });
+    const facilityRate = await findFacilityRateForEntry(e);
+
+    return {
+      ...e,
+      computedBreakMinutes,
+      payableMinutes,
+      totalHours_HHMM: fmtHHMM(payableMinutes),
+      calculatedHours_decimal: minutesToDecimalHours(payableMinutes),
+      buckets,
+      facilityRate,
+    };
+  })
+);
 
     return res.json({
       page: pageNum,
