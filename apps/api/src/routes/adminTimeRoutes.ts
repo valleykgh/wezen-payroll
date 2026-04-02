@@ -13,6 +13,7 @@ import earlyPayrollRoutes from "./admin/earlyPayroll";
 import payrollPreviewRoutes from "./admin/payrollPreview";
 import payrollFinalizeRoutes from "./admin/payrollFinalize";
 import payrollRunRoutes from "./admin/payrollRuns";
+import holidayRoutes from "./admin/holidays";
 
 export const adminTimeRoutes = express.Router();
 adminTimeRoutes.use(adminUserRoutes);
@@ -29,3 +30,4 @@ adminTimeRoutes.use(earlyPayrollRoutes);
 adminTimeRoutes.use(payrollPreviewRoutes);
 adminTimeRoutes.use(payrollFinalizeRoutes);
 adminTimeRoutes.use(payrollRunRoutes);
+adminTimeRoutes.use(holidayRoutes);

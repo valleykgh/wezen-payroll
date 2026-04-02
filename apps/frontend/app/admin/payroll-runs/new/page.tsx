@@ -32,6 +32,9 @@ type PreviewEmployee = {
   overtimeMinutes: number;
   doubleMinutes: number;
   grossPayCents: number;
+    paidEarlyCents?: number;
+  overpaidCents?: number;
+  underpaidCents?: number;
   payStatus: "READY" | "PAID_EARLY";
   earlyPayment: null | {
     id: string;
@@ -46,14 +49,17 @@ type PreviewResp = {
   periodStart: string;
   periodEnd: string;
   employees: PreviewEmployee[];
-  totals: {
-    employeeCount: number;
-    grossPayCents: number;
-    paidEarlyCount: number;
-    paidEarlyCents: number;
-    remainingCount: number;
-    remainingGrossPayCents: number;
-  };
+ totals: {
+  employeeCount: number;
+  grossPayCents: number;
+  paidEarlyCount: number;
+  paidEarlyCents: number;
+  remainingCount: number;
+  remainingGrossPayCents: number;
+  carryForwardOverpaidCents: number;
+    overpaidCents?: number;
+  underpaidCents?: number;
+};
 };
 
 function toISODate(d: Date) {
@@ -114,11 +120,9 @@ function dollars(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
 
-function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+function minutesToDecimalHours(min: number) {
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
 
 function employeeLabel(emp?: PreviewEmployee["employee"] | null) {
@@ -126,12 +130,27 @@ function employeeLabel(emp?: PreviewEmployee["employee"] | null) {
   return emp.preferredName ? `${emp.legalName} (${emp.preferredName})` : emp.legalName;
 }
 
+function earlyPaidCentsForEmp(emp: any) {
+  return Number(emp?.paidEarlyCents ?? emp?.earlyPayment?.amountCents ?? 0);
+}
+
+function remainingCentsForEmp(emp: any) {
+  return Number(emp?.underpaidCents ?? 0);
+}
+
+function overpaidCentsForEmp(emp: any) {
+  return Number(emp?.overpaidCents ?? 0);
+}
+
+function isFullyCoveredEarly(emp: any) {
+  return Number(emp?.underpaidCents ?? 0) <= 0 && Number(emp?.grossPayCents || 0) > 0;
+}
 export default function AdminFinalizePayrollRunPage() {
   const router = useRouter();
 
   const [preset, setPreset] = useState("");
   const [periodStart, setPeriodStart] = useState("");
-const [periodEnd, setPeriodEnd] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [notes, setNotes] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -145,6 +164,7 @@ const [periodEnd, setPeriodEnd] = useState("");
   const [editingEmployeeId, setEditingEmployeeId] = useState<string>("");
   const [earlyAmount, setEarlyAmount] = useState("");
   const [earlyNote, setEarlyNote] = useState("");
+  
 
   function applyPreset(value: string) {
     setPreset(value);
@@ -244,16 +264,29 @@ const [periodEnd, setPeriodEnd] = useState("");
     }
   }
 
-  function startEarlyPayEdit(emp: PreviewEmployee) {
-    setEditingEmployeeId(emp.employeeId);
-    setEarlyAmount(
-      emp.earlyPayment ? (Number(emp.earlyPayment.amountCents || 0) / 100).toFixed(2) : ""
-    );
-    setEarlyNote(emp.earlyPayment?.note || "");
-    setErr("");
-    setOk("");
+function startEarlyPayEdit(emp: any) {
+  setEditingEmployeeId(emp.employeeId);
+
+  const grossCents = Number(emp?.grossPayCents || 0);
+  const remainingCents = Number(emp?.underpaidCents || 0);
+  const overpaidCents = Number(emp?.overpaidCents || 0);
+
+  let suggestedCents = 0;
+
+  if (!emp?.earlyPayment) {
+    suggestedCents = grossCents;
+  } else if (remainingCents > 0) {
+    suggestedCents = remainingCents;
+  } else if (overpaidCents > 0) {
+    suggestedCents = 0;
+  } else {
+    suggestedCents = 0;
   }
 
+  setEarlyAmount(suggestedCents > 0 ? (suggestedCents / 100).toFixed(2) : "");
+  setEarlyNote(emp?.earlyPayment?.note || "");
+}
+ 
   function cancelEarlyPayEdit() {
     setEditingEmployeeId("");
     setEarlyAmount("");
@@ -271,7 +304,7 @@ const [periodEnd, setPeriodEnd] = useState("");
 
     const amountCents = Math.round(Number(earlyAmount || 0) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      setErr("Enter a valid early payment amount greater than zero.");
+      setErr("Enter a valid payment amount greater than zero.");
       return;
     }
 
@@ -303,6 +336,10 @@ try {
     }
   }
 
+const previewGrossCents = Number(preview?.totals?.grossPayCents || 0);
+const previewPaidEarlyCents = Number(preview?.totals?.paidEarlyCents || 0);
+const previewRemainingCents = Number(preview?.totals?.underpaidCents || 0);
+const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
       <h1 style={{ margin: 0, fontSize: 24 }}>Finalize Payroll Run</h1>
@@ -458,22 +495,19 @@ try {
             <div style={{ fontWeight: 800, marginBottom: 12, fontSize: 18 }}>
               Payroll Preview Summary
             </div>
-
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(5, minmax(160px, 1fr))",
+                gridTemplateColumns: "repeat(6, minmax(160px, 1fr))",
                 gap: 12,
               }}
             >
               <SummaryCard label="Employees" value={String(preview.totals.employeeCount)} />
-              <SummaryCard label="Gross Payroll" value={dollars(preview.totals.grossPayCents)} />
-              <SummaryCard label="Paid Early Count" value={String(preview.totals.paidEarlyCount)} />
-              <SummaryCard label="Paid Early Amount" value={dollars(preview.totals.paidEarlyCents)} />
-              <SummaryCard
-                label="Remaining Payroll"
-                value={dollars(preview.totals.remainingGrossPayCents)}
-              />
+              <SummaryCard label="Gross Payroll" value={dollars(previewGrossCents)} />
+	      <SummaryCard label="Paid Early Count" value={String(preview.totals.paidEarlyCount)} />
+	      <SummaryCard label="Paid Early Amount" value={dollars(previewPaidEarlyCents)} />
+	      <SummaryCard label="Remaining Payroll" value={dollars(previewRemainingCents)} />
+	      <SummaryCard label="Overpaid" value={dollars(previewOverpaidCents)} />
             </div>
           </div>
 
@@ -503,7 +537,7 @@ try {
                     <th style={th}>DT</th>
                     <th style={th}>Gross</th>
                     <th style={th}>Status</th>
-                    <th style={th}>Early Paid</th>
+                    <th style={th}>Early Pay Summary</th>
                     <th style={th}>Action</th>
                   </tr>
                 </thead>
@@ -520,54 +554,93 @@ try {
                           </td>
                           <td style={td}>{emp.employee?.title || "-"}</td>
                           <td style={td}>{emp.entryCount}</td>
-                          <td style={td}>{minutesToHHMM(emp.payableMinutes)}</td>
-                          <td style={td}>{minutesToHHMM(emp.regularMinutes)}</td>
-                          <td style={td}>{minutesToHHMM(emp.overtimeMinutes)}</td>
-                          <td style={td}>{minutesToHHMM(emp.doubleMinutes)}</td>
+                          <td style={td}>{minutesToDecimalHours(emp.payableMinutes)}</td>
+                          <td style={td}>{minutesToDecimalHours(emp.regularMinutes)}</td>
+                          <td style={td}>{minutesToDecimalHours(emp.overtimeMinutes)}</td>
+                          <td style={td}>{minutesToDecimalHours(emp.doubleMinutes)}</td>
                           <td style={td}>
                             <b>{dollars(emp.grossPayCents)}</b>
                           </td>
-                          <td style={td}>
-                            {emp.payStatus === "PAID_EARLY" ? (
-                              <span style={paidEarlyBadge}>PAID EARLY</span>
-                            ) : (
-                              <span style={readyBadge}>READY</span>
-                            )}
-                          </td>
-                          <td style={td}>
-                            {emp.earlyPayment ? (
-                              <div>
-                                <div>
-                                  <b>{dollars(emp.earlyPayment.amountCents)}</b>
-                                </div>
-                                <div style={{ fontSize: 12, color: "#666" }}>
-                                  {emp.earlyPayment.note || "-"}
-                                </div>
-                              </div>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td style={td}>
-                            {!emp.earlyPayment ? (
-                              <button
-                                type="button"
-                                onClick={() => startEarlyPayEdit(emp)}
-                                style={actionBtn}
-                              >
-                                Mark Paid Early
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => startEarlyPayEdit(emp)}
-                                style={secondaryBtn}
-                              >
-                                View / Replace
-                              </button>
-                            )}
-                          </td>
-                        </tr>
+                                
+
+<td style={td}>
+  {Number(emp.paidEarlyCents || 0) > 0 && (
+    <div>
+      <div>Paid Early: {dollars(Number(emp.paidEarlyCents || 0))}</div>
+      {Number(emp.overpaidCents || 0) > 0 && (
+        <div style={{ color: "#b91c1c" }}>
+          Overpayment: {dollars(Number(emp.overpaidCents || 0))}
+        </div>
+      )}
+      {Number(emp.underpaidCents || 0) > 0 && (
+        <div style={{ color: "#065f46" }}>
+          Remaining: {dollars(Number(emp.underpaidCents || 0))}
+        </div>
+      )}
+    </div>
+  )}
+</td>
+
+<td style={td}>
+  {emp.earlyPayment ? (
+    <div>
+      <div>
+        <b>{dollars(earlyPaidCentsForEmp(emp))}</b> paid early
+      </div>
+
+      {overpaidCentsForEmp(emp) > 0 && (
+        <div style={{ fontSize: 12, color: "#b91c1c" }}>
+          Overpayment to deduct: {dollars(overpaidCentsForEmp(emp))}
+        </div>
+      )}
+
+      <div style={{ fontSize: 12, color: "#065f46", fontWeight: 700 }}>
+        Remaining to pay: {dollars(remainingCentsForEmp(emp))}
+      </div>
+
+      {emp.earlyPayment.note && (
+        <div style={{ fontSize: 12, color: "#666" }}>
+          {emp.earlyPayment.note}
+        </div>
+      )}
+    </div>
+  ) : (
+    "-"
+  )}
+</td>
+
+<td style={td}>
+  {Number(emp.underpaidCents || 0) > 0 ? (
+    <button
+      type="button"
+      onClick={() => startEarlyPayEdit(emp)}
+      style={actionBtn}
+    >
+      Pay Now
+    </button>
+  ) : Number(emp.overpaidCents || 0) > 0 ? (
+    <span style={{ color: "#b91c1c", fontWeight: 700 }}>
+      Recover {dollars(Number(emp.overpaidCents || 0))} next payroll
+    </span>
+  ) : Number(emp.paidEarlyCents || 0) > 0 ? (
+    <button
+      type="button"
+      onClick={() => startEarlyPayEdit(emp)}
+      style={secondaryBtn}
+    >
+      View / Replace
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => startEarlyPayEdit(emp)}
+      style={actionBtn}
+    >
+      Mark Paid Early
+    </button>
+  )}
+</td>
+			</tr>
 
                         {isEditing ? (
                           <tr>
@@ -581,10 +654,15 @@ try {
                                 }}
                               >
                                 <div>
-                                  <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-                                    Early Payment Amount ($)
-                                  </div>
-                                  <input
+                                 <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+ 				 Payment To Add Now ($)
+				</div> 
+				<div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+ 				 Already paid: {dollars(earlyPaidCentsForEmp(emp))} ·
+ 				 Remaining: {dollars(remainingCentsForEmp(emp))} ·
+ 				 Overpaid: {dollars(overpaidCentsForEmp(emp))}
+				</div>
+				 <input
                                     value={earlyAmount}
                                     onChange={(e) => setEarlyAmount(e.target.value)}
                                     placeholder="e.g. 500.00"

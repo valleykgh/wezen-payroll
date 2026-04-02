@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
+import Link from "next/link";
 
 type Employee = {
   id: string;
@@ -482,6 +483,21 @@ async function sendInvite(employeeId: string) {
                           </button>
                         )}
 
+			<Link
+  href={`/admin/employees/${emp.id}/ledger`}
+  style={{
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #7c3aed",
+    background: "#f5f3ff",
+    color: "#6d28d9",
+    fontWeight: 700,
+    textDecoration: "none",
+    display: "inline-block",
+  }}
+>
+  Ledger
+</Link>			
 
 			{emp.user ? (
   <button

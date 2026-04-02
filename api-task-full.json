@@ -1,0 +1,134 @@
+{
+    "taskDefinition": {
+        "taskDefinitionArn": "arn:aws:ecs:us-west-1:211125653940:task-definition/wezen-payroll-api-task:80",
+        "containerDefinitions": [
+            {
+                "name": "api",
+                "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-api:fix4",
+                "cpu": 0,
+                "portMappings": [
+                    {
+                        "containerPort": 4000,
+                        "hostPort": 4000,
+                        "protocol": "tcp",
+                        "name": "api-4000-tcp"
+                    }
+                ],
+                "essential": true,
+                "environment": [
+                    {
+                        "name": "ADMIN_OVERRIDE_PIN",
+                        "value": "0786"
+                    },
+                    {
+                        "name": "ADOBE_API_TOKEN",
+                        "value": "placeholder token"
+                    },
+                    {
+                        "name": "PORT",
+                        "value": "4000"
+                    },
+                    {
+                        "name": "NODE_ENV",
+                        "value": "production"
+                    },
+                    {
+                        "name": "BUILD_ID",
+                        "value": "<TAG>"
+                    },
+                    {
+                        "name": "SES_FROM_EMAIL",
+                        "value": "noreply@wezenstaffing.com"
+                    },
+                    {
+                        "name": "FRONTEND_URL",
+                        "value": "https://payroll.wezenstaffing.com"
+                    }
+                ],
+                "environmentFiles": [],
+                "mountPoints": [],
+                "volumesFrom": [],
+                "secrets": [
+                    {
+                        "name": "DATABASE_URL",
+                        "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-database-url-cUrxz0"
+                    },
+                    {
+                        "name": "JWT_SECRET",
+                        "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-jwt-secret-CRPeTC"
+                    }
+                ],
+                "ulimits": [],
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": "/ecs/wezen-payroll-api-task",
+                        "awslogs-create-group": "true",
+                        "awslogs-region": "us-west-1",
+                        "awslogs-stream-prefix": "ecs"
+                    },
+                    "secretOptions": []
+                },
+                "systemControls": []
+            }
+        ],
+        "family": "wezen-payroll-api-task",
+        "taskRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+        "executionRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+        "networkMode": "awsvpc",
+        "revision": 80,
+        "volumes": [],
+        "status": "ACTIVE",
+        "requiresAttributes": [
+            {
+                "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+            },
+            {
+                "name": "ecs.capability.execution-role-awslogs"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.ecr-auth"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+            },
+            {
+                "name": "ecs.capability.secrets.asm.environment-variables"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.task-iam-role"
+            },
+            {
+                "name": "ecs.capability.execution-role-ecr-pull"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+            },
+            {
+                "name": "ecs.capability.task-eni"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.29"
+            }
+        ],
+        "placementConstraints": [],
+        "compatibilities": [
+            "EC2",
+            "FARGATE",
+            "MANAGED_INSTANCES"
+        ],
+        "runtimePlatform": {
+            "cpuArchitecture": "X86_64",
+            "operatingSystemFamily": "LINUX"
+        },
+        "requiresCompatibilities": [
+            "FARGATE"
+        ],
+        "cpu": "512",
+        "memory": "1024",
+        "registeredAt": "2026-03-13T11:07:09.544000-07:00",
+        "registeredBy": "arn:aws:iam::211125653940:user/payroll-local-cli",
+        "enableFaultInjection": false
+    },
+    "tags": []
+}

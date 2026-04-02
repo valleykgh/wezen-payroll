@@ -7,16 +7,34 @@ const express_1 = __importDefault(require("express"));
 const prisma_1 = require("../../prisma");
 const _shared_1 = require("./_shared");
 const router = express_1.default.Router();
+function mapShiftTypeToDb(shiftType) {
+    if (shiftType === "AM+PM")
+        return "AM_PM";
+    if (shiftType === "PM+NOC")
+        return "PM_NOC";
+    if (shiftType === "NOC+AM")
+        return "NOC_AM";
+    return shiftType;
+}
+function mapShiftTypeFromDb(shiftType) {
+    if (shiftType === "AM_PM")
+        return "AM+PM";
+    if (shiftType === "PM_NOC")
+        return "PM+NOC";
+    if (shiftType === "NOC_AM")
+        return "NOC+AM";
+    return shiftType || "";
+}
 async function findFacilityRateForEntry(e) {
     const facilityId = String(e.facilityId || "").trim();
     const workDate = e.workDate ? new Date(e.workDate) : null;
-    const employeeTitle = String(e.employee?.billingRole || e.employee?.title || "").trim();
+    const employeeTitle = String(e.employee?.title || "").trim();
     if (!facilityId || !workDate || !employeeTitle)
         return null;
     const rate = await prisma_1.prisma.facilityRate.findFirst({
         where: {
             facilityId,
-            discipline: employeeTitle,
+            title: employeeTitle,
             effectiveFrom: {
                 lte: workDate,
             },
@@ -26,7 +44,7 @@ async function findFacilityRateForEntry(e) {
         },
         select: {
             id: true,
-            discipline: true,
+            title: true,
             effectiveFrom: true,
             regRateCents: true,
             otRateCents: true,
@@ -35,9 +53,26 @@ async function findFacilityRateForEntry(e) {
     });
     return rate;
 }
+function getPayrollWeekBounds(workDateValue) {
+    const base = workDateValue instanceof Date
+        ? new Date(workDateValue)
+        : new Date(`${String(workDateValue).slice(0, 10)}T00:00:00.000Z`);
+    const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
+    const day = d.getUTCDay(); // Sun=0, Mon=1
+    const daysFromMonday = day === 0 ? 6 : day - 1;
+    const periodStart = new Date(d);
+    periodStart.setUTCDate(periodStart.getUTCDate() - daysFromMonday);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCDate(periodEnd.getUTCDate() + 6);
+    return { periodStart, periodEnd };
+}
+function centsToMoney(cents) {
+    return `$${(Number(cents || 0) / 100).toFixed(2)}`;
+}
 router.get("/time-entries", async (req, res) => {
     try {
-        const { employeeId, from, to, status, q, page = "1", pageSize = "25" } = req.query;
+        const { employeeId, from, to, status, q, facilityId, page = "1", pageSize = "25", } = req.query;
+        const includeMissedAdjustments = String(req.query.includeMissedAdjustments || "false") === "true";
         const take = Math.min(100, Math.max(1, Number(pageSize) || 25));
         const pageNum = Math.max(1, Number(page) || 1);
         const skip = (pageNum - 1) * take;
@@ -52,6 +87,9 @@ router.get("/time-entries", async (req, res) => {
                 .filter(Boolean);
             if (ids.length)
                 where.employeeId = { in: ids };
+        }
+        if (facilityId) {
+            where.facilityId = String(facilityId);
         }
         if (status)
             where.status = String(status);
@@ -94,6 +132,7 @@ router.get("/time-entries", async (req, res) => {
                     punchKey: true,
                     punchesJson: true,
                     breaksJson: true,
+                    createdAt: true,
                     employee: {
                         select: {
                             id: true,
@@ -105,13 +144,31 @@ router.get("/time-entries", async (req, res) => {
                             title: true,
                         },
                     },
-                    facility: { select: { id: true, name: true } },
-                    breaks: { select: { id: true, startTime: true, endTime: true, minutes: true } },
+                    facility: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    breaks: {
+                        select: {
+                            id: true,
+                            startTime: true,
+                            endTime: true,
+                            minutes: true,
+                        },
+                    },
                 },
             }),
         ]);
         const entriesWithComputed = await Promise.all(entries.map(async (e) => {
             const breaks = Array.isArray(e.breaks) ? e.breaks : [];
+            if (breaks.length > 0) {
+                e.breaksJson = breaks.map((b) => ({
+                    startTime: b.startTime,
+                    endTime: b.endTime,
+                }));
+            }
             const computedBreakMinutes = breaks.length > 0
                 ? breaks.reduce((sum, b) => sum + Number(b.minutes ?? 0), 0)
                 : Number(e.breakMinutes ?? 0);
@@ -122,30 +179,129 @@ router.get("/time-entries", async (req, res) => {
                 regularMinutes: b.regularMinutes,
                 overtimeMinutes: b.overtimeMinutes,
                 doubleMinutes: b.doubleMinutes,
-                regular_HHMM: (0, _shared_1.fmtHHMM)(b.regularMinutes),
-                overtime_HHMM: (0, _shared_1.fmtHHMM)(b.overtimeMinutes),
-                double_HHMM: (0, _shared_1.fmtHHMM)(b.doubleMinutes),
                 regular_decimal: (0, _shared_1.minutesToDecimalHours)(b.regularMinutes),
                 overtime_decimal: (0, _shared_1.minutesToDecimalHours)(b.overtimeMinutes),
                 double_decimal: (0, _shared_1.minutesToDecimalHours)(b.doubleMinutes),
             };
             const facilityRate = await findFacilityRateForEntry(e);
+            const marker = `TIME_ENTRY_PAY_NOW:${e.id}`;
+            const { periodStart, periodEnd } = getPayrollWeekBounds(e.workDate);
+            const finalizedRunForWeek = await prisma_1.prisma.payrollRun.findFirst({
+                where: {
+                    periodStart,
+                    periodEnd,
+                    status: "FINALIZED",
+                },
+                select: {
+                    id: true,
+                },
+            });
+            const snapshotInFinalizedWeek = finalizedRunForWeek
+                ? await prisma_1.prisma.payrollRunEntrySnapshot.findFirst({
+                    where: {
+                        payrollRunId: finalizedRunForWeek.id,
+                        timeEntryId: e.id,
+                    },
+                    select: {
+                        id: true,
+                    },
+                })
+                : null;
+            const paidNowLedgerRows = await prisma_1.prisma.employeePayrollLedger.findMany({
+                where: {
+                    employeeId: e.employeeId,
+                    note: {
+                        contains: marker,
+                    },
+                },
+                orderBy: [{ createdAt: "asc" }],
+                select: {
+                    id: true,
+                    type: true,
+                    amountCents: true,
+                    note: true,
+                    createdAt: true,
+                },
+            });
+            const paidNow = paidNowLedgerRows.length > 0;
+            const paidViaPayrollWeek = !!snapshotInFinalizedWeek && !paidNow;
+            const addedAfterFinalizedWeek = !!finalizedRunForWeek && !snapshotInFinalizedWeek && !paidNow;
+            const paidNowPaymentRow = paidNowLedgerRows.find((r) => r.type === "EARLY_PAY" && Number(r.amountCents || 0) < 0);
+            const paidNowAmountCents = paidNowPaymentRow
+                ? Math.abs(Number(paidNowPaymentRow.amountCents || 0))
+                : 0;
+            const paidNowAt = paidNowPaymentRow?.createdAt || paidNowLedgerRows[0]?.createdAt || null;
+            const paidNowNote = paidNowPaymentRow?.note || paidNowLedgerRows[0]?.note || null;
+            const holidayRule = await (0, _shared_1.getHolidayRule)(e.workDate);
             return {
                 ...e,
+                shiftType: mapShiftTypeFromDb(String(e.shiftType || "")),
                 computedBreakMinutes,
                 payableMinutes,
-                totalHours_HHMM: (0, _shared_1.fmtHHMM)(payableMinutes),
                 calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(payableMinutes),
                 buckets,
                 facilityRate,
+                paidNow,
+                paidNowAt,
+                paidNowAmountCents,
+                paidNowNote,
+                paidViaPayrollWeek,
+                addedAfterFinalizedWeek,
+                holidayName: holidayRule?.name || null,
+                holidayMultiplier: holidayRule?.payMultiplier || 1,
+                isHoliday: holidayRule?.isHoliday || false,
             };
         }));
+        let combinedEntries = [...entriesWithComputed];
+        if (includeMissedAdjustments && from && to) {
+            const missedRows = await (0, _shared_1.getBillableWorkRows)({
+                prisma: prisma_1.prisma,
+                facilityId: facilityId ? String(facilityId) : undefined,
+                from: (0, _shared_1.startOfDayUTC)(from),
+                toExclusive: (0, _shared_1.startOfNextDayUTC)(to),
+            });
+            const adjustmentRows = missedRows
+                .filter((r) => r.sourceType === "PAYROLL_ADJUSTMENT")
+                .map((r) => ({
+                id: r.sourceId,
+                employeeId: r.employeeId,
+                facilityId: r.facilityId,
+                workDate: r.workDate,
+                createdAt: r.createdAt,
+                status: "APPROVED",
+                shiftType: r.shiftType || "ADJUSTMENT",
+                minutesWorked: r.minutesWorked,
+                breakMinutes: r.breakMinutes,
+                payableMinutes: r.payableMinutes,
+                computedBreakMinutes: 0,
+                calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(r.payableMinutes || 0),
+                notes: r.notes,
+                employee: r.employee,
+                facility: r.facility,
+                breaks: [],
+                punchesJson: r.punchesJson || null,
+                breaksJson: r.breaksJson || null,
+                billAmountCents: r.billAmountCents || 0, // <-- add this
+                amountCents: r.amountCents || 0, // <-- useful too
+                facilityRate: null,
+                buckets: {
+                    regularMinutes: r.regularMinutes || 0,
+                    overtimeMinutes: r.overtimeMinutes || 0,
+                    doubleMinutes: r.doubleMinutes || 0,
+                    regular_decimal: (0, _shared_1.minutesToDecimalHours)(r.regularMinutes || 0),
+                    overtime_decimal: (0, _shared_1.minutesToDecimalHours)(r.overtimeMinutes || 0),
+                    double_decimal: (0, _shared_1.minutesToDecimalHours)(r.doubleMinutes || 0),
+                },
+                isMissedAdjustment: true,
+            }));
+            combinedEntries = [...entriesWithComputed, ...adjustmentRows].sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
+        }
         return res.json({
             page: pageNum,
             pageSize: take,
             total,
             totalPages: Math.ceil(total / take),
-            entries: entriesWithComputed,
+            entries: combinedEntries,
         });
     }
     catch (e) {
@@ -169,7 +325,61 @@ router.get("/time-entry/calc", async (req, res) => {
         const breakMinutes = computedBreaks.reduce((s, b) => s + b.minutes, 0);
         const payableMinutes = Math.max(0, r.workedMinutes - breakMinutes);
         const buckets = (0, _shared_1.splitDailyBuckets)(payableMinutes);
+        const holidayRule = await (0, _shared_1.getHolidayRule)(workDate);
         const warnings = [];
+        let billing = null;
+        const employeeId = String(req.query.employeeId || "").trim();
+        const facilityId = String(req.query.facilityId || "").trim();
+        if (employeeId && facilityId) {
+            const employee = await prisma_1.prisma.employee.findUnique({
+                where: { id: employeeId },
+                select: {
+                    id: true,
+                    title: true,
+                },
+            });
+            if (employee?.title) {
+                const facilityRate = await prisma_1.prisma.facilityRate.findFirst({
+                    where: {
+                        facilityId,
+                        title: String(employee.title),
+                        effectiveFrom: {
+                            lte: new Date(`${workDate}T00:00:00.000Z`),
+                        },
+                    },
+                    orderBy: {
+                        effectiveFrom: "desc",
+                    },
+                });
+                if (facilityRate) {
+                    const billAmountCents = (0, _shared_1.calculateBillCentsWithRule)({
+                        regularMinutes: buckets.regularMinutes,
+                        overtimeMinutes: buckets.overtimeMinutes,
+                        doubleMinutes: buckets.doubleMinutes,
+                        regRateCents: Number(facilityRate.regRateCents || 0),
+                        otRateCents: Number(facilityRate.otRateCents || 0),
+                        dtRateCents: Number(facilityRate.dtRateCents || 0),
+                        holidayRule,
+                    });
+                    billing = {
+                        hasRate: true,
+                        regRateCents: Number(facilityRate.regRateCents || 0),
+                        otRateCents: Number(facilityRate.otRateCents || 0),
+                        dtRateCents: Number(facilityRate.dtRateCents || 0),
+                        billAmountCents,
+                    };
+                }
+                else {
+                    billing = {
+                        hasRate: false,
+                        regRateCents: 0,
+                        otRateCents: 0,
+                        dtRateCents: 0,
+                        billAmountCents: 0,
+                    };
+                }
+            }
+        }
         if (breakMinutes > r.workedMinutes)
             warnings.push("Break minutes exceed worked minutes");
         return res.json({
@@ -181,17 +391,21 @@ router.get("/time-entry/calc", async (req, res) => {
                 payableMinutes,
             },
             display: {
-                totalHours_HHMM: (0, _shared_1.fmtHHMM)(payableMinutes),
                 calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(payableMinutes),
             },
             buckets: {
-                regular_HHMM: (0, _shared_1.fmtHHMM)(buckets.regularMinutes),
-                overtime_HHMM: (0, _shared_1.fmtHHMM)(buckets.overtimeMinutes),
-                double_HHMM: (0, _shared_1.fmtHHMM)(buckets.doubleMinutes),
                 regular_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.regularMinutes),
                 overtime_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.overtimeMinutes),
                 double_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.doubleMinutes),
             },
+            holiday: {
+                isHoliday: holidayRule.isHoliday,
+                name: holidayRule.name,
+                payMultiplier: holidayRule.payMultiplier,
+                billMultiplier: holidayRule.billMultiplier,
+                appliesToRegularOnly: holidayRule.appliesToRegularOnly,
+            },
+            billing,
             warnings,
         });
     }
@@ -233,13 +447,18 @@ router.get("/time-entry/:id", async (req, res) => {
                 },
             ];
         }
-        if (!entry.breaksJson && entry.breaks && entry.breaks.length > 0) {
+        if (entry.breaks && entry.breaks.length > 0) {
             entry.breaksJson = entry.breaks.map((b) => ({
                 startTime: b.startTime,
                 endTime: b.endTime,
             }));
         }
-        return res.json({ entry });
+        return res.json({
+            entry: {
+                ...entry,
+                shiftType: mapShiftTypeFromDb(String(entry.shiftType || "")),
+            },
+        });
     }
     catch (e) {
         console.error("GET /api/admin/time-entry/:id failed:", e);
@@ -256,6 +475,21 @@ router.post("/time-entry", async (req, res) => {
         }
         if (!Object.values(_shared_1.SHIFT_TYPE).includes(shiftType)) {
             return res.status(400).json({ error: "Invalid shiftType (AM|PM|NOC|AM+PM|PM+NOC|NOC+AM)" });
+        }
+        const hasSecondPunch = Array.isArray(punches) &&
+            punches.length >= 2 &&
+            String(punches[1]?.clockIn || "").trim() &&
+            String(punches[1]?.clockOut || "").trim();
+        const isCombinedShiftType = shiftType === "AM+PM" || shiftType === "PM+NOC" || shiftType === "NOC+AM";
+        if (hasSecondPunch && !isCombinedShiftType) {
+            return res.status(400).json({
+                error: "Two-shift punches were entered, but Shift Type is not combined. Please use AM+PM, PM+NOC, or NOC+AM.",
+            });
+        }
+        if (!hasSecondPunch && isCombinedShiftType) {
+            return res.status(400).json({
+                error: "Combined Shift Type selected, but second-shift punches are missing.",
+            });
         }
         await (0, _shared_1.assertFacilityRateExists)({
             employeeId: String(employeeId),
@@ -283,7 +517,9 @@ router.post("/time-entry", async (req, res) => {
             }
             const combined = `${s1.shift}+${s2.shift}`;
             if (combined !== shiftType) {
-                return res.status(400).json({ error: `shiftType must match segments order. Expected ${combined}` });
+                return res.status(400).json({
+                    error: `shiftType must match segments order. Expected ${combined}`,
+                });
             }
             const a = (0, _shared_1.computeWorkedMinutes)(ws, s1.punches);
             const b = (0, _shared_1.computeWorkedMinutes)(ws, s2.punches);
@@ -291,22 +527,20 @@ router.post("/time-entry", async (req, res) => {
             workedMinutes = a.workedMinutes + b.workedMinutes;
             startTime = a.firstIn;
             endTime = b.lastOut;
-            shiftTypeForDb = s1.shift;
+            // ✅ KEEP COMBINED SHIFT (PM+NOC etc)
+            shiftTypeForDb = mapShiftTypeToDb(shiftType);
         }
         else {
             if (!Array.isArray(punches) || punches.length === 0) {
-                return res.status(400).json({ error: "punches[] required (or provide segments[] length=2)" });
+                return res.status(400).json({
+                    error: "punches[] required (or provide segments[] length=2)",
+                });
             }
             const r = (0, _shared_1.computeWorkedMinutes)(ws, punches);
             workedMinutes = r.workedMinutes;
             startTime = r.firstIn;
             endTime = r.lastOut;
-            if (shiftType === "AM+PM" || shiftType === "PM+NOC" || shiftType === "NOC+AM") {
-                shiftTypeForDb = shiftType.split("+")[0];
-            }
-            else {
-                shiftTypeForDb = shiftType;
-            }
+            shiftTypeForDb = mapShiftTypeToDb(shiftType);
         }
         const computedBreaks = (0, _shared_1.computeBreakRows)(ws, Array.isArray(breaks) ? breaks : []);
         const breakMinutes = computedBreaks.reduce((s, b) => s + b.minutes, 0);
@@ -408,15 +642,11 @@ router.post("/time-entry", async (req, res) => {
                 workedMinutes,
                 breakMinutes,
                 payableMinutes,
-                totalHours_HHMM: (0, _shared_1.fmtHHMM)(payableMinutes),
                 calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(payableMinutes),
                 buckets: {
                     regularMinutes: buckets.regularMinutes,
                     overtimeMinutes: buckets.overtimeMinutes,
                     doubleMinutes: buckets.doubleMinutes,
-                    regular_HHMM: (0, _shared_1.fmtHHMM)(buckets.regularMinutes),
-                    overtime_HHMM: (0, _shared_1.fmtHHMM)(buckets.overtimeMinutes),
-                    double_HHMM: (0, _shared_1.fmtHHMM)(buckets.doubleMinutes),
                     regular_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.regularMinutes),
                     overtime_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.overtimeMinutes),
                     double_decimal: (0, _shared_1.minutesToDecimalHours)(buckets.doubleMinutes),
@@ -441,7 +671,7 @@ router.patch("/time-entry/:id", async (req, res) => {
         const id = String(req.params.id || "");
         if (!id)
             return res.status(400).json({ error: "id required" });
-        const editable = await (0, _shared_1.assertEditableNotLocked)(id);
+        const editable = await (0, _shared_1.assertEditableNotLocked)(id, req);
         if (!editable.ok)
             return res.status(editable.http).json({ error: editable.msg });
         const { employeeId, workDate, shiftType, punches, segments, breaks, notes, facilityId } = req.body || {};
@@ -452,6 +682,21 @@ router.patch("/time-entry/:id", async (req, res) => {
         }
         if (!Object.values(_shared_1.SHIFT_TYPE).includes(shiftType)) {
             return res.status(400).json({ error: "Invalid shiftType (AM|PM|NOC|AM+PM|PM+NOC|NOC+AM)" });
+        }
+        const hasSecondPunch = Array.isArray(punches) &&
+            punches.length >= 2 &&
+            String(punches[1]?.clockIn || "").trim() &&
+            String(punches[1]?.clockOut || "").trim();
+        const isCombinedShiftType = shiftType === "AM+PM" || shiftType === "PM+NOC" || shiftType === "NOC+AM";
+        if (hasSecondPunch && !isCombinedShiftType) {
+            return res.status(400).json({
+                error: "Two-shift punches were entered, but Shift Type is not combined. Please use AM+PM, PM+NOC, or NOC+AM.",
+            });
+        }
+        if (!hasSecondPunch && isCombinedShiftType) {
+            return res.status(400).json({
+                error: "Combined Shift Type selected, but second-shift punches are missing.",
+            });
         }
         await (0, _shared_1.assertFacilityRateExists)({
             employeeId: String(employeeId),
@@ -487,7 +732,7 @@ router.patch("/time-entry/:id", async (req, res) => {
             workedMinutes = a.workedMinutes + b.workedMinutes;
             startTime = a.firstIn;
             endTime = b.lastOut;
-            shiftTypeForDb = s1.shift;
+            shiftTypeForDb = mapShiftTypeToDb(shiftType);
         }
         else {
             if (!Array.isArray(punches) || punches.length === 0) {
@@ -497,12 +742,7 @@ router.patch("/time-entry/:id", async (req, res) => {
             workedMinutes = r.workedMinutes;
             startTime = r.firstIn;
             endTime = r.lastOut;
-            if (shiftType === "AM+PM" || shiftType === "PM+NOC" || shiftType === "NOC+AM") {
-                shiftTypeForDb = shiftType.split("+")[0];
-            }
-            else {
-                shiftTypeForDb = shiftType;
-            }
+            shiftTypeForDb = mapShiftTypeToDb(shiftType);
         }
         const computedBreaks = (0, _shared_1.computeBreakRows)(ws, Array.isArray(breaks) ? breaks : []);
         const breakMinutes = computedBreaks.reduce((s, b) => s + b.minutes, 0);
@@ -533,6 +773,14 @@ router.patch("/time-entry/:id", async (req, res) => {
                 error: `Duplicate shift: same timings already exist for this employee at this facility on ${ws} (entry ${dup.id}, status ${dup.status}).`,
             });
         }
+        const normalizedBreakInputs = Array.isArray(breaks)
+            ? breaks
+                .filter((b) => String(b?.startTime || "").trim() && String(b?.endTime || "").trim())
+                .map((b) => ({
+                startTime: String(b.startTime || "").trim(),
+                endTime: String(b.endTime || "").trim(),
+            }))
+            : [];
         const data = {
             employeeId: String(employeeId),
             facilityId: String(facilityId),
@@ -545,10 +793,7 @@ router.patch("/time-entry/:id", async (req, res) => {
             endTime,
             notes: notes ?? null,
             punchesJson: effectivePunches,
-            breaksJson: computedBreaks.map((b) => ({
-                startTime: b.startTime.toISOString(),
-                endTime: b.endTime.toISOString(),
-            })),
+            breaksJson: normalizedBreakInputs,
         };
         if (req.body.status) {
             data.status = String(req.body.status);
@@ -586,7 +831,9 @@ router.patch("/time-entry/:id", async (req, res) => {
                 })),
             });
         }
-        return res.json({ entry: updated, breaksStored: computedBreaks.length });
+        return res.json({ entry: updated,
+            shiftType: mapShiftTypeFromDb(String(updated.shiftType || "")),
+            breaksStored: computedBreaks.length });
     }
     catch (e) {
         console.error("PATCH /api/admin/time-entry/:id failed:", e);
@@ -596,12 +843,298 @@ router.patch("/time-entry/:id", async (req, res) => {
         return res.status(e?.status || 400).json({ error: e?.message || "Failed to update time entry" });
     }
 });
+router.post("/time-entry/:id/pay-now", async (req, res) => {
+    try {
+        const id = String(req.params.id || "").trim();
+        const paidNote = String(req.body?.paidNote || "").trim();
+        if (!id) {
+            return res.status(400).json({ error: "id required" });
+        }
+        const createdById = req?.user?.sub
+            ? String(req.user.sub)
+            : (req?.user?.id ? String(req.user.id) : null);
+        const entry = await prisma_1.prisma.timeEntry.findUnique({
+            where: { id },
+            include: {
+                employee: {
+                    select: {
+                        id: true,
+                        legalName: true,
+                        preferredName: true,
+                        email: true,
+                        hourlyRateCents: true,
+                        title: true,
+                    },
+                },
+                facility: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+                breaks: {
+                    select: {
+                        id: true,
+                        startTime: true,
+                        endTime: true,
+                        minutes: true,
+                    },
+                },
+            },
+        });
+        if (!entry) {
+            return res.status(404).json({ error: "Time entry not found" });
+        }
+        if (!entry.employeeId) {
+            return res.status(400).json({ error: "Time entry is missing employee" });
+        }
+        if (!entry.facilityId) {
+            return res.status(400).json({ error: "Time entry is missing facility" });
+        }
+        const marker = `TIME_ENTRY_PAY_NOW:${id}`;
+        const existingLedgerMarker = await prisma_1.prisma.employeePayrollLedger.findFirst({
+            where: {
+                employeeId: entry.employeeId,
+                note: { contains: marker },
+            },
+            select: { id: true },
+        });
+        if (existingLedgerMarker) {
+            return res.status(409).json({
+                error: "This time entry has already been paid with Pay Now.",
+            });
+        }
+        const computedBreakMinutes = (0, _shared_1.sumBreakMinutesFromEntry)(entry);
+        const workedMinutes = Number(entry.minutesWorked || 0);
+        const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
+        if (payableMinutes <= 0) {
+            return res.status(400).json({
+                error: "This time entry has no payable time.",
+            });
+        }
+        const buckets = (0, _shared_1.splitDailyBuckets)(payableMinutes);
+        const rateCents = Number(entry.employee?.hourlyRateCents || 0);
+        if (!Number.isFinite(rateCents) || rateCents <= 0) {
+            return res.status(400).json({
+                error: "Employee hourly rate is missing or invalid.",
+            });
+        }
+        const holidayRule = await (0, _shared_1.getHolidayRule)(entry.workDate);
+        const payCalc = (0, _shared_1.calculatePayCentsWithRule)({
+            regularMinutes: buckets.regularMinutes,
+            overtimeMinutes: buckets.overtimeMinutes,
+            doubleMinutes: buckets.doubleMinutes,
+            hourlyRateCents: rateCents,
+            holidayRule,
+        });
+        const regularPayCents = payCalc.regularPayCents;
+        const overtimePayCents = payCalc.overtimePayCents;
+        const doublePayCents = payCalc.doublePayCents;
+        const amountCents = payCalc.grossPayCents;
+        if (amountCents <= 0) {
+            return res.status(400).json({
+                error: "Calculated pay amount is zero.",
+            });
+        }
+        console.log("TIME_ENTRY_PAY_NOW_ATTEMPT", {
+            entryId: id,
+            employeeId: entry.employeeId,
+            amountCents,
+            marker,
+        });
+        const { periodStart, periodEnd } = getPayrollWeekBounds(entry.workDate);
+        const finalizedRun = await prisma_1.prisma.payrollRun.findFirst({
+            where: {
+                periodStart,
+                periodEnd,
+                status: "FINALIZED",
+            },
+            select: {
+                id: true,
+                periodStart: true,
+                periodEnd: true,
+            },
+        });
+        const facilityRate = await findFacilityRateForEntry(entry);
+        const billAmountCents = facilityRate
+            ? (0, _shared_1.calculateBillCentsWithRule)({
+                regularMinutes: buckets.regularMinutes,
+                overtimeMinutes: buckets.overtimeMinutes,
+                doubleMinutes: buckets.doubleMinutes,
+                regRateCents: Number(facilityRate.regRateCents || 0),
+                otRateCents: Number(facilityRate.otRateCents || 0),
+                dtRateCents: Number(facilityRate.dtRateCents || 0),
+                holidayRule,
+            })
+            : 0;
+        const result = await prisma_1.prisma.$transaction(async (tx) => {
+            if (entry.status === "DRAFT") {
+                await tx.timeEntry.update({
+                    where: { id },
+                    data: { status: "APPROVED" },
+                });
+            }
+            if (finalizedRun) {
+                const adjustment = await tx.payrollAdjustment.create({
+                    data: {
+                        employeeId: entry.employeeId,
+                        facilityId: entry.facilityId,
+                        workDate: entry.workDate,
+                        shiftType: entry.shiftType,
+                        punchesJson: entry.punchesJson ?? null,
+                        breaksJson: entry.breaksJson ?? null,
+                        reason: `Pay Now from time entry (${marker})`,
+                        amountCents,
+                        payableMinutes,
+                        regularMinutes: buckets.regularMinutes,
+                        overtimeMinutes: buckets.overtimeMinutes,
+                        doubleMinutes: buckets.doubleMinutes,
+                        billAmountCents,
+                        payrollRunId: null,
+                        paidImmediately: true,
+                        paidAt: new Date(),
+                        paidNote: paidNote
+                            ? `${paidNote} | ${marker}`
+                            : marker,
+                        paidAmountCents: amountCents,
+                        billedAt: null,
+                        invoiceNumber: null,
+                        invoiceType: null,
+                    },
+                });
+                await tx.employeePayrollLedger.create({
+                    data: {
+                        employeeId: entry.employeeId,
+                        periodStart,
+                        periodEnd,
+                        type: "EARNINGS_ADJUSTMENT",
+                        amountCents,
+                        note: `Time entry pay now earnings (${marker})`,
+                        createdById,
+                    },
+                });
+                await tx.employeePayrollLedger.create({
+                    data: {
+                        employeeId: entry.employeeId,
+                        periodStart,
+                        periodEnd,
+                        type: "EARLY_PAY",
+                        amountCents: -amountCents,
+                        note: `Time entry pay now payment (${marker})`,
+                        createdById,
+                    },
+                });
+                return {
+                    mode: "POST_FINALIZE_ADJUSTMENT",
+                    adjustmentId: adjustment.id,
+                };
+            }
+            const existingEarly = await tx.earlyPayrollPayment.findFirst({
+                where: {
+                    employeeId: entry.employeeId,
+                    periodStart,
+                    periodEnd,
+                },
+                select: {
+                    id: true,
+                    amountCents: true,
+                    note: true,
+                    payrollRunId: true,
+                },
+            });
+            if (existingEarly?.payrollRunId) {
+                throw new Error("This payroll week is already attached to a payroll run.");
+            }
+            if (existingEarly) {
+                await tx.earlyPayrollPayment.update({
+                    where: { id: existingEarly.id },
+                    data: {
+                        amountCents: Number(existingEarly.amountCents || 0) + amountCents,
+                        note: [existingEarly.note, marker].filter(Boolean).join(" | "),
+                        createdById,
+                    },
+                });
+            }
+            else {
+                await tx.earlyPayrollPayment.create({
+                    data: {
+                        employeeId: entry.employeeId,
+                        periodStart,
+                        periodEnd,
+                        amountCents,
+                        note: marker,
+                        createdById,
+                    },
+                });
+            }
+            const debugEarly = await tx.earlyPayrollPayment.findMany({
+                where: {
+                    employeeId: entry.employeeId,
+                    periodStart,
+                    periodEnd,
+                },
+                select: {
+                    id: true,
+                    employeeId: true,
+                    periodStart: true,
+                    periodEnd: true,
+                    amountCents: true,
+                    note: true,
+                    payrollRunId: true,
+                },
+            });
+            console.log("DEBUG_EARLY_PAYMENTS_AFTER_PAY_NOW", {
+                entryId: id,
+                employeeId: entry.employeeId,
+                workDate: entry.workDate,
+                periodStart,
+                periodEnd,
+                amountCents,
+                rows: debugEarly,
+            });
+            await tx.employeePayrollLedger.create({
+                data: {
+                    employeeId: entry.employeeId,
+                    periodStart,
+                    periodEnd,
+                    type: "EARLY_PAY",
+                    amountCents: -amountCents,
+                    note: `Time entry pay now early payment (${marker})`,
+                    createdById,
+                },
+            });
+            return {
+                mode: "PRE_FINALIZE_EARLY_PAY",
+            };
+        });
+        return res.json({
+            ok: true,
+            entryId: id,
+            employeeId: entry.employeeId,
+            workDate: entry.workDate,
+            amountCents,
+            amount: centsToMoney(amountCents),
+            mode: result.mode,
+            finalizedWeek: !!finalizedRun,
+            payableMinutes,
+            regularMinutes: buckets.regularMinutes,
+            overtimeMinutes: buckets.overtimeMinutes,
+            doubleMinutes: buckets.doubleMinutes,
+        });
+    }
+    catch (e) {
+        console.error("POST /api/admin/time-entry/:id/pay-now failed:", e);
+        return res.status(500).json({
+            error: e?.message || "Failed to pay time entry now",
+        });
+    }
+});
 router.post("/time-entry/:id/breaks", async (req, res) => {
     try {
         const id = String(req.params.id || "");
         if (!id)
             return res.status(400).json({ error: "id required" });
-        const editable = await (0, _shared_1.assertEditableNotLocked)(id);
+        const editable = await (0, _shared_1.assertEditableNotLocked)(id, req);
         if (!editable.ok)
             return res.status(editable.http).json({ error: editable.msg });
         const { workDate, breaks } = req.body || {};

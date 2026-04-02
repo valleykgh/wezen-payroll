@@ -2,25 +2,16 @@ FROM node:18-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Install deps first (better caching)
-COPY apps/api/package*.json /app/
+COPY apps/api/package*.json ./
 RUN npm ci
 
-# Copy API source into /app
-COPY apps/api/ /app/
+COPY apps/api ./
+COPY prisma /prisma
 
-# Copy Prisma schema + migrations into /prisma
-COPY prisma/schema.prisma /prisma/schema.prisma
-COPY prisma/migrations /prisma/migrations
-
-ENV NODE_ENV=development
-
-# Build API
+RUN npx prisma generate --schema=/prisma/schema.prisma
 RUN npm run build
 
-ENV NODE_ENV=production
 EXPOSE 4000
-
 CMD ["npm", "run", "start:prod"]

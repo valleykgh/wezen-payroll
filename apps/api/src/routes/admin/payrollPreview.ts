@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma";
+import { getHolidayRule, calculatePayCentsWithRule } from "./_shared";
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ function sumBreakMinutesFromEntry(e: any): number {
   }
   return Number(e.breakMinutes ?? 0);
 }
+
 
 function splitDailyBuckets(payableMinutes: number) {
   const m = Math.max(0, Math.floor(payableMinutes));
@@ -47,132 +49,196 @@ const periodEnd = String(
       return res.status(400).json({ error: "periodStart and periodEnd required" });
     }
 
-    const fromDt = startOfDayUTC(periodStart);
-    const toExclusive = startOfNextDayUTC(periodEnd);
+    function isMondayToSunday(periodStart: string, periodEnd: string) {
+  const start = new Date(`${periodStart}T00:00:00.000Z`);
+  const end = new Date(`${periodEnd}T00:00:00.000Z`);
+  return start.getUTCDay() === 1 && end.getUTCDay() === 0;
+}
 
-    const entries = await prisma.timeEntry.findMany({
-      where: {
-        workDate: {
-          gte: fromDt,
-          lt: toExclusive,
-        },
-        status: {
-          in: ["APPROVED", "LOCKED"],
-        },
-      },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            legalName: true,
-            preferredName: true,
-            email: true,
-            hourlyRateCents: true,
-            title: true,
-            active: true,
-          },
-        },
-        breaks: {
-          select: {
-            minutes: true,
-          },
-        },
-      },
-      orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
-    });
+if (!isMondayToSunday(periodStart, periodEnd)) {
+  return res.status(400).json({
+    error: "Please select exactly one Monday-to-Sunday pay period.",
+  });
+}
 
-    const earlyPayments = await prisma.earlyPayrollPayment.findMany({
-      where: {
-        periodStart: fromDt,
-        periodEnd: startOfDayUTC(periodEnd),
-      },
+const fromDt = startOfDayUTC(periodStart);
+const toExclusive = startOfNextDayUTC(periodEnd);
+
+const entries = await prisma.timeEntry.findMany({
+  where: {
+    workDate: {
+      gte: fromDt,
+      lt: toExclusive,
+    },
+    status: {
+      in: ["APPROVED", "LOCKED"],
+    },
+  },
+  include: {
+    employee: {
       select: {
         id: true,
-        employeeId: true,
-        amountCents: true,
-        paidAt: true,
-        note: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        hourlyRateCents: true,
+        title: true,
+        active: true,
       },
-    });
+    },
+    breaks: {
+      select: {
+        minutes: true,
+      },
+    },
+  },
+  orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
+});
 
-    const earlyByEmployee = new Map(
-      earlyPayments.map((p) => [String(p.employeeId), p])
-    );
+const ledgerRows = await prisma.employeePayrollLedger.findMany({
+  where: {
+    periodEnd: {
+      gte: fromDt,
+    },
+    periodStart: {
+      lt: toExclusive,
+    },
+    type: "EARLY_PAY",
+  },
+  select: {
+    employeeId: true,
+    amountCents: true,
+  },
+});
 
-    const byEmployee = new Map<string, any>();
+const ledgerPaidByEmployee = new Map<string, number>();
 
-    for (const e of entries) {
-      const employeeId = String(e.employeeId);
-      const workedMinutes = Number(e.minutesWorked || 0);
-      const breakMinutes = sumBreakMinutesFromEntry(e);
-      const payableMinutes = Math.max(0, workedMinutes - breakMinutes);
-      const buckets = splitDailyBuckets(payableMinutes);
-      const rateCents = Number(e.employee?.hourlyRateCents || 0);
+for (const row of ledgerRows) {
+  const key = String(row.employeeId);
+  const amt = Number(row.amountCents || 0);
 
-      const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-      const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-      const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-      const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
+  const current = ledgerPaidByEmployee.get(key) || 0;
 
-      const current =
-        byEmployee.get(employeeId) || {
-          employeeId,
-          employee: e.employee,
-          entryCount: 0,
-          workedMinutes: 0,
-          breakMinutes: 0,
-          payableMinutes: 0,
-          regularMinutes: 0,
-          overtimeMinutes: 0,
-          doubleMinutes: 0,
-          grossPayCents: 0,
-        };
+  if (amt < 0) {
+    ledgerPaidByEmployee.set(key, current + Math.abs(amt));
+  } else {
+    ledgerPaidByEmployee.set(key, current - Math.abs(amt));
+  }
+}
 
-      current.entryCount += 1;
-      current.workedMinutes += workedMinutes;
-      current.breakMinutes += breakMinutes;
-      current.payableMinutes += payableMinutes;
-      current.regularMinutes += buckets.regularMinutes;
-      current.overtimeMinutes += buckets.overtimeMinutes;
-      current.doubleMinutes += buckets.doubleMinutes;
-      current.grossPayCents += grossPayCents;
+const byEmployee = new Map<string, any>();
 
-      byEmployee.set(employeeId, current);
-    }
+for (const e of entries) {
+  const employeeId = String(e.employeeId);
+  const workedMinutes = Number(e.minutesWorked || 0);
+  const breakMinutes = sumBreakMinutesFromEntry(e);
+  const payableMinutes = Math.max(0, workedMinutes - breakMinutes);
+  const buckets = splitDailyBuckets(payableMinutes);
+  const rateCents = Number(e.employee?.hourlyRateCents || 0);
 
-    const employees = Array.from(byEmployee.values()).map((row) => {
-      const earlyPayment = earlyByEmployee.get(String(row.employeeId)) || null;
-      return {
-        ...row,
-        payStatus: earlyPayment ? "PAID_EARLY" : "READY",
-        earlyPayment,
-      };
-    });
+const holidayRule = await getHolidayRule(e.workDate);
+
+const payCalc = calculatePayCentsWithRule({
+  regularMinutes: buckets.regularMinutes,
+  overtimeMinutes: buckets.overtimeMinutes,
+  doubleMinutes: buckets.doubleMinutes,
+  hourlyRateCents: rateCents,
+  holidayRule,
+});
+
+const regularPayCents = payCalc.regularPayCents;
+const overtimePayCents = payCalc.overtimePayCents;
+const doublePayCents = payCalc.doublePayCents;
+const grossPayCents = payCalc.grossPayCents;
+
+  const current =
+    byEmployee.get(employeeId) || {
+      employeeId,
+      employee: e.employee,
+      entryCount: 0,
+      workedMinutes: 0,
+      breakMinutes: 0,
+      payableMinutes: 0,
+      regularMinutes: 0,
+      overtimeMinutes: 0,
+      doubleMinutes: 0,
+      grossPayCents: 0,
+    };
+
+  current.entryCount += 1;
+  current.workedMinutes += workedMinutes;
+  current.breakMinutes += breakMinutes;
+  current.payableMinutes += payableMinutes;
+  current.regularMinutes += buckets.regularMinutes;
+  current.overtimeMinutes += buckets.overtimeMinutes;
+  current.doubleMinutes += buckets.doubleMinutes;
+  current.grossPayCents += grossPayCents;
+
+  byEmployee.set(employeeId, current);
+}
+
+const employees = await Promise.all(
+  Array.from(byEmployee.values()).map(async (row) => {
+    
+    const paidEarlyCents = Number(
+  ledgerPaidByEmployee.get(String(row.employeeId)) || 0
+);
+
+    const grossCents = Number(row.grossPayCents || 0);
+
+
+    const remainingForThisPeriodCents = grossCents - paidEarlyCents;
+
+    const underpaidCents =
+      remainingForThisPeriodCents > 0 ? remainingForThisPeriodCents : 0;
+
+    const overpaidCents =
+      remainingForThisPeriodCents < 0 ? Math.abs(remainingForThisPeriodCents) : 0;
+
+    const earlyPayment =
+      paidEarlyCents > 0 ? { amountCents: paidEarlyCents } : null;
+
+    return {
+      ...row,
+      earlyPayment,
+      paidEarlyCents,
+      remainingToPayCents: underpaidCents,
+      underpaidCents,
+      overpaidCents,
+      remainingForThisPeriodCents,
+      payStatus:
+        overpaidCents > 0
+          ? "OVERPAID"
+          : underpaidCents > 0
+          ? "UNDERPAID"
+          : "SETTLED",
+    };
+  })
+);
 
     const totals = employees.reduce(
-      (acc, row) => {
-        acc.employeeCount += 1;
-        acc.grossPayCents += Number(row.grossPayCents || 0);
+  (acc, emp) => {
+    acc.employeeCount += 1;
+    acc.grossPayCents += Number(emp.grossPayCents || 0);
+    acc.paidEarlyCents += Number(emp.paidEarlyCents || 0);
+    acc.overpaidCents += Number(emp.overpaidCents || 0);
+    acc.underpaidCents += Number(emp.underpaidCents || 0);
 
-        if (row.earlyPayment) {
-          acc.paidEarlyCount += 1;
-          acc.paidEarlyCents += Number(row.earlyPayment.amountCents || 0);
-        } else {
-          acc.remainingCount += 1;
-          acc.remainingGrossPayCents += Number(row.grossPayCents || 0);
-        }
+    if (Number(emp.paidEarlyCents || 0) > 0) {
+      acc.paidEarlyCount += 1;
+    }
 
-        return acc;
-      },
-      {
-        employeeCount: 0,
-        grossPayCents: 0,
-        paidEarlyCount: 0,
-        paidEarlyCents: 0,
-        remainingCount: 0,
-        remainingGrossPayCents: 0,
-      }
-    );
+    return acc;
+  },
+  {
+    employeeCount: 0,
+    grossPayCents: 0,
+    paidEarlyCount: 0,
+    paidEarlyCents: 0,
+    overpaidCents: 0,
+    underpaidCents: 0,
+  }
+);
 
     return res.json({
       periodStart,

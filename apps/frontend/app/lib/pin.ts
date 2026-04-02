@@ -12,5 +12,7 @@ export async function verifyAdminPinWithPrompt(message = "Enter admin PIN") {
     body: JSON.stringify({ pin }),
   });
 
+  localStorage.setItem("admin_override_pin", pin);
+
   return true;
 }

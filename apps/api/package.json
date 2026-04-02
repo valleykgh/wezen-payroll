@@ -13,7 +13,8 @@
     "start": "node dist/server.js",
     "migrate:deploy": "prisma migrate deploy --schema ../../prisma/schema.prisma",
     "seed": "prisma db seed --schema ../../prisma/schema.prisma",
-    "start:prod": "npm run start"
+    "start:prod": "npm run start",
+    "repair:bad-payroll-run": "node dist/scripts/repairBadPayrollRun.js"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1006.0",
@@ -40,6 +41,7 @@
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "tsx": "^4.19.2"
   }
 }

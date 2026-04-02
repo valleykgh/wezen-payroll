@@ -1,0 +1,12 @@
+{
+  "containerOverrides": [
+    {
+      "name": "api",
+      "command": [
+        "sh",
+        "-lc",
+        "echo '==== DIST files ====' && find /app \\( -path '*/dist/*payrollAdjustments*' -o -path '*/dist/*billingExport*' -o -path '*/dist/*timeEntries*' -o -path '*/dist/*_shared*' \\) && echo '==== grep paidImmediately ====' && grep -R 'paidImmediately' -n /app/apps/api/dist || true && echo '==== grep includeMissedAdjustments ====' && grep -R 'includeMissedAdjustments' -n /app/apps/api/dist || true && echo '==== grep billAmountCents ====' && grep -R 'billAmountCents' -n /app/apps/api/dist || true"
+      ]
+    }
+  ]
+}

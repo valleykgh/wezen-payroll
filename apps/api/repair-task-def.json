@@ -1,0 +1,52 @@
+{
+  "family": "wezen-payroll-api-repair",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-api:repair",
+      "essential": true,
+      "command": ["npm", "run", "repair:bad-payroll-run"],
+      "environment": [
+        { "name": "ADMIN_OVERRIDE_PIN", "value": "0786" },
+        { "name": "ADOBE_API_TOKEN", "value": "placeholder token" },
+        { "name": "PORT", "value": "4000" },
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "BUILD_ID", "value": "repair" },
+        { "name": "SES_FROM_EMAIL", "value": "noreply@wezenstaffing.com" },
+        { "name": "FRONTEND_URL", "value": "https://payroll.wezenstaffing.com" },
+        { "name": "PERIOD_START", "value": "2026-04-06" },
+        { "name": "PERIOD_END", "value": "2026-04-12" },
+        { "name": "EMPLOYEE_EMAIL", "value": "ncsingh@gmail.com" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-database-url-cUrxz0"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-jwt-secret-CRPeTC"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wezen-payroll-api-task",
+          "awslogs-create-group": "true",
+          "awslogs-region": "us-west-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

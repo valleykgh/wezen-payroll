@@ -1,0 +1,12 @@
+{
+  "containerOverrides": [
+    {
+      "name": "api",
+      "command": [
+        "sh",
+        "-lc",
+        "cd /app/apps/api && node -e 'const {PrismaClient}=require(\"@prisma/client\"); const prisma=new PrismaClient(); (async()=>{ const rows=await prisma.payrollAdjustment.findMany({ where:{ facilityId:{ not:null } }, select:{ id:true, facilityId:true, employeeId:true, workDate:true, regularMinutes:true, overtimeMinutes:true, doubleMinutes:true, billAmountCents:true, employee:{ select:{ title:true } } } }); for (const r of rows) { if (!r.workDate || !r.facilityId || !r.employee?.title) continue; const rate=await prisma.facilityRate.findFirst({ where:{ facilityId:r.facilityId, title:r.employee.title, effectiveFrom:{ lte:r.workDate } }, orderBy:{ effectiveFrom:\"desc\" } }); if (!rate) continue; const newBill=Math.round(((Number(r.regularMinutes||0)*Number(rate.regRateCents||0)) + (Number(r.overtimeMinutes||0)*Number(rate.otRateCents||0)) + (Number(r.doubleMinutes||0)*Number(rate.dtRateCents||0))) / 60); if (Number(r.billAmountCents||0)!==newBill) { await prisma.payrollAdjustment.update({ where:{ id:r.id }, data:{ billAmountCents:newBill } }); console.log(r.id, \"updated\", r.billAmountCents, \"->\", newBill); } } console.log(\"Done\"); await prisma.$disconnect(); })().catch(async e=>{ console.error(e); await prisma.$disconnect(); process.exit(1); });'"
+      ]
+    }
+  ]
+}

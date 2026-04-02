@@ -20,20 +20,28 @@ type FacilityLite = {
 type EntryRow = {
   id: string;
   employeeId: string;
+  facilityId?: string | null;
   workDate: string;
-  facilityId: string | null;
-  shiftType: string;
-  status: EntryStatus;
+  status: "DRAFT" | "APPROVED" | "LOCKED";
+  shiftType?: string | null;
   minutesWorked?: number | null;
   breakMinutes?: number | null;
   computedBreakMinutes?: number | null;
   payableMinutes?: number | null;
-  totalHours_HHMM?: string | null;
-  calculatedHours_decimal?: number | null;
-  notes?: string | null;
-
-  employee?: EmployeeLite | null;
-  facility?: FacilityLite | null;
+  punchesJson?: any[] | null;
+  breaksJson?: any[] | null;
+  employee?: any;
+  facility?: any;
+  buckets?: {
+    regularMinutes?: number;
+    overtimeMinutes?: number;
+    doubleMinutes?: number;
+    regular_decimal?: number;
+    overtime_decimal?: number;
+    double_decimal?: number;
+  };
+  isMissedAdjustment?: boolean;
+  sourceType?: "TIME_ENTRY" | "PAYROLL_ADJUSTMENT";
 };
 
 type ListResp = {
@@ -59,12 +67,9 @@ function addDaysISO(iso: string, days: number) {
 }
 
 function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
-
 function formatEmployeeName(e?: EmployeeLite | null) {
   if (!e) return "Unknown";
   return e.preferredName ? `${e.legalName} (${e.preferredName})` : e.legalName;
@@ -134,6 +139,7 @@ export default function AdminTimeEntriesWeekPage() {
       const qs = new URLSearchParams();
       qs.set("from", from);
       qs.set("to", to);
+      qs.set("includeMissedAdjustments", "true");
       qs.set("page", "1");
       qs.set("pageSize", "500");
 
@@ -179,7 +185,7 @@ export default function AdminTimeEntriesWeekPage() {
       const cur =
         map.get(key) || {
           employee: e.employee ?? null,
-          entries: [],
+          entries: [] as EntryRow[],
           payableMinutes: 0,
           draftCount: 0,
           approvedCount: 0,
@@ -934,25 +940,32 @@ function toggleEntry(id: string) {
                           <td style={td}>
                             <span style={statusBadge(e.status)}>{e.status}</span>
                           </td>
+                        
 			  <td style={td}>
-  				<a
-   				 href={`/admin/time-entry/${e.id}`}
-   				 style={{
-     				 display: "inline-block",
-     				 padding: "6px 10px",
-     				 borderRadius: 8,
-     				 border: "1px solid #ccc",
-     				 background: "#fff",
-     				 color: "#111",
-     				 textDecoration: "none",
-     				 fontSize: 12,
-     				 fontWeight: 700,
-   				 }}
- 				 >
-   				 Edit
- 				 </a>
-				 </td>
-                        </tr>
+  <a
+    href={
+      e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
+        ? `/admin/time-entry/${e.id}?sourceType=PAYROLL_ADJUSTMENT`
+        : `/admin/time-entry/${e.id}`
+    }
+    style={{
+      display: "inline-block",
+      padding: "6px 10px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: "#fff",
+      color: "#111",
+      textDecoration: "none",
+      fontSize: 12,
+      fontWeight: 700,
+    }}
+  >
+    {e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
+      ? "Create Correction"
+      : "Edit"}
+  </a>
+</td>
+			</tr>
                       );
                     })}
 

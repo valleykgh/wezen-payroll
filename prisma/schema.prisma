@@ -24,6 +24,9 @@ enum ShiftType {
   AM
   PM
   NOC
+  AM_PM
+  PM_NOC
+  NOC_AM
 }
 
 enum EmployeeTitle {
@@ -36,6 +39,16 @@ enum PayrollRunStatus {
   DRAFT
   FINALIZED
   VOIDED
+}
+
+enum PayrollLedgerType {
+  EARLY_PAY
+  EARLY_PAYMENT_APPLIED
+  PAYROLL_RUN
+  ADJUSTMENT
+  CORRECTION
+  RECOVERY
+  EARNINGS_ADJUSTMENT
 }
 
 model User {
@@ -62,6 +75,7 @@ model User {
   createdInvites                 Invite[]                  @relation("InviteCreatedBy")
   lockedFacilityBillingContracts FacilityBillingContract[] @relation("FacilityBillingContractLockedBy")
   payrollRunsCreated             PayrollRun[]              @relation("PayrollRunCreatedBy")
+  
   earlyPayrollPaymentsCreated    EarlyPayrollPayment[]     @relation("EarlyPayrollPaymentCreatedBy")
   createdAt                      DateTime                  @default(now())
   updatedAt                      DateTime                  @updatedAt
@@ -87,6 +101,8 @@ model Employee {
   ssnLast4           String?
   payrollAdjustments PayrollAdjustment[]
   payrollCorrections PayrollCorrection[]
+  earlyPayrollPayments EarlyPayrollPayment[]
+  payrollLedgerEntries EmployeePayrollLedger[]
   // optional user
   user               User?
   // time entries exist even if user doesn't exist / invite not accepted
@@ -96,7 +112,6 @@ model Employee {
   invites                  Invite[]
   payrollRunEmployees      PayrollRunEmployee[]
   payrollRunEntrySnapshots PayrollRunEntrySnapshot[]
-  earlyPayrollPayments     EarlyPayrollPayment[]
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
 }
@@ -125,7 +140,9 @@ model TimeEntry {
   breaksJson    Json?
   createdById   String?
   createdBy     User?            @relation("TimeEntryCreatedBy", fields: [createdById], references: [id])
-
+  billedAt          DateTime?
+  invoiceNumber     String?
+  invoiceType       String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -222,6 +239,8 @@ model Facility {
   rates            FacilityRate[]
   timeEntries      TimeEntry[]
   billingContracts FacilityBillingContract[]
+  billingRuns      BillingRun[]
+  payrollAdjustments PayrollAdjustment[]
 }
 
 model FacilityRate {
@@ -314,17 +333,60 @@ model FacilityBillingRate {
 
   @@unique([contractId, role])
 }
+model BillingRun {
+  id           String   @id @default(cuid())
+  facilityId   String
+  periodStart  DateTime
+  periodEnd    DateTime
+  invoiceType  String
+  invoiceNumber String?
+  status       String   @default("OPEN")
+  lockedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
+  facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, periodStart, periodEnd, invoiceType])
+}
 model PayrollAdjustment {
-  id           String             @id @default(cuid())
-  employeeId   String
-  payrollRunId String?
-  amountCents  Int                @default(0) // can be negative or positive
-  reason       String?
-  createdAt    DateTime           @default(now())
-  payrollRun   PayrollRun?        @relation(fields: [payrollRunId], references: [id])
-  employee     Employee           @relation(fields: [employeeId], references: [id])
-  correction   PayrollCorrection?
+  id                  String             @id @default(cuid())
+  employeeId          String
+  payrollRunId        String?
+  amountCents         Int                @default(0)
+  reason              String?
+  createdAt           DateTime           @default(now())
+
+  paidImmediately     Boolean            @default(false)
+  paidAt              DateTime?
+  paidNote            String?
+  paidAmountCents     Int?
+
+  payrollRun          PayrollRun?        @relation(fields: [payrollRunId], references: [id])
+  employee            Employee           @relation(fields: [employeeId], references: [id])
+  correction          PayrollCorrection?
+
+  facilityId          String?
+  facility            Facility?          @relation(fields: [facilityId], references: [id])
+
+  workDate            DateTime?
+  shiftType           ShiftType?
+  punchesJson         Json?
+  breaksJson          Json?
+
+  payableMinutes      Int?
+  regularMinutes      Int?
+  overtimeMinutes     Int?
+  doubleMinutes       Int?
+
+  billAmountCents     Int?
+  billedAt            DateTime?
+  invoiceNumber       String?
+  invoiceType         String?
+  isSuperseded        Boolean  @default(false)
+  supersededById      String?
+  correctionOfId      String?
+  isCorrection        Boolean  @default(false)
 }
 
 model PayrollRun {
@@ -453,4 +515,37 @@ model EarlyPayrollPayment {
 
   @@unique([employeeId, periodStart, periodEnd])
   @@index([employeeId, periodStart, periodEnd])
+}
+
+model EmployeePayrollLedger {
+  id            String   @id @default(cuid())
+
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  type          PayrollLedgerType
+  amountCents   Int
+
+  note          String?
+
+  createdById   String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId, periodStart, periodEnd])
+}
+
+model Holiday {
+  id                   String   @id @default(cuid())
+  date                 DateTime @unique
+  name                 String
+  active               Boolean  @default(true)
+  payMultiplier        Float    @default(1.5)
+  billMultiplier       Float    @default(1.5)
+  appliesToRegularOnly Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }

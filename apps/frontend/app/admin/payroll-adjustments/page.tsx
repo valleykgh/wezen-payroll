@@ -16,9 +16,28 @@ type Employee = {
 type AdjustmentRow = {
   id: string;
   employeeId: string;
+  facilityId?: string | null;
+  workDate?: string | null;
+  shiftType?: string | null;
+  punchesJson?: { clockIn: string; clockOut: string }[] | null;
+  breaksJson?: { startTime: string; endTime: string }[] | null;
+  payableMinutes?: number | null;
+  regularMinutes?: number | null;
+  overtimeMinutes?: number | null;
+  doubleMinutes?: number | null;
   reason: string;
   amountCents: number;
   createdAt: string;
+  paidImmediately?: boolean;
+  paidAt?: string | null;
+  paidNote?: string | null;
+  paidAmountCents?: number | null;
+  invoiceNumber?: string | null;
+  invoiceType?: string | null;
+  facility?: {
+    id: string;
+    name: string;
+  } | null;
   employee?: {
     id: string;
     legalName: string;
@@ -33,16 +52,31 @@ type AdjustmentRow = {
   } | null;
 };
 
+type Facility = {
+  id: string;
+  name: string;
+};
+
 function money(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
+function punchText(punches?: { clockIn: string; clockOut: string }[] | null) {
+  if (!Array.isArray(punches) || punches.length === 0) return "—";
+  return punches.map((p) => `${p.clockIn} → ${p.clockOut}`).join(" | ");
+}
 
-export default function AdminPayrollAdjustmentsPage() {
+function dateOnlyUTC(value: string | Date) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+export default function PayrollAdjustmentsPage({ editId }: { editId?: string }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [adjustments, setAdjustments] = useState<AdjustmentRow[]>([]);
-
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [facilityId, setFacilityId] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [payingId, setPayingId] = useState("");
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
@@ -60,13 +94,46 @@ export default function AdminPayrollAdjustmentsPage() {
     const resp = await apiFetch<{ adjustments: AdjustmentRow[] }>("/api/admin/payroll-adjustments");
     setAdjustments(resp.adjustments || []);
   }
+  
+  async function loadFacilities() {
+  const resp = await apiFetch<{ facilities: Facility[] }>("/api/admin/facilities");
+  setFacilities(resp.facilities || []);
+}
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([loadEmployees(), loadAdjustments()])
-      .catch((e: any) => setErr(e?.message || "Failed to load payroll adjustments"))
-      .finally(() => setLoading(false));
-  }, []);
+  setLoading(true);
+  Promise.all([loadEmployees(), loadFacilities(), loadAdjustments()])
+    .catch((e: any) => setErr(e?.message || "Failed to load payroll adjustments"))
+    .finally(() => setLoading(false));
+}, []);
+
+
+  useEffect(() => {
+  if (!editId) return;
+
+  async function loadAdjustment() {
+    try {
+      const data = await apiFetch<{ adjustment: any }>(
+        `/api/admin/payroll-adjustments/${editId}`
+      );
+
+      const a = data?.adjustment;
+      if (!a) return;
+
+      setEmployeeId(a.employeeId || "");
+      setFacilityId(a.facilityId || "");
+      setWorkDate(a.workDate ? new Date(a.workDate).toISOString().slice(0,10) : "");
+      setHours(a.payableMinutes ? String(a.payableMinutes / 60) : "");
+      setReasonNote(a.reason || "");
+
+      setOk("Loaded adjustment for editing");
+    } catch (err) {
+      console.error("Failed to load adjustment", err);
+    }
+  }
+
+  loadAdjustment();
+}, [editId]);
 
   const selectedEmployee = useMemo(
     () => employees.find((e) => e.id === employeeId) || null,
@@ -93,7 +160,10 @@ export default function AdminPayrollAdjustmentsPage() {
         setErr("Please select an employee.");
         return;
       }
-
+      if (!facilityId) {
+  setErr("Please select a facility.");
+  return;
+}
       if (!workDate) {
         setErr("Please enter the missed shift date.");
         return;
@@ -122,6 +192,9 @@ export default function AdminPayrollAdjustmentsPage() {
         method: "POST",
         body: JSON.stringify({
           employeeId,
+          facilityId,
+	  workDate,
+  	  hours,
           reason: computedReason,
           amountCents,
         }),
@@ -129,6 +202,7 @@ export default function AdminPayrollAdjustmentsPage() {
 
       setOk(`Adjustment created for ${selectedEmployee.legalName}: ${money(amountCents)}.`);
       setEmployeeId("");
+      setFacilityId("");
       setWorkDate("");
       setHours("");
       setReasonNote("");
@@ -140,6 +214,32 @@ export default function AdminPayrollAdjustmentsPage() {
       setSaving(false);
     }
   }
+
+async function markPaidNow(adjustment: AdjustmentRow) {
+  try {
+    setErr("");
+    setOk("");
+
+    const paidNote = window.prompt("Optional payment note", adjustment.paidNote || "");
+    if (paidNote === null) return;
+
+    setPayingId(adjustment.id);
+
+    await apiFetch(`/api/admin/payroll-adjustments/${encodeURIComponent(adjustment.id)}/pay-now`, {
+      method: "POST",
+      body: JSON.stringify({
+        paidNote,
+      }),
+    });
+
+    setOk(`Adjustment marked paid immediately: ${money(adjustment.amountCents)}.`);
+    await loadAdjustments();
+  } catch (e: any) {
+    setErr(e?.message || "Failed to mark adjustment as paid");
+  } finally {
+    setPayingId("");
+  }
+}
 
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
@@ -162,7 +262,7 @@ export default function AdminPayrollAdjustmentsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.2fr 180px 140px 1fr",
+            gridTemplateColumns: "1.2fr 1.2fr 180px 140px 1fr",
             gap: 12,
             alignItems: "end",
           }}
@@ -182,6 +282,21 @@ export default function AdminPayrollAdjustmentsPage() {
               ))}
             </select>
           </div>
+           <div>
+  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Facility</div>
+  <select
+    value={facilityId}
+    onChange={(e) => setFacilityId(e.target.value)}
+    style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+  >
+    <option value="">Select facility</option>
+    {facilities.map((f) => (
+      <option key={f.id} value={f.id}>
+        {f.name}
+      </option>
+    ))}
+  </select>
+</div>
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Missed Shift Date</div>
@@ -277,8 +392,9 @@ export default function AdminPayrollAdjustmentsPage() {
                 <th style={th}>Employee</th>
                 <th style={th}>Reason</th>
                 <th style={th}>Amount</th>
-                <th style={th}>Payroll Run</th>
-              </tr>
+                <th style={th}>Status</th>
+		<th style={th}>Action</th>
+	     </tr>
             </thead>
             <tbody>
               {adjustments.map((a) => (
@@ -295,21 +411,59 @@ export default function AdminPayrollAdjustmentsPage() {
                   <td style={td}>{a.reason}</td>
                   <td style={td}>{money(a.amountCents)}</td>
                   <td style={td}>
-                    {a.payrollRun ? (
-                      <span>
-                        {String(a.payrollRun.periodStart).slice(0, 10)} →{" "}
-                        {String(a.payrollRun.periodEnd).slice(0, 10)} ({a.payrollRun.status})
-                      </span>
-                    ) : (
-                      <span style={{ opacity: 0.7 }}>Pending next payroll</span>
-                    )}
-                  </td>
-                </tr>
+  {a.paidImmediately ? (
+    <div>
+      <div style={{ fontWeight: 700, color: "#0a7a2f" }}>Paid Immediately</div>
+      <div style={{ fontSize: 12, opacity: 0.75 }}>
+        {a.paidAt ? new Date(a.paidAt).toLocaleString() : ""}
+      </div>
+      {a.paidNote ? (
+        <div style={{ fontSize: 12, opacity: 0.75 }}>{a.paidNote}</div>
+      ) : null}
+    </div>
+  ) : a.payrollRun ? (
+    <span>
+      {dateOnlyUTC(a.payrollRun.periodStart)} → {dateOnlyUTC(a.payrollRun.periodEnd)}
+       {String(a.payrollRun.periodEnd).slice(0, 10)} ({a.payrollRun.status})
+    </span>
+  ) : (
+    <span style={{ opacity: 0.7 }}>Pending next payroll</span>
+  )}
+</td>
+
+	      <td style={td}>
+  {!a.paidImmediately && !a.payrollRun ? (
+    Number(a.amountCents || 0) > 0 ? (
+      <button
+        type="button"
+        disabled={payingId === a.id}
+        onClick={() => markPaidNow(a)}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #1d4ed8",
+          background: "#eff6ff",
+          color: "#1d4ed8",
+          fontWeight: 700,
+        }}
+      >
+        {payingId === a.id ? "Saving..." : "Pay Now"}
+      </button>
+    ) : (
+      <span style={{ opacity: 0.75, color: "#92400e", fontWeight: 600 }}>
+        Recover next payroll
+      </span>
+    )
+  ) : (
+    <span style={{ opacity: 0.5 }}>—</span>
+  )}
+</td>
+		</tr>
               ))}
 
               {adjustments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={td}>
+                  <td colSpan={6} style={td}>
                     {loading ? "Loading..." : "No adjustments found."}
                   </td>
                 </tr>

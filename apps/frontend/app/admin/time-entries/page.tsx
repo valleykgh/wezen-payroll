@@ -68,12 +68,9 @@ function formatEmployeeName(e?: EmployeeLite | null) {
 }
 
 function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
-
 export default function AdminTimeEntriesWeekPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -106,6 +103,7 @@ export default function AdminTimeEntriesWeekPage() {
       const qs = new URLSearchParams();
       qs.set("from", from);
       qs.set("to", to);
+      qs.set("includeMissedAdjustments", "true");
       // IMPORTANT: for sidebar UX we want ALL employees; keep pagination huge
       qs.set("page", "1");
       qs.set("pageSize", "100");

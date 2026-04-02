@@ -23,6 +23,27 @@ function requireAdminPin(req) {
         throw err;
     }
 }
+function startOfNextDayUTC(iso) {
+    const d = startOfDayUTC(iso);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d;
+}
+function sumBreakMinutesFromEntry(e) {
+    const breaks = Array.isArray(e.breaks) ? e.breaks : [];
+    if (breaks.length > 0) {
+        return breaks.reduce((sum, b) => sum + Number(b.minutes ?? 0), 0);
+    }
+    return Number(e.breakMinutes ?? 0);
+}
+function splitDailyBuckets(payableMinutes) {
+    const m = Math.max(0, Math.floor(payableMinutes));
+    const regularCap = 8 * 60;
+    const otCap = 12 * 60;
+    const regularMinutes = Math.min(m, regularCap);
+    const overtimeMinutes = Math.max(0, Math.min(m, otCap) - regularCap);
+    const doubleMinutes = Math.max(0, m - otCap);
+    return { regularMinutes, overtimeMinutes, doubleMinutes };
+}
 router.get("/early-payroll", async (req, res) => {
     try {
         const periodStart = String(req.query.periodStart || "").trim();
@@ -104,51 +125,162 @@ router.post("/early-payroll", async (req, res) => {
         const createdById = req?.user?.sub
             ? String(req.user.sub)
             : (req?.user?.id ? String(req.user.id) : null);
+        const normalizedPeriodStart = startOfDayUTC(periodStart);
+        const normalizedPeriodEnd = startOfDayUTC(periodEnd);
         const existing = await prisma_1.prisma.earlyPayrollPayment.findFirst({
             where: {
                 employeeId,
-                periodStart: startOfDayUTC(periodStart),
-                periodEnd: startOfDayUTC(periodEnd),
+                periodStart: normalizedPeriodStart,
+                periodEnd: normalizedPeriodEnd,
             },
             select: {
                 id: true,
                 amountCents: true,
                 paidAt: true,
+                payrollRunId: true,
             },
         });
-        if (existing) {
+        if (existing?.payrollRunId) {
             return res.status(409).json({
-                error: "This employee is already marked paid early for that pay period.",
+                error: "This early payroll payment is already attached to a payroll run and cannot be changed.",
             });
         }
-        const earlyPayment = await prisma_1.prisma.earlyPayrollPayment.create({
-            data: {
-                employeeId,
-                periodStart: startOfDayUTC(periodStart),
-                periodEnd: startOfDayUTC(periodEnd),
-                amountCents: Math.round(amountCents),
-                note,
-                createdById,
-            },
-            include: {
-                employee: {
-                    select: {
-                        id: true,
-                        legalName: true,
-                        preferredName: true,
-                        email: true,
-                        title: true,
-                        active: true,
+        const incomingAmountCents = Math.round(amountCents);
+        const previousAmountCents = Number(existing?.amountCents || 0);
+        const earlyPayment = await prisma_1.prisma.$transaction(async (tx) => {
+            const saved = existing
+                ? await tx.earlyPayrollPayment.update({
+                    where: { id: existing.id },
+                    data: {
+                        amountCents: previousAmountCents + incomingAmountCents,
+                        note,
+                        createdById,
+                    },
+                    include: {
+                        employee: {
+                            select: {
+                                id: true,
+                                legalName: true,
+                                preferredName: true,
+                                email: true,
+                                title: true,
+                                active: true,
+                            },
+                        },
+                    },
+                })
+                : await tx.earlyPayrollPayment.create({
+                    data: {
+                        employeeId,
+                        periodStart: normalizedPeriodStart,
+                        periodEnd: normalizedPeriodEnd,
+                        amountCents: incomingAmountCents,
+                        note,
+                        createdById,
+                    },
+                    include: {
+                        employee: {
+                            select: {
+                                id: true,
+                                legalName: true,
+                                preferredName: true,
+                                email: true,
+                                title: true,
+                                active: true,
+                            },
+                        },
+                    },
+                });
+            await tx.employeePayrollLedger.create({
+                data: {
+                    employeeId,
+                    periodStart: normalizedPeriodStart,
+                    periodEnd: normalizedPeriodEnd,
+                    type: "EARLY_PAY",
+                    amountCents: -incomingAmountCents,
+                    note: "Early payroll payment",
+                    createdById,
+                },
+            });
+            // Mark approved/locked time entries as covered by Finalize-page Pay Now
+            const periodToExclusive = startOfNextDayUTC(periodEnd);
+            const entries = await tx.timeEntry.findMany({
+                where: {
+                    employeeId,
+                    workDate: {
+                        gte: normalizedPeriodStart,
+                        lt: periodToExclusive,
+                    },
+                    status: {
+                        in: ["APPROVED", "LOCKED"],
                     },
                 },
-            },
+                include: {
+                    employee: {
+                        select: {
+                            hourlyRateCents: true,
+                        },
+                    },
+                    breaks: {
+                        select: {
+                            minutes: true,
+                        },
+                    },
+                },
+                orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
+            });
+            let remainingToApplyCents = previousAmountCents + incomingAmountCents;
+            for (const entry of entries) {
+                if (remainingToApplyCents <= 0)
+                    break;
+                const marker = `TIME_ENTRY_PAY_NOW:${entry.id}`;
+                const existingMarker = await tx.employeePayrollLedger.findFirst({
+                    where: {
+                        employeeId,
+                        note: { contains: marker },
+                    },
+                    select: { id: true },
+                });
+                if (existingMarker) {
+                    continue;
+                }
+                const computedBreakMinutes = sumBreakMinutesFromEntry(entry);
+                const workedMinutes = Number(entry.minutesWorked || 0);
+                const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
+                const buckets = splitDailyBuckets(payableMinutes);
+                const rateCents = Number(entry.employee?.hourlyRateCents || 0);
+                const entryAmountCents = Math.round((buckets.regularMinutes * rateCents) / 60) +
+                    Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60) +
+                    Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
+                if (entryAmountCents <= 0) {
+                    continue;
+                }
+                if (remainingToApplyCents < entryAmountCents) {
+                    continue;
+                }
+                await tx.employeePayrollLedger.create({
+                    data: {
+                        employeeId,
+                        periodStart: normalizedPeriodStart,
+                        periodEnd: normalizedPeriodEnd,
+                        type: "EARNINGS_ADJUSTMENT",
+                        amountCents: 0,
+                        note: `Finalize pay-now marker (${marker})`,
+                        createdById,
+                    },
+                });
+                remainingToApplyCents -= entryAmountCents;
+            }
+            return saved;
         });
         return res.json({ ok: true, earlyPayment });
     }
     catch (e) {
         const status = e?.status || 500;
         console.error("POST /api/admin/early-payroll failed:", e);
-        return res.status(status).json({ error: e?.message || "Failed to create early payroll payment" });
+        return res.status(status).json({
+            error: e?.message || "Failed to create early payroll payment",
+        });
     }
 });
 router.delete("/early-payroll/:id", async (req, res) => {
@@ -162,6 +294,10 @@ router.delete("/early-payroll/:id", async (req, res) => {
             where: { id },
             select: {
                 id: true,
+                employeeId: true,
+                periodStart: true,
+                periodEnd: true,
+                amountCents: true,
                 payrollRunId: true,
             },
         });
@@ -173,8 +309,21 @@ router.delete("/early-payroll/:id", async (req, res) => {
                 error: "This early payroll payment is already attached to a payroll run and cannot be deleted.",
             });
         }
-        await prisma_1.prisma.earlyPayrollPayment.delete({
-            where: { id },
+        await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.employeePayrollLedger.create({
+                data: {
+                    employeeId: existing.employeeId,
+                    periodStart: existing.periodStart,
+                    periodEnd: existing.periodEnd,
+                    type: "EARLY_PAY",
+                    amountCents: Number(existing.amountCents || 0),
+                    note: "Early payroll payment reversed",
+                    createdById: req.user?.id || null,
+                },
+            });
+            await tx.earlyPayrollPayment.delete({
+                where: { id },
+            });
         });
         return res.json({ ok: true });
     }

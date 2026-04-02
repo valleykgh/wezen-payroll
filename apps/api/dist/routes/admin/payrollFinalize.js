@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const prisma_1 = require("../../prisma");
+const _shared_1 = require("./_shared");
 const router = express_1.default.Router();
 function startOfDayUTC(iso) {
     return new Date(`${iso}T00:00:00.000Z`);
@@ -42,6 +43,16 @@ router.post("/payroll-runs/finalize", async (req, res) => {
         const notes = req.body.notes == null ? null : String(req.body.notes);
         if (!periodStart || !periodEnd) {
             return res.status(400).json({ error: "periodStart and periodEnd required (YYYY-MM-DD)" });
+        }
+        function isMondayToSunday(periodStart, periodEnd) {
+            const start = new Date(`${periodStart}T00:00:00.000Z`);
+            const end = new Date(`${periodEnd}T00:00:00.000Z`);
+            return start.getUTCDay() === 1 && end.getUTCDay() === 0;
+        }
+        if (!isMondayToSunday(periodStart, periodEnd)) {
+            return res.status(400).json({
+                error: "Please select exactly one Monday-to-Sunday pay period.",
+            });
         }
         const fromDt = startOfDayUTC(periodStart);
         const toExclusive = startOfNextDayUTC(periodEnd);
@@ -149,7 +160,35 @@ router.post("/payroll-runs/finalize", async (req, res) => {
         });
         const earlyPaymentByEmployee = new Map();
         for (const p of earlyPayments) {
-            earlyPaymentByEmployee.set(String(p.employeeId), p);
+            const key = String(p.employeeId);
+            earlyPaymentByEmployee.set(key, (earlyPaymentByEmployee.get(key) || 0) + Number(p.amountCents || 0));
+        }
+        const suspiciousPaidNowAdjustments = await prisma_1.prisma.payrollAdjustment.findMany({
+            where: {
+                paidImmediately: true,
+                payrollRunId: null,
+                workDate: {
+                    gte: fromDt,
+                    lt: toExclusive,
+                },
+            },
+            select: {
+                id: true,
+                employeeId: true,
+                amountCents: true,
+                reason: true,
+                paidNote: true,
+                paidAmountCents: true,
+                workDate: true,
+                createdAt: true,
+            },
+            orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
+        });
+        if (suspiciousPaidNowAdjustments.length > 0) {
+            return res.status(409).json({
+                error: "Finalize blocked: paid-immediate time-entry adjustments still exist in this pay period. Resolve them before finalizing.",
+                details: suspiciousPaidNowAdjustments,
+            });
         }
         const createdById = req.user?.id || null;
         const result = await prisma_1.prisma.$transaction(async (tx) => {
@@ -173,10 +212,18 @@ router.post("/payroll-runs/finalize", async (req, res) => {
                 const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
                 const buckets = splitDailyBuckets(payableMinutes);
                 const rateCents = Number(e.employee?.hourlyRateCents || 0);
-                const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-                const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-                const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-                const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
+                const holidayRule = await (0, _shared_1.getHolidayRule)(e.workDate);
+                const payCalc = (0, _shared_1.calculatePayCentsWithRule)({
+                    regularMinutes: buckets.regularMinutes,
+                    overtimeMinutes: buckets.overtimeMinutes,
+                    doubleMinutes: buckets.doubleMinutes,
+                    hourlyRateCents: rateCents,
+                    holidayRule,
+                });
+                const regularPayCents = payCalc.regularPayCents;
+                const overtimePayCents = payCalc.overtimePayCents;
+                const doublePayCents = payCalc.doublePayCents;
+                const grossPayCents = payCalc.grossPayCents;
                 const current = byEmployee.get(e.employeeId) || {
                     employeeId: e.employeeId,
                     regularMinutes: 0,
@@ -239,8 +286,17 @@ router.post("/payroll-runs/finalize", async (req, res) => {
                     where: {
                         employeeId: totals.employeeId,
                         payrollRunId: null,
+                        paidImmediately: false,
+                        workDate: {
+                            gte: fromDt,
+                            lt: toExclusive,
+                        },
                     },
-                    select: { id: true, amountCents: true },
+                    select: {
+                        id: true,
+                        amountCents: true,
+                        workDate: true,
+                    },
                 });
                 const loanDeductions = await tx.loanDeduction.findMany({
                     where: {
@@ -252,15 +308,12 @@ router.post("/payroll-runs/finalize", async (req, res) => {
                 });
                 const adjustmentsCents = adjustments.reduce((sum, adj) => sum + Number(adj.amountCents || 0), 0);
                 const loanDeductionCents = loanDeductions.reduce((sum, d) => sum + Number(d.amountCents || 0), 0);
-                const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) || null;
-                const paidEarly = !!earlyPayment;
-                const paidEarlyAmountCents = Number(earlyPayment?.amountCents || 0);
+                const paidEarlyAmountCents = Number(earlyPaymentByEmployee.get(String(totals.employeeId)) || 0);
+                const paidEarly = paidEarlyAmountCents > 0;
                 // Full net for the pay period
                 const totalNetForPeriodCents = totals.grossPayCents + adjustmentsCents - loanDeductionCents;
-                // What still needs to be paid now in this finalized run
-                const netPayCents = paidEarly
-                    ? Math.max(0, totalNetForPeriodCents - paidEarlyAmountCents)
-                    : totalNetForPeriodCents;
+                // What still remains to be paid after early payments
+                const remainingToPayCents = Math.max(0, totalNetForPeriodCents - paidEarlyAmountCents);
                 await tx.payrollRunEmployee.create({
                     data: {
                         payrollRunId: payrollRun.id,
@@ -276,12 +329,25 @@ router.post("/payroll-runs/finalize", async (req, res) => {
                         grossPayCents: totals.grossPayCents,
                         adjustmentsCents,
                         loanDeductionCents,
-                        netPayCents,
+                        netPayCents: totalNetForPeriodCents,
                         paidEarly,
                         paidEarlyAmountCents,
                         snapshotVersion: 1,
                     },
                 });
+                // 1. Add earnings
+                await tx.employeePayrollLedger.create({
+                    data: {
+                        employeeId: totals.employeeId,
+                        periodStart: fromDt,
+                        periodEnd: startOfDayUTC(periodEnd),
+                        type: "PAYROLL_RUN",
+                        amountCents: totalNetForPeriodCents,
+                        note: "Payroll run net earnings",
+                        createdById,
+                    },
+                });
+                // 2. Subtract early payment (if any)
                 if (adjustments.length > 0) {
                     await tx.payrollAdjustment.updateMany({
                         where: {

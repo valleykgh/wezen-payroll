@@ -33,7 +33,7 @@ export type Segment = {
 };
 
 export function requireAdminPinFromBody(req: any) {
-  const providedPin = String(req.body?.pin || "").trim();
+  const providedPin = String(req.headers["x-admin-pin"] || req.body?.pin || "").trim();
   const expectedPin = String(process.env.ADMIN_OVERRIDE_PIN || "").trim();
 
   if (!expectedPin) {
@@ -53,6 +53,13 @@ export function requireAdminPinFromBody(req: any) {
     err.status = 403;
     throw err;
   }
+}
+
+export function hasValidAdminPin(req: any): boolean {
+  const providedPin = String(req.headers["x-admin-pin"] || req.body?.pin || "").trim();
+  const expectedPin = String(process.env.ADMIN_OVERRIDE_PIN || "").trim();
+
+  return !!expectedPin && !!providedPin && providedPin === expectedPin;
 }
 
 export function requireFacilityPin(req: any) {
@@ -209,14 +216,15 @@ export function parseTimeOnDate(workDateISO: string, timeStr: string): Date {
 
   if (s.includes("T")) {
     const d = new Date(s);
-    if (Number.isNaN(d.getTime())) throw new Error(`Invalid datetime: ${s}`);
-    return d;
+    if (!Number.isNaN(d.getTime())) return d;
   }
 
   const base = new Date(`${workDateISO}T00:00:00`);
   if (Number.isNaN(base.getTime())) throw new Error("Invalid workDate");
 
-  const m24 = s.match(/^(\d{1,2}):(\d{2})$/);
+  const normalized = s.replace(/\./g, "").replace(/\s+/g, " ").trim().toUpperCase();
+
+  const m24 = normalized.match(/^(\d{1,2}):(\d{2})$/);
   if (m24) {
     const hh = Number(m24[1]);
     const mm = Number(m24[2]);
@@ -226,10 +234,10 @@ export function parseTimeOnDate(workDateISO: string, timeStr: string): Date {
     return d;
   }
 
-  const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  const m12 = normalized.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
   if (m12) {
     let hh = Number(m12[1]);
-    const mm = Number(m12[2]);
+    const mm = Number(m12[2] ?? "00");
     const ap = m12[3].toUpperCase();
 
     if (hh < 1 || hh > 12 || mm < 0 || mm > 59) throw new Error("Invalid time");
@@ -245,9 +253,28 @@ export function parseTimeOnDate(workDateISO: string, timeStr: string): Date {
     return d;
   }
 
+  const bareHour = normalized.match(/^(\d{1,2})$/);
+  if (bareHour) {
+    const hh = Number(bareHour[1]);
+    if (hh < 0 || hh > 23) throw new Error("Invalid time");
+    const d = new Date(base);
+    d.setHours(hh, 0, 0, 0);
+    return d;
+  }
+
+  const compact = normalized.match(/^(\d{3,4})$/);
+  if (compact) {
+    const digits = compact[1];
+    const hh = Number(digits.length === 3 ? digits.slice(0, 1) : digits.slice(0, 2));
+    const mm = Number(digits.length === 3 ? digits.slice(1) : digits.slice(2));
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) throw new Error("Invalid time");
+    const d = new Date(base);
+    d.setHours(hh, mm, 0, 0);
+    return d;
+  }
+
   throw new Error(`Unsupported time format: ${timeStr}`);
 }
-
 export function splitDailyBuckets(payableMinutes: number) {
   const m = Math.max(0, Math.floor(payableMinutes));
   const regularCap = 8 * 60;
@@ -260,12 +287,306 @@ export function splitDailyBuckets(payableMinutes: number) {
   return { regularMinutes, overtimeMinutes, doubleMinutes };
 }
 
+export const HOLIDAY_DATES = new Set<string>([
+  // Add company-observed holiday dates here in YYYY-MM-DD format
+  // Example:
+   "2026-01-01",
+   "2026-07-04",
+   "2026-05-25",
+   "2026-09-07",
+   "2026-11-26",
+   "2026-12-25",
+]);
+
+export function dateOnlyUTC(value: string | Date) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+export function isHolidayDate(workDate: string | Date) {
+  return HOLIDAY_DATES.has(dateOnlyUTC(workDate));
+}
+
+export function getHolidayMultiplier(workDate: string | Date) {
+  return isHolidayDate(workDate) ? 1.5 : 1;
+}
+
+export function calculatePayCents(params: {
+  regularMinutes: number;
+  overtimeMinutes: number;
+  doubleMinutes: number;
+  hourlyRateCents: number;
+  workDate: string | Date;
+}) {
+  const {
+    regularMinutes,
+    overtimeMinutes,
+    doubleMinutes,
+    hourlyRateCents,
+    workDate,
+  } = params;
+
+  const holidayMultiplier = getHolidayMultiplier(workDate);
+
+  const regularPayCents = Math.round(
+    (regularMinutes * hourlyRateCents * holidayMultiplier) / 60
+  );
+
+  const overtimePayCents = Math.round(
+    (overtimeMinutes * hourlyRateCents * 1.5) / 60
+  );
+
+  const doublePayCents = Math.round(
+    (doubleMinutes * hourlyRateCents * 2) / 60
+  );
+
+  const grossPayCents =
+    regularPayCents + overtimePayCents + doublePayCents;
+
+  return {
+    holidayMultiplier,
+    regularPayCents,
+    overtimePayCents,
+    doublePayCents,
+    grossPayCents,
+  };
+}
+
+export function calculateBillCents(params: {
+  regularMinutes: number;
+  overtimeMinutes: number;
+  doubleMinutes: number;
+  regRateCents: number;
+  otRateCents: number;
+  dtRateCents: number;
+  workDate: string | Date;
+}) {
+  const {
+    regularMinutes,
+    overtimeMinutes,
+    doubleMinutes,
+    regRateCents,
+    otRateCents,
+    dtRateCents,
+    workDate,
+  } = params;
+
+  const holidayMultiplier = getHolidayMultiplier(workDate);
+
+  return Math.round(
+    (
+      regularMinutes * regRateCents * holidayMultiplier +
+      overtimeMinutes * otRateCents +
+      doubleMinutes * dtRateCents
+    ) / 60
+  );
+}
+
 export function sumBreakMinutesFromEntry(e: any): number {
   const breaks: Array<{ minutes: number | null }> = Array.isArray(e.breaks) ? e.breaks : [];
   if (breaks.length > 0) {
     return breaks.reduce((sum, b) => sum + Number(b.minutes ?? 0), 0);
   }
   return Number(e.breakMinutes ?? 0);
+}
+export async function getHolidayRule(workDate: string | Date) {
+  const dateOnly = dateOnlyUTC(workDate);
+
+  const holiday = await prisma.holiday.findFirst({
+    where: {
+      date: new Date(`${dateOnly}T00:00:00.000Z`),
+      active: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      payMultiplier: true,
+      billMultiplier: true,
+      appliesToRegularOnly: true,
+    },
+  });
+
+  if (holiday) {
+    return {
+      isHoliday: true,
+      name: holiday.name,
+      payMultiplier: Number(holiday.payMultiplier || 1.5),
+      billMultiplier: Number(holiday.billMultiplier || 1.5),
+      appliesToRegularOnly: !!holiday.appliesToRegularOnly,
+    };
+  }
+
+  return {
+    isHoliday: false,
+    name: null,
+    payMultiplier: 1,
+    billMultiplier: 1,
+    appliesToRegularOnly: true,
+  };
+}
+
+export function calculatePayCentsWithRule(params: {
+  regularMinutes: number;
+  overtimeMinutes: number;
+  doubleMinutes: number;
+  hourlyRateCents: number;
+  holidayRule: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier: number;
+    appliesToRegularOnly: boolean;
+  };
+}) {
+  const {
+    regularMinutes,
+    overtimeMinutes,
+    doubleMinutes,
+    hourlyRateCents,
+    holidayRule,
+  } = params;
+
+  const regularMultiplier =
+    holidayRule.isHoliday && holidayRule.appliesToRegularOnly
+      ? Number(holidayRule.payMultiplier || 1.5)
+      : 1;
+
+  const regularPayCents = Math.round(
+    (regularMinutes * hourlyRateCents * regularMultiplier) / 60
+  );
+
+  const overtimePayCents = Math.round(
+    (overtimeMinutes * hourlyRateCents * 1.5) / 60
+  );
+
+  const doublePayCents = Math.round(
+    (doubleMinutes * hourlyRateCents * 2) / 60
+  );
+
+  const grossPayCents =
+    regularPayCents + overtimePayCents + doublePayCents;
+
+  return {
+    regularPayCents,
+    overtimePayCents,
+    doublePayCents,
+    grossPayCents,
+  };
+}
+
+export function calculateBillCentsWithRule(params: {
+  regularMinutes: number;
+  overtimeMinutes: number;
+  doubleMinutes: number;
+  regRateCents: number;
+  otRateCents: number;
+  dtRateCents: number;
+  holidayRule: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier: number;
+    appliesToRegularOnly: boolean;
+  };
+}) {
+  const {
+    regularMinutes,
+    overtimeMinutes,
+    doubleMinutes,
+    regRateCents,
+    otRateCents,
+    dtRateCents,
+    holidayRule,
+  } = params;
+
+  const regularMultiplier =
+    holidayRule.isHoliday && holidayRule.appliesToRegularOnly
+      ? Number(holidayRule.billMultiplier || 1.5)
+      : 1;
+
+  return Math.round(
+    (
+      regularMinutes * regRateCents * regularMultiplier +
+      overtimeMinutes * otRateCents +
+      doubleMinutes * dtRateCents
+    ) / 60
+  );
+}
+export async function getBillingRun(params: {
+  facilityId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  invoiceType: "REGULAR" | "SUPPLEMENTAL";
+}) {
+  const { facilityId, periodStart, periodEnd, invoiceType } = params;
+
+  return prisma.billingRun.findFirst({
+    where: {
+      facilityId,
+      periodStart,
+      periodEnd,
+      invoiceType,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getOrCreateBillingRun(params: {
+  facilityId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  invoiceType: "REGULAR" | "SUPPLEMENTAL";
+  invoiceNumber?: string | null;
+}) {
+  const { facilityId, periodStart, periodEnd, invoiceType, invoiceNumber } = params;
+
+  const existing = await prisma.billingRun.findFirst({
+    where: {
+      facilityId,
+      periodStart,
+      periodEnd,
+      invoiceType,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.billingRun.create({
+    data: {
+      facilityId,
+      periodStart,
+      periodEnd,
+      invoiceType,
+      invoiceNumber: invoiceNumber || null,
+      status: "OPEN",
+    },
+  });
+}
+
+export async function getActiveHolidayDates() {
+  const holidays = await prisma.holiday.findMany({
+    where: { active: true },
+    select: {
+      id: true,
+      date: true,
+      name: true,
+      payMultiplier: true,
+      billMultiplier: true,
+      appliesToRegularOnly: true,
+    },
+    orderBy: { date: "asc" },
+  });
+
+  return holidays.map((h) => ({
+    id: h.id,
+    date: dateOnlyUTC(h.date),
+    name: h.name,
+    payMultiplier: Number(h.payMultiplier || 1.5),
+    billMultiplier: Number(h.billMultiplier || 1.5),
+    appliesToRegularOnly: !!h.appliesToRegularOnly,
+  }));
 }
 
 export function buildPunchKey(
@@ -435,10 +756,19 @@ export function calculateTimeEntryTotals(args: {
   const buckets = splitDailyBuckets(payableMinutes);
 
   const rateCents = Number(hourlyRateCents || 0);
-  const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-  const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-  const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-  const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
+
+const payCalc = calculatePayCents({
+  regularMinutes: buckets.regularMinutes,
+  overtimeMinutes: buckets.overtimeMinutes,
+  doubleMinutes: buckets.doubleMinutes,
+  hourlyRateCents: rateCents,
+  workDate,
+});
+
+const regularPayCents = payCalc.regularPayCents;
+const overtimePayCents = payCalc.overtimePayCents;
+const doublePayCents = payCalc.doublePayCents;
+const grossPayCents = payCalc.grossPayCents;
 
   return {
     workedMinutes,
@@ -455,58 +785,103 @@ export function calculateTimeEntryTotals(args: {
 }
 
 export function buildExportPunchPairs(entry: any) {
-  if (Array.isArray(entry?.punchesJson) && entry.punchesJson.length > 0) {
-    return entry.punchesJson
-      .filter((p: any) => p?.clockIn && p?.clockOut)
-      .map((p: any) => ({
-        clockIn: String(p.clockIn),
-        clockOut: String(p.clockOut),
-      }));
+  const workDateISO = entry?.workDate
+    ? new Date(entry.workDate).toISOString().slice(0, 10)
+    : null;
+
+  function parseValue(v: any): Date | null {
+    const s = String(v || "").trim();
+    if (!s) return null;
+
+    const asDate = new Date(s);
+    if (!Number.isNaN(asDate.getTime()) && s.includes("T")) {
+      return asDate;
+    }
+
+    if (!workDateISO) return null;
+    return parseTimeOnDate(workDateISO, s);
   }
 
-  const start = entry?.startTime ? new Date(entry.startTime) : null;
-  const end = entry?.endTime ? new Date(entry.endTime) : null;
+  const punchRanges: Array<{ start: Date; end: Date }> = [];
 
-  if (!start || !end) return [];
+  if (Array.isArray(entry?.punchesJson) && entry.punchesJson.length > 0) {
+    for (const p of entry.punchesJson) {
+      const cin = parseValue(p?.clockIn);
+      let cout = parseValue(p?.clockOut);
+      if (!cin || !cout) continue;
 
-  const breaks = [];
+      if (cout.getTime() <= cin.getTime()) {
+        cout = new Date(cout.getTime() + 24 * 60 * 60 * 1000);
+      }
 
-  if (Array.isArray(entry?.breaksJson)) {
-    breaks.push(
-      ...entry.breaksJson.map((b: any) => ({
-        start: new Date(b.startTime),
-        end: new Date(b.endTime),
-      }))
-    );
+      punchRanges.push({ start: cin, end: cout });
+    }
+  } else {
+    const start = entry?.startTime ? new Date(entry.startTime) : null;
+    const end = entry?.endTime ? new Date(entry.endTime) : null;
+
+    if (start && end) {
+      punchRanges.push({ start, end });
+    }
+  }
+
+  if (punchRanges.length === 0) return [];
+
+  const breaks: Array<{ start: Date; end: Date }> = [];
+
+  if (Array.isArray(entry?.breaksJson) && entry.breaksJson.length > 0) {
+    for (const b of entry.breaksJson) {
+      const bs = parseValue(b?.startTime);
+      let be = parseValue(b?.endTime);
+      if (!bs || !be) continue;
+
+      if (be.getTime() <= bs.getTime()) {
+        be = new Date(be.getTime() + 24 * 60 * 60 * 1000);
+      }
+
+      breaks.push({ start: bs, end: be });
+    }
   } else if (Array.isArray(entry?.breaks)) {
-    breaks.push(
-      ...entry.breaks.map((b: any) => ({
-        start: new Date(b.startTime),
-        end: new Date(b.endTime),
-      }))
-    );
+    for (const b of entry.breaks) {
+      const bs = b?.startTime ? new Date(b.startTime) : null;
+      const be = b?.endTime ? new Date(b.endTime) : null;
+      if (!bs || !be) continue;
+      breaks.push({ start: bs, end: be });
+    }
   }
 
   breaks.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  const segments: any[] = [];
-  let cursor = start;
+  const segments: Array<{ clockIn: string; clockOut: string }> = [];
 
-  for (const br of breaks) {
-    if (br.start > cursor) {
+  for (const punch of punchRanges) {
+    const overlappingBreaks = breaks
+      .filter((br) => br.end > punch.start && br.start < punch.end)
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    let cursor = punch.start;
+
+    for (const br of overlappingBreaks) {
+      const segEnd = br.start < punch.end ? br.start : punch.end;
+
+      if (segEnd > cursor) {
+        segments.push({
+          clockIn: cursor.toISOString(),
+          clockOut: segEnd.toISOString(),
+        });
+      }
+
+      if (br.end > cursor) {
+        cursor = br.end;
+      }
+    }
+
+    if (cursor < punch.end) {
       segments.push({
         clockIn: cursor.toISOString(),
-        clockOut: br.start.toISOString(),
+        clockOut: punch.end.toISOString(),
       });
     }
-    cursor = br.end;
-  }
-
-  if (end > cursor) {
-    segments.push({
-      clockIn: cursor.toISOString(),
-      clockOut: end.toISOString(),
-    });
   }
 
   return segments;
@@ -623,7 +998,7 @@ export async function assertFacilityRateExists(args: {
   };
 }
 
-export async function assertEditableNotLocked(timeEntryId: string) {
+export async function assertEditableNotLocked(timeEntryId: string, req?: any) {
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
     select: { id: true, status: true },
@@ -632,8 +1007,179 @@ export async function assertEditableNotLocked(timeEntryId: string) {
   if (!entry) return { ok: false as const, http: 404, msg: "Time entry not found" };
 
   if (entry.status === "LOCKED") {
-    return { ok: false as const, http: 409, msg: "Time entry is LOCKED and cannot be edited" };
+    const pinOk = req ? hasValidAdminPin(req) : false;
+    if (!pinOk) {
+      return { ok: false as const, http: 409, msg: "Time entry is LOCKED and cannot be edited" };
+    }
   }
 
   return { ok: true as const };
 }
+
+export async function getBillableWorkRows(params: {
+  prisma: any;
+  facilityId?: string;
+  from: Date;
+  toExclusive: Date;
+}) {
+  const { prisma, facilityId, from, toExclusive } = params;
+
+  const timeEntries = await prisma.timeEntry.findMany({
+    where: {
+      ...(facilityId ? { facilityId: String(facilityId) } : {}),
+      workDate: {
+        gte: from,
+        lt: toExclusive,
+      },
+      status: {
+        in: ["APPROVED", "LOCKED"],
+      },
+    },
+    include: {
+      employee: {
+        select: {
+          id: true,
+          legalName: true,
+          preferredName: true,
+          email: true,
+          title: true,
+          hourlyRateCents: true,
+        },
+      },
+      facility: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      breaks: {
+        select: {
+          id: true,
+          timeEntryId: true,
+          startTime: true,
+          endTime: true,
+          minutes: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
+  });
+
+  const adjustments = await prisma.payrollAdjustment.findMany({
+  where: {
+    ...(facilityId ? { facilityId: String(facilityId) } : {}),
+    workDate: {
+      gte: from,
+      lt: toExclusive,
+    },
+    isSuperseded: false,
+  },
+  include: {
+    employee: {
+      select: {
+        id: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        title: true,
+        hourlyRateCents: true,
+      },
+    },
+    facility: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+  orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
+});
+
+  const rows: any[] = [];
+
+for (const e of timeEntries) {
+  const breakMinutes = Array.isArray(e.breaks)
+    ? e.breaks.reduce((sum: number, b: any) => sum + Number(b.minutes || 0), 0)
+    : Number((e as any).breakMinutes || 0);
+
+  const workedMinutes = Number(e.minutesWorked || 0);
+  const payableMinutes = Math.max(0, workedMinutes - breakMinutes);
+  const buckets = splitDailyBuckets(payableMinutes);
+
+  rows.push({
+    sourceType: "TIME_ENTRY",
+    sourceId: e.id,
+    billedAt: (e as any).billedAt || null,
+    invoiceNumber: (e as any).invoiceNumber || null,
+    invoiceType: (e as any).invoiceType || null,
+
+    employeeId: e.employeeId,
+    employee: e.employee,
+    facilityId: e.facilityId,
+    facility: e.facility,
+    workDate: e.workDate,
+    createdAt: e.createdAt,
+
+    minutesWorked: workedMinutes,
+    breakMinutes,
+    payableMinutes,
+
+    regularMinutes: buckets.regularMinutes,
+    overtimeMinutes: buckets.overtimeMinutes,
+    doubleMinutes: buckets.doubleMinutes,
+
+    breaks: e.breaks || [],
+    breaksJson:
+      Array.isArray(e.breaks) && e.breaks.length > 0
+        ? e.breaks.map((b: any) => ({
+            startTime: b.startTime,
+            endTime: b.endTime,
+          }))
+        : ((e as any).breaksJson || null),
+    punchesJson: (e as any).punchesJson || null,
+    notes: e.notes || null,
+  });
+}
+
+for (const a of adjustments) {
+  const payableMinutes = Number(a.payableMinutes || 0);
+  const regularMinutes = Number(a.regularMinutes || 0);
+  const overtimeMinutes = Number(a.overtimeMinutes || 0);
+  const doubleMinutes = Number(a.doubleMinutes || 0);
+
+  rows.push({
+    sourceType: "PAYROLL_ADJUSTMENT",
+    sourceId: a.id,
+    billedAt: (a as any).billedAt || null,
+    invoiceNumber: (a as any).invoiceNumber || null,
+    invoiceType: (a as any).invoiceType || null,
+
+    employeeId: a.employeeId,
+    employee: a.employee,
+    facilityId: a.facilityId,
+    facility: a.facility,
+    workDate: a.workDate,
+    createdAt: a.createdAt,
+
+    shiftType: (a as any).shiftType || null,
+    minutesWorked: payableMinutes,
+    breakMinutes: 0,
+    payableMinutes,
+
+    regularMinutes,
+    overtimeMinutes,
+    doubleMinutes,
+
+    breaks: [],
+    punchesJson: (a as any).punchesJson || null,
+    breaksJson: (a as any).breaksJson || null,
+    notes: a.reason || null,
+    amountCents: a.amountCents || 0,
+    billAmountCents: (a as any).billAmountCents || null,
+  });
+}
+return rows;
+}
+
+

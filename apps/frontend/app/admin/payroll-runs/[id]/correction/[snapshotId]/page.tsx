@@ -83,12 +83,9 @@ function normalizeTimeInput(raw: string): string {
 }
 
 function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
-
 function dollars(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
@@ -545,13 +542,13 @@ setOk(`Payroll correction saved and adjustment created: ${dollars(correctionDelt
         Payable: <b>{minutesToHHMM(calc.input.payableMinutes)}</b>
       </div>
       <div>
-        Regular: <b>{calc.buckets.regular_HHMM}</b> ({dollars(calc.pay.regularPayCents)})
+      Regular: <b>{(calc.buckets.regularMinutes / 60).toFixed(2)}</b>
       </div>
       <div>
-        OT: <b>{calc.buckets.overtime_HHMM}</b> ({dollars(calc.pay.overtimePayCents)})
+      OT: <b>{(calc.buckets.overtimeMinutes / 60).toFixed(2)}</b> ({dollars(calc.pay.overtimePayCents)})
       </div>
       <div>
-        DT: <b>{calc.buckets.double_HHMM}</b> ({dollars(calc.pay.doublePayCents)})
+      DT: <b>{(calc.buckets.doubleMinutes / 60).toFixed(2)}</b> ({dollars(calc.pay.doublePayCents)})
       </div>
       <div>
         Corrected Gross: <b>{dollars(calc.pay.grossPayCents)}</b>

@@ -1,9 +1,8 @@
-// apps/frontend/app/lib/api.ts
 import { getToken } from "./auth";
 
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_URL;
-  if (!base) return "http://localhost:4001";
+  if (!base) return "http://localhost:4000";
   return base.replace(/\/+$/, "");
 }
 
@@ -21,36 +20,33 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const url = `${apiBase()}${path.startsWith("/") ? path : `/${path}`}`;
 
-  const headers: Record<string, string> = {
-    ...(opts.headers as any),
-  };
-
-  // Only set JSON header if we are sending a body (GET shouldn't force it)
+  const headers = new Headers(opts.headers || {});
   const hasBody = opts.body !== undefined && opts.body !== null;
-  if (hasBody && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
+
+  if (hasBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
   if (opts.auth !== false) {
     const token = getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  if (typeof window !== "undefined") {
+    const pin = localStorage.getItem("admin_override_pin") || "";
+    if (pin) headers.set("x-admin-pin", pin);
   }
 
   const res = await fetch(url, {
     ...opts,
     headers,
+    credentials: "include",
   });
 
   const body = await readBody(res);
 
   if (!res.ok) {
-    // common backend shape: { error: "..." }
-    const msg =
-      (body && typeof body === "object" && (body.error || body.message)) ||
-      (typeof body === "string" && body) ||
-      `Request failed (${res.status})`;
-
-    throw new Error(msg);
+    throw new Error(body?.error || body || "Request failed");
   }
 
   return body as T;

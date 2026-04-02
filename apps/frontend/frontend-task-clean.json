@@ -1,0 +1,44 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "211125653940.dkr.ecr.us-west-1.amazonaws.com/wezen-payroll-frontend:5bd4d4d",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "NEXT_PUBLIC_API_URL",
+          "value": "https://api.payroll.wezenstaffing.com"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wezen-payroll-frontend",
+          "awslogs-region": "us-west-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "wezen-payroll-frontend-task",
+  "executionRoleArn": "arn:aws:iam::211125653940:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "placementConstraints": [],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024"
+}

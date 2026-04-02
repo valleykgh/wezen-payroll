@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../../prisma";
+import { getHolidayRule, calculatePayCentsWithRule } from "./_shared";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ function startOfNextDayUTC(iso: string) {
 function fmtISODateOnly(d: Date | string) {
   return new Date(d).toISOString().slice(0, 10);
 }
+
 
 function splitDailyBuckets(payableMinutes: number) {
   const m = Math.max(0, Math.floor(payableMinutes));
@@ -67,6 +69,18 @@ router.post("/payroll-runs/finalize", async (req, res) => {
     if (!periodStart || !periodEnd) {
       return res.status(400).json({ error: "periodStart and periodEnd required (YYYY-MM-DD)" });
     }
+   
+    function isMondayToSunday(periodStart: string, periodEnd: string) {
+  const start = new Date(`${periodStart}T00:00:00.000Z`);
+  const end = new Date(`${periodEnd}T00:00:00.000Z`);
+  return start.getUTCDay() === 1 && end.getUTCDay() === 0;
+}
+
+if (!isMondayToSunday(periodStart, periodEnd)) {
+  return res.status(400).json({
+    error: "Please select exactly one Monday-to-Sunday pay period.",
+  });
+}
 
     const fromDt = startOfDayUTC(periodStart);
     const toExclusive = startOfNextDayUTC(periodEnd);
@@ -202,12 +216,45 @@ router.post("/payroll-runs/finalize", async (req, res) => {
   },
 });
 
-const earlyPaymentByEmployee = new Map<string, (typeof earlyPayments)[number]>();
+const earlyPaymentByEmployee = new Map<string, number>();
 
 for (const p of earlyPayments) {
-  earlyPaymentByEmployee.set(String(p.employeeId), p);
+  const key = String(p.employeeId);
+  earlyPaymentByEmployee.set(
+    key,
+    (earlyPaymentByEmployee.get(key) || 0) + Number(p.amountCents || 0)
+  );
 }
 
+const suspiciousPaidNowAdjustments = await prisma.payrollAdjustment.findMany({
+  where: {
+    paidImmediately: true,
+    payrollRunId: null,
+    workDate: {
+      gte: fromDt,
+      lt: toExclusive,
+    },
+  },
+  select: {
+    id: true,
+    employeeId: true,
+    amountCents: true,
+    reason: true,
+    paidNote: true,
+    paidAmountCents: true,
+    workDate: true,
+    createdAt: true,
+  },
+  orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
+});
+
+if (suspiciousPaidNowAdjustments.length > 0) {
+  return res.status(409).json({
+    error:
+      "Finalize blocked: paid-immediate time-entry adjustments still exist in this pay period. Resolve them before finalizing.",
+    details: suspiciousPaidNowAdjustments,
+  });
+}
 
 const createdById = (req as any).user?.id || null;   
 
@@ -252,10 +299,20 @@ const createdById = (req as any).user?.id || null;
         const buckets = splitDailyBuckets(payableMinutes);
         const rateCents = Number(e.employee?.hourlyRateCents || 0);
 
-        const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-        const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-        const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-        const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
+const holidayRule = await getHolidayRule(e.workDate);
+
+const payCalc = calculatePayCentsWithRule({
+  regularMinutes: buckets.regularMinutes,
+  overtimeMinutes: buckets.overtimeMinutes,
+  doubleMinutes: buckets.doubleMinutes,
+  hourlyRateCents: rateCents,
+  holidayRule,
+});
+
+const regularPayCents = payCalc.regularPayCents;
+const overtimePayCents = payCalc.overtimePayCents;
+const doublePayCents = payCalc.doublePayCents;
+const grossPayCents = payCalc.grossPayCents;
 
         const current =
           byEmployee.get(e.employeeId) || {
@@ -318,16 +375,24 @@ const createdById = (req as any).user?.id || null;
           },
         });
       }
-
-      for (const [, totals] of byEmployee) {
+        for (const [, totals] of byEmployee) {
         const adjustments = await tx.payrollAdjustment.findMany({
-          where: {
-            employeeId: totals.employeeId,
-            payrollRunId: null,
-          },
-          select: { id: true, amountCents: true },
-        });
-
+  where: {
+    employeeId: totals.employeeId,
+    payrollRunId: null,
+    paidImmediately: false,
+    workDate: {
+      gte: fromDt,
+      lt: toExclusive,
+    },
+  },
+  select: {
+    id: true,
+    amountCents: true,
+    workDate: true,
+  },
+});
+      
         const loanDeductions = await tx.loanDeduction.findMany({
           where: {
             employeeId: totals.employeeId,
@@ -347,20 +412,21 @@ const loanDeductionCents = loanDeductions.reduce(
   0
 );
 
-const earlyPayment = earlyPaymentByEmployee.get(String(totals.employeeId)) || null;
 
-const paidEarly = !!earlyPayment;
-const paidEarlyAmountCents = Number(earlyPayment?.amountCents || 0);
+const paidEarlyAmountCents =
+  Number(earlyPaymentByEmployee.get(String(totals.employeeId)) || 0);
+
+const paidEarly = paidEarlyAmountCents > 0;
 
 // Full net for the pay period
 const totalNetForPeriodCents =
   totals.grossPayCents + adjustmentsCents - loanDeductionCents;
 
-// What still needs to be paid now in this finalized run
-const netPayCents = paidEarly
-  ? Math.max(0, totalNetForPeriodCents - paidEarlyAmountCents)
-  : totalNetForPeriodCents;
-
+// What still remains to be paid after early payments
+const remainingToPayCents = Math.max(
+  0,
+  totalNetForPeriodCents - paidEarlyAmountCents
+);
 await tx.payrollRunEmployee.create({
   data: {
     payrollRunId: payrollRun.id,
@@ -376,12 +442,25 @@ await tx.payrollRunEmployee.create({
     grossPayCents: totals.grossPayCents,
     adjustmentsCents,
     loanDeductionCents,
-    netPayCents,
+   netPayCents: totalNetForPeriodCents,
     paidEarly,
     paidEarlyAmountCents,
     snapshotVersion: 1,
   },
 });
+	// 1. Add earnings
+await tx.employeePayrollLedger.create({
+  data: {
+    employeeId: totals.employeeId,
+    periodStart: fromDt,
+    periodEnd: startOfDayUTC(periodEnd),
+    type: "PAYROLL_RUN",
+    amountCents: totalNetForPeriodCents,
+    note: "Payroll run net earnings",
+    createdById,
+  },
+});
+// 2. Subtract early payment (if any)
 
         if (adjustments.length > 0) {
           await tx.payrollAdjustment.updateMany({

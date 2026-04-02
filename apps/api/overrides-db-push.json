@@ -1,0 +1,12 @@
+{
+  "containerOverrides": [
+    {
+      "name": "api",
+      "command": [
+        "sh",
+        "-lc",
+        "cd /app/apps/api && npx prisma db push --schema=/app/prisma/schema.prisma"
+      ]
+    }
+  ]
+}

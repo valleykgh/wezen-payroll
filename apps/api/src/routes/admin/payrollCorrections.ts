@@ -1,12 +1,15 @@
 import express from "express";
 import { prisma } from "../../prisma";
+import { calculatePayCentsWithRule, getHolidayRule } from "./_shared";
 
 const router = express.Router();
 
 function minutesBetween(a: Date, b: Date): number {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
 }
-
+function minutesToDecimalHours(minutes: number) {
+  return Number((Number(minutes || 0) / 60).toFixed(2));
+}
 function parseTimeOnDate(workDateISO: string, timeStr: string): Date {
   const s = (timeStr || "").trim();
   if (!s) throw new Error("Invalid time");
@@ -71,7 +74,7 @@ function fmtHHMM(totalMinutes: number): string {
   return `${hh}:${String(mm).padStart(2, "0")}`;
 }
 
-function calculateTimeEntryTotals(args: {
+async function calculateTimeEntryTotals(args: {
   workDate: string;
   shiftType: string;
   punches: Array<{ clockIn: string; clockOut: string }>;
@@ -112,10 +115,21 @@ function calculateTimeEntryTotals(args: {
   const buckets = splitDailyBuckets(payableMinutes);
 
   const rateCents = Number(hourlyRateCents || 0);
-  const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-  const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-  const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-  const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
+
+const holidayRule = await getHolidayRule(workDate);
+
+const payCalc = calculatePayCentsWithRule({
+  regularMinutes: buckets.regularMinutes,
+  overtimeMinutes: buckets.overtimeMinutes,
+  doubleMinutes: buckets.doubleMinutes,
+  hourlyRateCents: rateCents,
+  holidayRule,
+});
+
+const regularPayCents = payCalc.regularPayCents;
+const overtimePayCents = payCalc.overtimePayCents;
+const doublePayCents = payCalc.doublePayCents;
+const grossPayCents = payCalc.grossPayCents;
 
   return {
     workedMinutes,
@@ -162,7 +176,7 @@ router.get("/payroll-correction/calc", async (req, res) => {
       return res.status(404).json({ error: "Employee not found" });
     }
 
-    const calc = calculateTimeEntryTotals({
+    const calc = await calculateTimeEntryTotals({
       workDate,
       shiftType,
       punches,
@@ -182,9 +196,10 @@ router.get("/payroll-correction/calc", async (req, res) => {
         regularMinutes: calc.regularMinutes,
         overtimeMinutes: calc.overtimeMinutes,
         doubleMinutes: calc.doubleMinutes,
-        regular_HHMM: fmtHHMM(calc.regularMinutes),
-        overtime_HHMM: fmtHHMM(calc.overtimeMinutes),
-        double_HHMM: fmtHHMM(calc.doubleMinutes),
+        regular_decimal: minutesToDecimalHours(calc.regularMinutes),
+overtime_decimal: minutesToDecimalHours(calc.overtimeMinutes),
+double_decimal: minutesToDecimalHours(calc.doubleMinutes),
+calculatedHours_decimal: minutesToDecimalHours(calc.payableMinutes),
       },
       pay: {
         hourlyRateCents: employee.hourlyRateCents,
@@ -194,7 +209,7 @@ router.get("/payroll-correction/calc", async (req, res) => {
         grossPayCents: calc.grossPayCents,
       },
       display: {
-        payableHours_HHMM: fmtHHMM(calc.payableMinutes),
+      calculatedHours_decimal: minutesToDecimalHours(calc.payableMinutes),
       },
     });
   } catch (e: any) {

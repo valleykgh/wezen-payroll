@@ -127,42 +127,6 @@ router.get("/payroll-adjustments", async (req, res) => {
         return res.status(500).json({ error: e?.message || "Failed to load payroll adjustments" });
     }
 });
-router.post("/payroll-adjustments", async (req, res) => {
-    try {
-        const employeeId = String(req.body.employeeId || "").trim();
-        const reason = String(req.body.reason || "").trim();
-        const amountCents = Number(req.body.amountCents);
-        if (!employeeId) {
-            return res.status(400).json({ error: "employeeId required" });
-        }
-        if (!reason) {
-            return res.status(400).json({ error: "reason required" });
-        }
-        if (!Number.isFinite(amountCents) || amountCents === 0) {
-            return res.status(400).json({ error: "amountCents must be a non-zero number" });
-        }
-        const employee = await prisma_1.prisma.employee.findUnique({
-            where: { id: employeeId },
-            select: { id: true },
-        });
-        if (!employee) {
-            return res.status(404).json({ error: "Employee not found" });
-        }
-        const adjustment = await prisma_1.prisma.payrollAdjustment.create({
-            data: {
-                employeeId,
-                reason,
-                amountCents,
-                payrollRunId: null,
-            },
-        });
-        return res.json({ ok: true, adjustment });
-    }
-    catch (e) {
-        console.error("POST /api/admin/payroll-adjustments failed:", e);
-        return res.status(500).json({ error: e?.message || "Failed to create payroll adjustment" });
-    }
-});
 router.get("/payroll-runs", async (req, res) => {
     try {
         const status = String(req.query.status || "").trim();
@@ -313,259 +277,6 @@ router.get("/payroll-runs/:id", async (req, res) => {
         return res.status(500).json({ error: e?.message || "Failed to load payroll run" });
     }
 });
-router.post("/payroll-runs/finalize", async (req, res) => {
-    try {
-        const periodStart = String(req.body.periodStart || "").trim();
-        const periodEnd = String(req.body.periodEnd || "").trim();
-        const notes = req.body.notes == null ? null : String(req.body.notes);
-        if (!periodStart || !periodEnd) {
-            return res.status(400).json({ error: "periodStart and periodEnd required (YYYY-MM-DD)" });
-        }
-        const fromDt = (0, _shared_1.startOfDayUTC)(periodStart);
-        const toExclusive = (0, _shared_1.startOfNextDayUTC)(periodEnd);
-        const existing = await prisma_1.prisma.payrollRun.findFirst({
-            where: {
-                periodStart: fromDt,
-                periodEnd: (0, _shared_1.startOfDayUTC)(periodEnd),
-                status: "FINALIZED",
-            },
-            select: { id: true },
-        });
-        if (existing) {
-            return res.status(409).json({ error: "A finalized payroll run already exists for this pay period" });
-        }
-        const entries = await prisma_1.prisma.timeEntry.findMany({
-            where: {
-                workDate: {
-                    gte: fromDt,
-                    lt: toExclusive,
-                },
-                status: {
-                    in: ["APPROVED", "LOCKED"],
-                },
-            },
-            include: {
-                employee: {
-                    select: {
-                        id: true,
-                        legalName: true,
-                        preferredName: true,
-                        email: true,
-                        hourlyRateCents: true,
-                        title: true,
-                    },
-                },
-                facility: {
-                    select: {
-                        id: true,
-                        name: true,
-                    },
-                },
-                breaks: {
-                    select: {
-                        id: true,
-                        startTime: true,
-                        endTime: true,
-                        minutes: true,
-                    },
-                },
-            },
-            orderBy: [{ employeeId: "asc" }, { workDate: "asc" }, { createdAt: "asc" }],
-        });
-        if (entries.length === 0) {
-            return res.status(400).json({ error: "No approved/locked time entries found for this pay period" });
-        }
-        const facilityIds = Array.from(new Set(entries.map((e) => String(e.facilityId || "")).filter(Boolean)));
-        const facilityRates = await prisma_1.prisma.facilityRate.findMany({
-            where: {
-                facilityId: { in: facilityIds },
-            },
-            orderBy: [
-                { facilityId: "asc" },
-                { title: "asc" },
-                { effectiveFrom: "desc" },
-            ],
-        });
-        const validationErrors = [];
-        for (const e of entries) {
-            const employeeName = e.employee?.preferredName
-                ? `${e.employee.legalName} (${e.employee.preferredName})`
-                : e.employee?.legalName || e.employeeId;
-            const title = String(e.employee?.title || "").trim();
-            if (!title) {
-                validationErrors.push(`Employee "${employeeName}" has no designation/title.`);
-                continue;
-            }
-            const facId = String(e.facilityId || "").trim();
-            if (!facId) {
-                validationErrors.push(`Employee "${employeeName}" has a time entry on ${(0, _shared_1.fmtISODateOnly)(e.workDate)} with no facility.`);
-                continue;
-            }
-            const facilityName = e.facility?.name || facId;
-            const applicableRates = facilityRates.filter((r) => String(r.facilityId || "") === facId);
-            const effectiveRate = (0, _shared_1.findEffectiveFacilityRate)(applicableRates, title, new Date(e.workDate));
-            if (!effectiveRate) {
-                validationErrors.push(`Missing billing rate for facility "${facilityName}", title "${title}", work date ${(0, _shared_1.fmtISODateOnly)(e.workDate)}.`);
-            }
-        }
-        if (validationErrors.length > 0) {
-            return res.status(400).json({
-                error: "Payroll cannot be finalized until all facility billing setup is complete.",
-                details: validationErrors,
-            });
-        }
-        const createdById = req.user?.id || null;
-        const result = await prisma_1.prisma.$transaction(async (tx) => {
-            const payrollRun = await tx.payrollRun.create({
-                data: {
-                    periodStart: fromDt,
-                    periodEnd: (0, _shared_1.startOfDayUTC)(periodEnd),
-                    status: "FINALIZED",
-                    notes,
-                    createdById,
-                    finalizedAt: new Date(),
-                },
-            });
-            const byEmployee = new Map();
-            for (const e of entries) {
-                const breaks = Array.isArray(e.breaks) ? e.breaks : [];
-                const computedBreakMinutes = breaks.length > 0
-                    ? breaks.reduce((sum, b) => sum + Number(b.minutes || 0), 0)
-                    : Number(e.breakMinutes || 0);
-                const workedMinutes = Number(e.minutesWorked || 0);
-                const payableMinutes = Math.max(0, workedMinutes - computedBreakMinutes);
-                const buckets = (0, _shared_1.splitDailyBuckets)(payableMinutes);
-                const rateCents = Number(e.employee?.hourlyRateCents || 0);
-                const regularPayCents = Math.round((buckets.regularMinutes * rateCents) / 60);
-                const overtimePayCents = Math.round((buckets.overtimeMinutes * rateCents * 1.5) / 60);
-                const doublePayCents = Math.round((buckets.doubleMinutes * rateCents * 2) / 60);
-                const grossPayCents = regularPayCents + overtimePayCents + doublePayCents;
-                const current = byEmployee.get(e.employeeId) || {
-                    employeeId: e.employeeId,
-                    regularMinutes: 0,
-                    overtimeMinutes: 0,
-                    doubleMinutes: 0,
-                    breakMinutes: 0,
-                    payableMinutes: 0,
-                    regularPayCents: 0,
-                    overtimePayCents: 0,
-                    doublePayCents: 0,
-                    grossPayCents: 0,
-                };
-                current.regularMinutes += buckets.regularMinutes;
-                current.overtimeMinutes += buckets.overtimeMinutes;
-                current.doubleMinutes += buckets.doubleMinutes;
-                current.breakMinutes += computedBreakMinutes;
-                current.payableMinutes += payableMinutes;
-                current.regularPayCents += regularPayCents;
-                current.overtimePayCents += overtimePayCents;
-                current.doublePayCents += doublePayCents;
-                current.grossPayCents += grossPayCents;
-                byEmployee.set(e.employeeId, current);
-                await tx.payrollRunEntrySnapshot.create({
-                    data: {
-                        payrollRunId: payrollRun.id,
-                        employeeId: e.employeeId,
-                        timeEntryId: e.id,
-                        workDate: e.workDate,
-                        status: String(e.status),
-                        snapshotJson: {
-                            timeEntryId: e.id,
-                            employeeId: e.employeeId,
-                            employeeName: e.employee?.legalName ?? null,
-                            facilityId: e.facilityId,
-                            facilityName: e.facility?.name ?? null,
-                            workDate: e.workDate,
-                            shiftType: e.shiftType,
-                            status: e.status,
-                            punchesJson: e.punchesJson ?? null,
-                            breaksJson: e.breaksJson ?? null,
-                            breakRows: breaks,
-                            workedMinutes,
-                            breakMinutes: computedBreakMinutes,
-                            payableMinutes,
-                            regularMinutes: buckets.regularMinutes,
-                            overtimeMinutes: buckets.overtimeMinutes,
-                            doubleMinutes: buckets.doubleMinutes,
-                            hourlyRateCents: rateCents,
-                            regularPayCents,
-                            overtimePayCents,
-                            doublePayCents,
-                            grossPayCents,
-                            notes: e.notes ?? null,
-                        },
-                    },
-                });
-            }
-            for (const [, totals] of byEmployee) {
-                const adjustments = await tx.payrollAdjustment.findMany({
-                    where: {
-                        employeeId: totals.employeeId,
-                        payrollRunId: null,
-                    },
-                    select: { id: true, amountCents: true },
-                });
-                const loanDeductions = await tx.loanDeduction.findMany({
-                    where: {
-                        employeeId: totals.employeeId,
-                        periodStart: { gte: fromDt },
-                        periodEnd: { lt: toExclusive },
-                    },
-                    select: { amountCents: true },
-                });
-                const adjustmentsCents = adjustments.reduce((s, a) => s + Number(a.amountCents || 0), 0);
-                const loanDeductionCents = loanDeductions.reduce((s, d) => s + Number(d.amountCents || 0), 0);
-                const netPayCents = totals.grossPayCents + adjustmentsCents - loanDeductionCents;
-                await tx.payrollRunEmployee.create({
-                    data: {
-                        payrollRunId: payrollRun.id,
-                        employeeId: totals.employeeId,
-                        regularMinutes: totals.regularMinutes,
-                        overtimeMinutes: totals.overtimeMinutes,
-                        doubleMinutes: totals.doubleMinutes,
-                        breakMinutes: totals.breakMinutes,
-                        payableMinutes: totals.payableMinutes,
-                        regularPayCents: totals.regularPayCents,
-                        overtimePayCents: totals.overtimePayCents,
-                        doublePayCents: totals.doublePayCents,
-                        grossPayCents: totals.grossPayCents,
-                        adjustmentsCents,
-                        loanDeductionCents,
-                        netPayCents,
-                        snapshotVersion: 1,
-                    },
-                });
-                if (adjustments.length > 0) {
-                    await tx.payrollAdjustment.updateMany({
-                        where: {
-                            id: { in: adjustments.map((a) => a.id) },
-                        },
-                        data: {
-                            payrollRunId: payrollRun.id,
-                        },
-                    });
-                }
-            }
-            return {
-                payrollRunId: payrollRun.id,
-                employeeCount: byEmployee.size,
-                snapshotCount: entries.length,
-            };
-        });
-        return res.json({
-            ok: true,
-            periodStart,
-            periodEnd,
-            payrollRunId: result.payrollRunId,
-            employeeCount: result.employeeCount,
-            snapshotCount: result.snapshotCount,
-        });
-    }
-    catch (e) {
-        console.error("POST /api/admin/payroll-runs/finalize failed:", e);
-        return res.status(500).json({ error: e?.message || "Failed to finalize payroll run" });
-    }
-});
 router.get("/payroll-runs/:runId/snapshots/:snapshotId", async (req, res) => {
     try {
         const runId = String(req.params.runId || "");
@@ -648,9 +359,10 @@ router.get("/payroll-correction/calc", async (req, res) => {
                 regularMinutes: calc.regularMinutes,
                 overtimeMinutes: calc.overtimeMinutes,
                 doubleMinutes: calc.doubleMinutes,
-                regular_HHMM: (0, _shared_1.fmtHHMM)(calc.regularMinutes),
-                overtime_HHMM: (0, _shared_1.fmtHHMM)(calc.overtimeMinutes),
-                double_HHMM: (0, _shared_1.fmtHHMM)(calc.doubleMinutes),
+                regular_decimal: (0, _shared_1.minutesToDecimalHours)(calc.regularMinutes),
+                overtime_decimal: (0, _shared_1.minutesToDecimalHours)(calc.overtimeMinutes),
+                double_decimal: (0, _shared_1.minutesToDecimalHours)(calc.doubleMinutes),
+                calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(calc.payableMinutes),
             },
             pay: {
                 hourlyRateCents: employee.hourlyRateCents,
@@ -660,7 +372,7 @@ router.get("/payroll-correction/calc", async (req, res) => {
                 grossPayCents: calc.grossPayCents,
             },
             display: {
-                payableHours_HHMM: (0, _shared_1.fmtHHMM)(calc.payableMinutes),
+                calculatedHours_decimal: (0, _shared_1.minutesToDecimalHours)(calc.payableMinutes),
             },
         });
     }

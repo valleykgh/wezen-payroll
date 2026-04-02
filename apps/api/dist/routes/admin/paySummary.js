@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const prisma_1 = require("../../prisma");
+const _shared_1 = require("./_shared");
 const router = express_1.default.Router();
 function startOfDayUTC(iso) {
     return new Date(`${iso}T00:00:00.000Z`);
@@ -13,13 +14,6 @@ function startOfNextDayUTC(iso) {
     const d = startOfDayUTC(iso);
     d.setUTCDate(d.getUTCDate() + 1);
     return d;
-}
-function sumBreakMinutesFromEntry(e) {
-    const breaks = Array.isArray(e.breaks) ? e.breaks : [];
-    if (breaks.length > 0) {
-        return breaks.reduce((sum, b) => sum + Number(b.minutes ?? 0), 0);
-    }
-    return Number(e.breakMinutes ?? 0);
 }
 // GET /api/admin/pay-summary
 router.get("/pay-summary", async (req, res) => {
@@ -60,23 +54,47 @@ router.get("/pay-summary", async (req, res) => {
         });
         const rate = entries[0]?.employee?.hourlyRateCents ?? 0;
         const totalWorkedMinutes = entries.reduce((sum, e) => sum + Number(e.minutesWorked ?? 0), 0);
-        const totalBreakMinutes = entries.reduce((sum, e) => sum + sumBreakMinutesFromEntry(e), 0);
-        const payableMinutes = entries.reduce((sum, e) => {
+        const totalBreakMinutes = entries.reduce((sum, e) => sum + (0, _shared_1.sumBreakMinutesFromEntry)(e), 0);
+        let payableMinutes = 0;
+        let grossPayCents = 0;
+        for (const e of entries) {
             const worked = Number(e.minutesWorked ?? 0);
-            const br = sumBreakMinutesFromEntry(e);
-            return sum + Math.max(0, worked - br);
-        }, 0);
-        const grossPayCents = Math.round((payableMinutes * rate) / 60);
+            const br = (0, _shared_1.sumBreakMinutesFromEntry)(e);
+            const entryPayableMinutes = Math.max(0, worked - br);
+            const buckets = (0, _shared_1.splitDailyBuckets)(entryPayableMinutes);
+            const holidayRule = await (0, _shared_1.getHolidayRule)(e.workDate);
+            const payCalc = (0, _shared_1.calculatePayCentsWithRule)({
+                regularMinutes: buckets.regularMinutes,
+                overtimeMinutes: buckets.overtimeMinutes,
+                doubleMinutes: buckets.doubleMinutes,
+                hourlyRateCents: Number(e.employee?.hourlyRateCents || 0),
+                holidayRule,
+            });
+            payableMinutes += entryPayableMinutes;
+            grossPayCents += Number(payCalc.grossPayCents || 0);
+        }
+        const adjustmentWhere = {
+            employeeId: String(employeeId),
+            payrollRunId: null,
+            paidImmediately: false,
+        };
+        if (from || to) {
+            adjustmentWhere.workDate = {};
+            if (from)
+                adjustmentWhere.workDate.gte = startOfDayUTC(from);
+            if (to)
+                adjustmentWhere.workDate.lt = startOfNextDayUTC(to);
+        }
         const adjustments = await prisma_1.prisma.payrollAdjustment.findMany({
-            where: {
-                employeeId: String(employeeId),
-                payrollRunId: null,
-            },
+            where: adjustmentWhere,
             select: {
                 id: true,
                 amountCents: true,
+                billAmountCents: true,
                 reason: true,
                 createdAt: true,
+                workDate: true,
+                facilityId: true,
             },
             orderBy: { createdAt: "desc" },
         });

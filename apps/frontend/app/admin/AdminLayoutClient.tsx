@@ -44,17 +44,18 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
           <NavLink href="/admin" label="Admin Home" />
           <NavLink href="/admin/users" label="Admin Users" />
           <NavLink href="/admin/time-entry" label="Time Entry" />
-          <NavLink href="/admin/missed-time" label="Missed Time Entry" />
+	  <NavLink href="/admin/missed-time" label="Exceptions" />
 	  <NavLink href="/admin/time-entries-week" label="Time Entries (Week)" />
  	  <NavLink href="/admin/employees" label="Employees" />
-  	  <NavLink href="/admin/employees/new" label="Create Employee" />
+          <NavLink href="/admin/employees/new" label="Create Employee" />
   	  <NavLink href="/admin/pay-period-summary" label="Pay Period Summary" />
   	  <NavLink href="/admin/payroll-runs" label="Payroll Runs" />
   	  <NavLink href="/admin/payroll-adjustments" label="Payroll Adjustments" />
 	  <NavLink href="/admin/payroll-runs/new" label="Finalize Payroll" />
           <NavLink href="/admin/facilities" label="Facilities" />
           <NavLink href="/admin/loans" label="Loans" />
-        </div>
+          <NavLink href="/admin/holidays" label="Holidays" />
+	</div>
 
         <button
           type="button"

@@ -107,6 +107,9 @@ router.get("/payroll-runs/:id", async (req, res) => {
                                 email: true,
                                 hourlyRateCents: true,
                                 payrollAdjustments: {
+                                    where: {
+                                        payrollRunId: id,
+                                    },
                                     orderBy: { createdAt: "desc" },
                                     select: {
                                         id: true,
@@ -114,6 +117,8 @@ router.get("/payroll-runs/:id", async (req, res) => {
                                         reason: true,
                                         createdAt: true,
                                         payrollRunId: true,
+                                        workDate: true,
+                                        paidImmediately: true,
                                     },
                                 },
                             },

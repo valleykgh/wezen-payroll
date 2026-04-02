@@ -31,10 +31,12 @@ app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin && allowedOrigins.has(origin)) {
         res.header("Access-Control-Allow-Origin", origin);
+        res.header("Access-Control-Allow-Credentials", "true");
     }
     res.header("Vary", "Origin");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With, x-admin-pin");
+    res.header("Access-Control-Expose-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
     if (req.method === "OPTIONS") {
         return res.sendStatus(204);
     }

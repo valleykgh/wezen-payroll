@@ -89,18 +89,13 @@ function dollars(cents: number) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
 
-function dateOnly(v?: string | null) {
-  if (!v) return "";
-  return new Date(v).toISOString().slice(0, 10);
+function dateOnly(value: string | Date) {
+  return new Date(value).toISOString().slice(0, 10);
 }
-
 function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
-
 function employeeLabel(emp?: PayrollRunEmployeeRow["employee"] | PayrollRunEntrySnapshotRow["employee"] | null) {
   if (!emp) return "Unknown";
   return emp.preferredName ? `${emp.legalName} (${emp.preferredName})` : emp.legalName;

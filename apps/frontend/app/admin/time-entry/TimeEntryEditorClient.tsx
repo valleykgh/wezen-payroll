@@ -42,6 +42,20 @@ type CalcResp = {
     overtime_decimal: number;
     double_decimal: number;
   };
+    billing?: {
+    hasRate: boolean;
+    regRateCents: number;
+    otRateCents: number;
+    dtRateCents: number;
+    billAmountCents: number;
+  } | null;
+  holiday?: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier?: number;
+    appliesToRegularOnly?: boolean;
+  } | null;
   warnings?: string[];
 };
 
@@ -51,10 +65,22 @@ export type DayDraft = {
   status?: "DRAFT" | "APPROVED" | "LOCKED" | null;
   facilityId: string;
   shiftType: string;
+  adjustmentId?: string;
+  isMissedAdjustment?: boolean;
+  sourceType?: "TIME_ENTRY" | "PAYROLL_ADJUSTMENT";
   p1: PunchSet;
   p2: PunchSet;
   b1: BreakSet;
   b2: BreakSet;
+    paidNow?: boolean;
+  paidNowAt?: string | null;
+  paidNowAmountCents?: number | null;
+  paidNowNote?: string | null;
+  paidViaPayrollWeek?: boolean;
+  addedAfterFinalizedWeek?: boolean;
+  isHoliday?: boolean;
+  holidayName?: string | null;
+  holidayMultiplier?: number | null;
 };
 
 export type Draft = {
@@ -75,6 +101,12 @@ type EntryRow = {
   punchesJson?: Array<{ clockIn: string; clockOut: string }> | null;
   breaksJson?: Array<{ startTime: string; endTime: string }> | null;
   facility?: { id: string; name: string } | null;
+    paidNow?: boolean;
+  paidNowAt?: string | null;
+  paidNowAmountCents?: number | null;
+  paidNowNote?: string | null;
+  paidViaPayrollWeek?: boolean;
+  addedAfterFinalizedWeek?: boolean;
 };
 
 function todayISO() {
@@ -86,9 +118,10 @@ function todayISO() {
 }
 
 function addDaysISO(iso: string, days: number) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
 }
 
 function clampEndToMax7(startISO: string, endISO: string) {
@@ -98,46 +131,268 @@ function clampEndToMax7(startISO: string, endISO: string) {
 
 function listDatesInclusive(startISO: string, endISO: string) {
   const out: string[] = [];
-  const start = new Date(`${startISO}T00:00:00`);
-  const end = new Date(`${endISO}T00:00:00`);
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+  const [sy, sm, sd] = startISO.split("-").map(Number);
+  const [ey, em, ed] = endISO.split("-").map(Number);
+
+  const start = new Date(Date.UTC(sy, sm - 1, sd));
+  const end = new Date(Date.UTC(ey, em - 1, ed));
+
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     out.push(d.toISOString().slice(0, 10));
   }
   return out;
 }
-
 function minutesToHHMM(min: number) {
-  const m = Math.max(0, Math.floor(min || 0));
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${hh}:${String(mm).padStart(2, "0")}`;
+  const m = Math.max(0, Number(min || 0));
+  return (m / 60).toFixed(2);
 }
 
+function money(cents: number) {
+  return `$${(Number(cents || 0) / 100).toFixed(2)}`;
+}
+
+
+function calcPayCents(
+  calc: CalcResp | null,
+  hourlyRateCents: number,
+  workDate?: string,
+  holiday?: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier?: number;
+    appliesToRegularOnly?: boolean;
+  } | null
+) {
+  if (!calc) return 0;
+
+  const regularMinutes = Math.round(Number(calc?.buckets?.regular_decimal || 0) * 60);
+  const overtimeMinutes = Math.round(Number(calc?.buckets?.overtime_decimal || 0) * 60);
+  const doubleMinutes = Math.round(Number(calc?.buckets?.double_decimal || 0) * 60);
+
+  const holidayMultiplier =
+    holiday?.isHoliday && holiday?.appliesToRegularOnly !== false
+      ? Number(holiday?.payMultiplier || 1.5)
+      : 1;
+
+  const regularPayCents = Math.round(
+    (regularMinutes * hourlyRateCents * holidayMultiplier) / 60
+  );
+  const overtimePayCents = Math.round(
+    (overtimeMinutes * hourlyRateCents * 1.5) / 60
+  );
+  const doublePayCents = Math.round(
+    (doubleMinutes * hourlyRateCents * 2) / 60
+  );
+
+  return regularPayCents + overtimePayCents + doublePayCents;
+}
+function hoursFromCalcBucket(value: number | undefined | null) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
+function formatMultiplier(n: number) {
+  return `${Number(n || 0).toFixed(1)}x`;
+}
+
+function buildPayBreakdown(
+  calc: CalcResp | null,
+  hourlyRateCents: number,
+  holiday?: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier?: number;
+    appliesToRegularOnly?: boolean;
+  } | null
+) {
+  if (!calc) {
+    return {
+      regularHours: 0,
+      overtimeHours: 0,
+      doubleHours: 0,
+      regularMultiplier: 1,
+      overtimeMultiplier: 1.5,
+      doubleMultiplier: 2,
+      regularPayCents: 0,
+      overtimePayCents: 0,
+      doublePayCents: 0,
+      totalPayCents: 0,
+    };
+  }
+
+  const regularHours = hoursFromCalcBucket(calc?.buckets?.regular_decimal);
+  const overtimeHours = hoursFromCalcBucket(calc?.buckets?.overtime_decimal);
+  const doubleHours = hoursFromCalcBucket(calc?.buckets?.double_decimal);
+
+  const regularMinutes = Math.round(regularHours * 60);
+  const overtimeMinutes = Math.round(overtimeHours * 60);
+  const doubleMinutes = Math.round(doubleHours * 60);
+
+  const regularMultiplier =
+    holiday?.isHoliday && holiday?.appliesToRegularOnly !== false
+      ? Number(holiday?.payMultiplier || 1.5)
+      : 1;
+
+  const overtimeMultiplier = 1.5;
+  const doubleMultiplier = 2;
+
+  const regularPayCents = Math.round(
+    (regularMinutes * hourlyRateCents * regularMultiplier) / 60
+  );
+  const overtimePayCents = Math.round(
+    (overtimeMinutes * hourlyRateCents * overtimeMultiplier) / 60
+  );
+  const doublePayCents = Math.round(
+    (doubleMinutes * hourlyRateCents * doubleMultiplier) / 60
+  );
+
+  return {
+    regularHours,
+    overtimeHours,
+    doubleHours,
+    regularMultiplier,
+    overtimeMultiplier,
+    doubleMultiplier,
+    regularPayCents,
+    overtimePayCents,
+    doublePayCents,
+    totalPayCents: regularPayCents + overtimePayCents + doublePayCents,
+  };
+}
+function buildBillingBreakdown(
+  calc: CalcResp | null,
+  holiday?: {
+    isHoliday: boolean;
+    name: string | null;
+    payMultiplier: number;
+    billMultiplier?: number;
+    appliesToRegularOnly?: boolean;
+  } | null
+) {
+  if (!calc || !calc.billing?.hasRate) {
+    return {
+      regularHours: 0,
+      overtimeHours: 0,
+      doubleHours: 0,
+      regularMultiplier: 1,
+      overtimeMultiplier: 1.5,
+      doubleMultiplier: 2,
+      regularBillCents: 0,
+      overtimeBillCents: 0,
+      doubleBillCents: 0,
+      totalBillCents: 0,
+      hasRate: false,
+    };
+  }
+
+  const regularHours = hoursFromCalcBucket(calc?.buckets?.regular_decimal);
+  const overtimeHours = hoursFromCalcBucket(calc?.buckets?.overtime_decimal);
+  const doubleHours = hoursFromCalcBucket(calc?.buckets?.double_decimal);
+
+  const regularMinutes = Math.round(regularHours * 60);
+  const overtimeMinutes = Math.round(overtimeHours * 60);
+  const doubleMinutes = Math.round(doubleHours * 60);
+
+  const regularMultiplier =
+    holiday?.isHoliday && holiday?.appliesToRegularOnly !== false
+      ? Number(holiday?.billMultiplier || 1.5)
+      : 1;
+
+  const overtimeMultiplier = 1.5;
+  const doubleMultiplier = 2;
+
+  const regularBillCents = Math.round(
+    (regularMinutes * Number(calc.billing.regRateCents || 0) * regularMultiplier) / 60
+  );
+  const overtimeBillCents = Math.round(
+    (overtimeMinutes * Number(calc.billing.otRateCents || 0) * overtimeMultiplier) / 60
+  );
+  const doubleBillCents = Math.round(
+    (doubleMinutes * Number(calc.billing.dtRateCents || 0) * doubleMultiplier) / 60
+  );
+
+  return {
+    regularHours,
+    overtimeHours,
+    doubleHours,
+    regularMultiplier,
+    overtimeMultiplier,
+    doubleMultiplier,
+    regularBillCents,
+    overtimeBillCents,
+    doubleBillCents,
+    totalBillCents: regularBillCents + overtimeBillCents + doubleBillCents,
+    hasRate: true,
+  };
+}
 function normalizeTimeInput(raw: string): string {
   const s = (raw || "").trim();
   if (!s) return "";
 
+  if (s.includes("T")) {
+  const timePartMatch = s.match(/T(\d{2}):(\d{2})/);
+  if (timePartMatch) {
+    const hh = Number(timePartMatch[1]);
+    const mm = timePartMatch[2];
+    const ampm = hh >= 12 ? "PM" : "AM";
+    let h12 = hh % 12;
+    if (h12 === 0) h12 = 12;
+    return `${h12}:${mm} ${ampm}`;
+  }
+}
+
   if (/[ap]\.?m\.?/i.test(s)) {
-    return s
+    const cleaned = s
+      .replace(/\./g, "")
       .replace(/\s+/g, " ")
-      .replace(/\bA\.?M\.?\b/i, "AM")
-      .replace(/\bP\.?M\.?\b/i, "PM")
-      .trim();
+      .trim()
+      .toUpperCase();
+
+    const m12 = cleaned.match(/^(\d{1,2})(?::?(\d{2}))?\s*(AM|PM)$/i);
+    if (m12) {
+      const hh = Number(m12[1]);
+      const mm = String(m12[2] ?? "00").padStart(2, "0");
+      if (hh >= 1 && hh <= 12) return `${hh}:${mm} ${m12[3].toUpperCase()}`;
+    }
+
+    return cleaned;
   }
 
-  const m = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return s;
+  const m24 = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m24) {
+    let hh = Number(m24[1]);
+    const mm = m24[2];
+    if (hh < 0 || hh > 23) return s;
+    const ampm = hh >= 12 ? "PM" : "AM";
+    let h12 = hh % 12;
+    if (h12 === 0) h12 = 12;
+    return `${h12}:${mm} ${ampm}`;
+  }
 
-  let hh = Number(m[1]);
-  const mm = m[2];
+  const bareHour = s.match(/^(\d{1,2})$/);
+  if (bareHour) {
+    let hh = Number(bareHour[1]);
+    if (hh < 0 || hh > 23) return s;
+    const ampm = hh >= 12 ? "PM" : "AM";
+    let h12 = hh % 12;
+    if (h12 === 0) h12 = 12;
+    return `${h12}:00 ${ampm}`;
+  }
 
-  if (Number.isNaN(hh)) return s;
-  if (hh < 0 || hh > 23) return s;
+  const compact = s.match(/^(\d{3,4})$/);
+  if (compact) {
+    const digits = compact[1];
+    const hh = Number(digits.length === 3 ? digits.slice(0, 1) : digits.slice(0, 2));
+    const mm = Number(digits.length === 3 ? digits.slice(1) : digits.slice(2));
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return s;
+    const ampm = hh >= 12 ? "PM" : "AM";
+    let h12 = hh % 12;
+    if (h12 === 0) h12 = 12;
+    return `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
+  }
 
-  const ampm = hh >= 12 ? "PM" : "AM";
-  let h12 = hh % 12;
-  if (h12 === 0) h12 = 12;
-  return `${h12}:${mm} ${ampm}`;
+  return s;
 }
 
 function defaultDayDraft(date: string): DayDraft {
@@ -151,6 +406,9 @@ function defaultDayDraft(date: string): DayDraft {
     p2: { clockIn: "", clockOut: "" },
     b1: { startTime: "", endTime: "" },
     b2: { startTime: "", endTime: "" },
+    isHoliday: false,
+    holidayName: null,
+    holidayMultiplier: null,
   };
 }
 
@@ -176,6 +434,18 @@ function isoToDisplayTime(v?: string | null): string {
 
   if (/[ap]\.?m\.?/i.test(s) || /^\d{1,2}:\d{2}$/.test(s)) {
     return normalizeTimeInput(s);
+  }
+
+  if (s.includes("T")) {
+    const timePartMatch = s.match(/T(\d{2}):(\d{2})/);
+    if (timePartMatch) {
+      const hh = Number(timePartMatch[1]);
+      const mm = timePartMatch[2];
+      const ampm = hh >= 12 ? "PM" : "AM";
+      let h12 = hh % 12;
+      if (h12 === 0) h12 = 12;
+      return `${h12}:${mm} ${ampm}`;
+    }
   }
 
   const d = new Date(s);
@@ -412,9 +682,14 @@ export default function TimeEntryEditorClient(props?: {
         clockOut: normalizeTimeInput(String(p.clockOut || "").trim()),
       }));
 
-    const breaks = [day.b1, day.b2]
-      .filter((b) => String(b?.startTime || "").trim() && String(b?.endTime || "").trim())
-      .map((b) => ({
+      const breaks = [day.b1, day.b2]
+  .filter((b) => {
+    const start = normalizeTimeInput(String(b?.startTime || "").trim());
+    const end = normalizeTimeInput(String(b?.endTime || "").trim());
+    const valid = /^(?:\d{1,2}:\d{2}\s?(?:AM|PM)|\d{1,2}:\d{2})$/i;
+    return valid.test(start) && valid.test(end);
+  })
+	.map((b) => ({
         startTime: normalizeTimeInput(String(b.startTime || "").trim()),
         endTime: normalizeTimeInput(String(b.endTime || "").trim()),
       }));
@@ -424,11 +699,20 @@ export default function TimeEntryEditorClient(props?: {
       return;
     }
 
+        const shiftValidationErr = validateShiftTypeAgainstPunches(day);
+    if (shiftValidationErr) {
+      setCalcByEmpDay((prev) => ({ ...prev, [`${empId}__${date}`]: null }));
+      throw new Error(shiftValidationErr);
+    }
+
     const qs = new URLSearchParams();
     qs.set("workDate", date);
     qs.set("shiftType", day.shiftType || "AM");
     qs.set("punches", JSON.stringify(punches));
     qs.set("breaks", JSON.stringify(breaks));
+    qs.set("employeeId", empId);
+    qs.set("facilityId", String(day.facilityId || ""));
+
 
     const apiUrl = `/api/admin/time-entry/calc?${qs.toString()}`;
 
@@ -589,6 +873,35 @@ export default function TimeEntryEditorClient(props?: {
     });
   }
 
+    function validateShiftTypeAgainstPunches(day: DayDraft) {
+    const hasP1 =
+      !!String(day?.p1?.clockIn || "").trim() &&
+      !!String(day?.p1?.clockOut || "").trim();
+
+    const hasP2 =
+      !!String(day?.p2?.clockIn || "").trim() &&
+      !!String(day?.p2?.clockOut || "").trim();
+
+    const isCombinedShift =
+      day.shiftType === "AM+PM" ||
+      day.shiftType === "PM+NOC" ||
+      day.shiftType === "NOC+AM";
+
+    if (hasP2 && !isCombinedShift) {
+      return "You entered punches for two shifts. Please select a combined Shift Type (AM+PM, PM+NOC, or NOC+AM).";
+    }
+
+    if (!hasP2 && isCombinedShift) {
+      return "You selected a combined Shift Type, but second-shift punches are missing.";
+    }
+
+    if (!hasP1 && hasP2) {
+      return "Shift 1 punches are required before entering Shift 2 punches.";
+    }
+
+    return "";
+  }
+
   async function loadEmployees() {
     const resp = await apiFetch<{ employees: Employee[] }>("/api/admin/employees");
     setEmployees(resp.employees || []);
@@ -599,27 +912,38 @@ export default function TimeEntryEditorClient(props?: {
     setFacilities(resp.facilities || []);
   }
 
-  function mapEntryToDayPatch(e: EntryRow): Partial<DayDraft> {
-    const punches = Array.isArray(e.punchesJson) ? e.punchesJson : [];
-    const breaks = Array.isArray(e.breaksJson) ? e.breaksJson : [];
+function mapEntryToDayPatch(e: EntryRow & { breaks?: Array<{ startTime: string; endTime: string; minutes?: number }> }): Partial<DayDraft> {
+  const punches = Array.isArray(e.punchesJson) ? e.punchesJson : [];
 
-    const p1 = punches[0] || null;
-    const p2 = punches[1] || null;
-    const b1 = breaks[0] || null;
-    const b2 = breaks[1] || null;
+  const breaksSource =
+    Array.isArray((e as any).breaks) && (e as any).breaks.length > 0
+      ? (e as any).breaks
+      : Array.isArray(e.breaksJson)
+      ? e.breaksJson
+      : [];
 
-    return {
-      entryId: e.id,
-      status: e.status,
-      facilityId: e.facilityId || "",
-      shiftType: e.shiftType || "AM",
-      p1: { clockIn: isoToDisplayTime(p1?.clockIn), clockOut: isoToDisplayTime(p1?.clockOut) },
-      p2: { clockIn: isoToDisplayTime(p2?.clockIn), clockOut: isoToDisplayTime(p2?.clockOut) },
-      b1: { startTime: isoToDisplayTime(b1?.startTime), endTime: isoToDisplayTime(b1?.endTime) },
-      b2: { startTime: isoToDisplayTime(b2?.startTime), endTime: isoToDisplayTime(b2?.endTime) },
-    };
-  }
+  const p1 = punches[0] || null;
+  const p2 = punches[1] || null;
+  const b1 = breaksSource[0] || null;
+  const b2 = breaksSource[1] || null;
 
+  return {
+    entryId: e.id,
+    status: e.status,
+    facilityId: e.facilityId || "",
+    shiftType: e.shiftType || "AM",
+        paidNow: !!(e as any).paidNow,
+    paidNowAt: (e as any).paidNowAt || null,
+    paidNowAmountCents: Number((e as any).paidNowAmountCents || 0),
+    paidNowNote: (e as any).paidNowNote || null,
+    paidViaPayrollWeek: !!(e as any).paidViaPayrollWeek,
+    addedAfterFinalizedWeek: !!(e as any).addedAfterFinalizedWeek,
+    p1: { clockIn: isoToDisplayTime(p1?.clockIn), clockOut: isoToDisplayTime(p1?.clockOut) },
+    p2: { clockIn: isoToDisplayTime(p2?.clockIn), clockOut: isoToDisplayTime(p2?.clockOut) },
+    b1: { startTime: isoToDisplayTime(b1?.startTime), endTime: isoToDisplayTime(b1?.endTime) },
+    b2: { startTime: isoToDisplayTime(b2?.startTime), endTime: isoToDisplayTime(b2?.endTime) },
+  };
+}
   async function hydrateDraftFromServer(empId: string, start: string, end: string) {
     const seq = ++loadSeqRef.current;
 
@@ -634,17 +958,30 @@ export default function TimeEntryEditorClient(props?: {
     const list = resp.entries || [];
 
     setDraftsByEmpId((prev) => {
-      const current = prev[empId] ?? defaultDraft();
-      const next: Draft = { ...current, startDate: start, endDate: end, days: { ...(current.days || {}) } };
+        const current = prev[empId] ?? defaultDraft();
+const dates = listDatesInclusive(start, end);
 
-      const dates = listDatesInclusive(start, end);
-      for (const d of dates) next.days[d] = next.days[d] ?? defaultDayDraft(d);
+const freshDays: Record<string, DayDraft> = {};
+for (const d of dates) {
+  freshDays[d] = defaultDayDraft(d);
+}
 
-      for (const e of list) {
-        const dateISO = String(e.workDate).slice(0, 10);
-        if (!next.days[dateISO]) continue;
-        next.days[dateISO] = { ...next.days[dateISO], ...mapEntryToDayPatch(e) } as DayDraft;
-      }
+for (const e of list) {
+  const dateISO = String(e.workDate).slice(0, 10);
+  if (!freshDays[dateISO]) continue;
+  freshDays[dateISO] = {
+    ...freshDays[dateISO],
+    ...mapEntryToDayPatch(e),
+  } as DayDraft;
+}
+
+const next: Draft = {
+  ...current,
+  startDate: start,
+  endDate: end,
+  days: freshDays,
+};
+
 
       return { ...prev, [empId]: next };
     });
@@ -713,6 +1050,11 @@ export default function TimeEntryEditorClient(props?: {
   if (!String(day.facilityId || "").trim()) {
     throw new Error(`Please select a facility for ${date} before saving.`);
   }
+  
+    const shiftValidationErr = validateShiftTypeAgainstPunches(day);
+  if (shiftValidationErr) {
+    throw new Error(`${date}: ${shiftValidationErr}`);
+  }
 
   const breaks = [day.b1, day.b2]
     .filter((b) => String(b?.startTime || "").trim() && String(b?.endTime || "").trim())
@@ -721,7 +1063,13 @@ export default function TimeEntryEditorClient(props?: {
       endTime: normalizeTimeInput(String(b.endTime || "").trim()),
     }));
 
+  const isAdjustment =
+    !!day?.isMissedAdjustment ||
+    day?.sourceType === "PAYROLL_ADJUSTMENT" ||
+    !!day?.adjustmentId;
+
   const shouldResetToDraft =
+    !isAdjustment &&
     !!props?.allowStatusOverrideEdit &&
     (day.status === "APPROVED" || day.status === "LOCKED");
 
@@ -735,6 +1083,26 @@ export default function TimeEntryEditorClient(props?: {
     notes: notes?.trim() ? notes.trim() : undefined,
     ...(shouldResetToDraft ? { status: "DRAFT" } : {}),
   };
+
+  if (isAdjustment) {
+    const adjustmentId = String(day.adjustmentId || "").trim();
+    if (!adjustmentId) {
+      throw new Error(`Missing adjustmentId for ${date}`);
+    }
+    const shiftValidationErr = validateShiftTypeAgainstPunches(day);
+  if (shiftValidationErr) {
+    throw new Error(`${date}: ${shiftValidationErr}`);
+  }
+    await apiFetch(
+      `/api/admin/payroll-adjustments/${encodeURIComponent(adjustmentId)}/correction`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    return { didSave: true, resetToDraft: false };
+  }
 
   if (day.entryId) {
     await apiFetch(`/api/admin/time-entry/${encodeURIComponent(day.entryId)}`, {
@@ -756,7 +1124,7 @@ export default function TimeEntryEditorClient(props?: {
   }
 
   return { didSave: true, resetToDraft: shouldResetToDraft };
-} 
+}
  
   async function saveWeekForEmployee(empId: string) {
   const draft = draftsByEmpId[empId];
@@ -905,6 +1273,72 @@ if (resetToDraftCount > 0) {
     }
   }
 
+
+
+async function payNowForDay(date: string, day: DayDraft) {
+  try {
+    setErr("");
+    setOk("");
+
+    if (!day?.entryId) {
+      setErr("Save this day first before paying.");
+      return;
+    }
+
+    if (day.sourceType === "PAYROLL_ADJUSTMENT" || day.isMissedAdjustment) {
+      setErr("Use the Payroll Adjustment flow for adjustment rows.");
+      return;
+    }
+
+    if (day.status !== "APPROVED" && day.status !== "LOCKED") {
+      setErr("Only APPROVED or LOCKED entries can be paid now.");
+      return;
+    }
+
+    const calc = calcByEmpDay[`${activeEmpId}__${date}`];
+  
+    const payCents = calcPayCents(
+  calc,
+  Number(activeEmp?.hourlyRateCents || 0),
+  date
+);
+    
+    if (!calc || payCents <= 0) {
+      setErr("This day does not have a valid calculated amount yet.");
+      return;
+    }
+
+    const confirmPay = window.confirm(
+      `Pay this time entry now for ${date} for $${(payCents / 100).toFixed(2)}?`
+    );
+    if (!confirmPay) return;
+
+    const paidNote = window.prompt("Optional payment note", "Paid now from time entry");
+    if (paidNote === null) return;
+
+    setLoading(true);
+
+    const resp = await apiFetch<{ ok: boolean; amountCents: number }>(
+      `/api/admin/time-entry/${encodeURIComponent(day.entryId)}/pay-now`,
+      {
+        method: "POST",
+        body: JSON.stringify({ paidNote }),
+      }
+    );
+
+    setOk(
+      `Paid ${date} immediately: $${(Number(resp.amountCents || 0) / 100).toFixed(2)}`
+    );
+
+    if (!props?.lockEmployeeTabs && activeEmpId && activeDraft) {
+      await hydrateDraftFromServer(activeEmpId, activeDraft.startDate, activeDraft.endDate);
+    }
+  } catch (e: any) {
+    setErr(e?.message || "Failed to pay this entry now");
+  } finally {
+    setLoading(false);
+  }
+}
   async function saveWeekForAllTabs() {
     setErr("");
     setOk("");
@@ -1349,28 +1783,160 @@ if (resetToDraftCount > 0) {
                 <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Pay Summary</div>
 
                 {listDatesInclusive(activeDraft.startDate, activeDraft.endDate).map((date) => {
-                  const day = activeDraft.days?.[date] ?? defaultDayDraft(date);
-                  const calcKey = `${activeEmpId}__${date}`;
-                  const calc = calcByEmpDay[calcKey];
-        	  const rateWarning = rateWarningsByEmpDay[calcKey];
+		  const day = activeDraft.days?.[date] ?? defaultDayDraft(date);
+const calcKey = `${activeEmpId}__${date}`;
+const calc = calcByEmpDay[calcKey];
+const rateWarning = rateWarningsByEmpDay[calcKey];
+
+const isHoliday = !!calc?.holiday?.isHoliday || !!day.isHoliday;
+const holidayName = calc?.holiday?.name || day.holidayName || null;
+const holidayMultiplier =
+  calc?.holiday?.payMultiplier || day.holidayMultiplier || 1;
+
+const payCents = calcPayCents(
+  calc,
+  Number(activeEmp?.hourlyRateCents || 0),
+  date,
+  calc?.holiday || null
+);
+const payBreakdown = buildPayBreakdown(
+  calc,
+  Number(activeEmp?.hourlyRateCents || 0),
+  calc?.holiday || null
+);
+
+const billingBreakdown = buildBillingBreakdown(
+  calc,
+  calc?.holiday || null
+);
+
+const marginCents =
+  Number(billingBreakdown.totalBillCents || 0) -
+  Number(payBreakdown.totalPayCents || 0);
+
                   return (
                     <React.Fragment key={date}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-start",
-                          gap: 4,
-                        }}
-                      >
-                        <div style={{ whiteSpace: "nowrap" }}>
-                          {date}
-                          {day.entryId ? (
-                            <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.65 }}>(loaded)</span>
-                          ) : null}
-                        </div>
-                        {day.status ? statusBadge(day) : null}
+                    <div
+  style={{
+    fontSize: 13,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4,
+    background: isHoliday ? "#fffaf0" : undefined,
+    border: isHoliday ? "1px solid #f59e0b" : undefined,
+    borderRadius: 10,
+    padding: isHoliday ? 8 : 0,
+  }}
+>    
+			<div style={{ whiteSpace: "nowrap" }}>
+  {date}
+{isHoliday ? (
+  <div
+    style={{
+      marginTop: 6,
+      padding: "6px 8px",
+      borderRadius: 6,
+      border: "1px solid #f59e0b",
+      background: "#fffbeb",
+      color: "#92400e",
+      fontSize: 11,
+      fontWeight: 700,
+    }}
+  >
+    🎉 {holidayName || "Holiday"}
+    <div style={{ fontWeight: 500 }}>
+      Regular hours @ {holidayMultiplier}x
+    </div>
+  </div>
+) : null}
+
+{day.entryId ? (
+    <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.65 }}>(loaded)</span>
+  ) : null}
+</div>
+			{day.status ? statusBadge(day) : null}
+			
+                        {day.entryId &&
+		        !day.paidNow &&
+		        !day.paidViaPayrollWeek &&	
+                        !day.isMissedAdjustment &&
+			 day.sourceType !== "PAYROLL_ADJUSTMENT" &&
+			 (day.status === "APPROVED" || day.status === "LOCKED") ? (  
+			<button
+                            type="button"
+                            disabled={loading || !calc || payCents <= 0}
+   			    onClick={() => payNowForDay(date, day)}
+                            style={{
+                              marginTop: 4,
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #065f46",
+                              background: "#ecfdf5",
+                              color: "#065f46",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: loading ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            Pay Now
+                          </button>
+                        ) : null}
+
+{day.paidNow ? (
+  <div
+    style={{
+      marginTop: 4,
+      padding: "6px 10px",
+      borderRadius: 8,
+      border: "1px solid #86efac",
+      background: "#f0fdf4",
+      color: "#166534",
+      fontSize: 12,
+      fontWeight: 700,
+      lineHeight: 1.35,
+    }}
+  >
+    Paid Now ${(Number(day.paidNowAmountCents || 0) / 100).toFixed(2)}
+    {day.paidNowAt ? (
+      <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8 }}>
+        {new Date(day.paidNowAt).toLocaleString()}
+      </div>
+    ) : null}
+  </div>
+) : day.paidViaPayrollWeek ? (
+  <div
+    style={{
+      marginTop: 4,
+      padding: "6px 10px",
+      borderRadius: 8,
+      border: "1px solid #bfdbfe",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      fontSize: 12,
+      fontWeight: 700,
+      lineHeight: 1.35,
+    }}
+  >
+    Included in finalized payroll
+  </div>
+) : day.addedAfterFinalizedWeek ? (
+  <div
+    style={{
+      marginTop: 4,
+      padding: "6px 10px",
+      borderRadius: 8,
+      border: "1px solid #fcd34d",
+      background: "#fffbeb",
+      color: "#92400e",
+      fontSize: 12,
+      fontWeight: 700,
+      lineHeight: 1.35,
+    }}
+  >
+    Added after payroll finalized
+  </div>
+) : null}
                           {rateWarning ? (
     <div
       style={{
@@ -1495,13 +2061,13 @@ if (resetToDraftCount > 0) {
 
                       <div
                         style={{
-                          border: "1px solid #ddd",
-                          borderRadius: 8,
-                          padding: 10,
+    			  border: isHoliday ? "1px solid #f59e0b" : "1px solid #ddd",
+			  borderRadius: 8,
+			  padding: 10,
                           fontSize: 12,
                           lineHeight: 1.35,
-                          background: "#fafafa",
-                          minWidth: 260,
+			  background: isHoliday ? "#fffaf0" : "#fafafa",
+			  minWidth: 260,
                         }}
                       >
                         {!calc ? (
@@ -1509,14 +2075,120 @@ if (resetToDraftCount > 0) {
                         ) : (
                           <>
                             <div>
-                              <b>Payable:</b> {calc.display.totalHours_HHMM} ({calc.display.calculatedHours_decimal})
-                            </div>
+                            <b>Payable:</b> {calc.display.calculatedHours_decimal.toFixed(2)}
+			    </div>
                             <div style={{ marginTop: 4 }}>
-                              <b>Reg:</b> {calc.buckets.regular_HHMM} &nbsp;
-                              <b>OT:</b> {calc.buckets.overtime_HHMM} &nbsp;
-                              <b>DT:</b> {calc.buckets.double_HHMM}
-                            </div>
+                            <b>Reg:</b> {calc.buckets.regular_decimal.toFixed(2)}
+			    <b>OT:</b> {calc.buckets.overtime_decimal.toFixed(2)}
+			    <b>DT:</b> {calc.buckets.double_decimal.toFixed(2)}
+			    </div>
+			    {activeEmp ? (
+  <div style={{ marginTop: 4 }}>
+    <b>Amount:</b>{" "}
+    {(payCents / 100).toFixed(2)}
+  </div>
+) : null}
 
+<div
+  style={{
+    marginTop: 8,
+    paddingTop: 8,
+    borderTop: "1px solid #e5e7eb",
+    fontSize: 11,
+    lineHeight: 1.5,
+  }}
+>
+  <div style={{ fontWeight: 700, marginBottom: 4 }}>Employee Pay</div>
+
+  {isHoliday ? (
+    <div
+      style={{
+        marginBottom: 6,
+        color: "#92400e",
+        fontWeight: 700,
+      }}
+    >
+      🎉 {holidayName || "Holiday"} — Regular hours @ {formatMultiplier(payBreakdown.regularMultiplier)}
+    </div>
+  ) : null}
+
+  <div>
+    <b>Reg:</b>{" "}
+    {payBreakdown.regularHours.toFixed(2)}h × {formatMultiplier(payBreakdown.regularMultiplier)} ={" "}
+    {money(payBreakdown.regularPayCents)}
+  </div>
+
+  <div>
+    <b>OT:</b>{" "}
+    {payBreakdown.overtimeHours.toFixed(2)}h × {formatMultiplier(payBreakdown.overtimeMultiplier)} ={" "}
+    {money(payBreakdown.overtimePayCents)}
+  </div>
+
+  <div>
+    <b>DT:</b>{" "}
+    {payBreakdown.doubleHours.toFixed(2)}h × {formatMultiplier(payBreakdown.doubleMultiplier)} ={" "}
+    {money(payBreakdown.doublePayCents)}
+  </div>
+
+  <div style={{ marginTop: 4, fontWeight: 700 }}>
+    Total Pay: {money(payBreakdown.totalPayCents)}
+  </div>
+</div>
+
+<div
+  style={{
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: "1px solid #d1d5db",
+    fontSize: 11,
+    lineHeight: 1.5,
+  }}
+>
+  <div style={{ fontWeight: 700, marginBottom: 4 }}>Client Billing</div>
+
+  {billingBreakdown.hasRate ? (
+    <>
+      <div>
+        <b>Reg:</b>{" "}
+        {billingBreakdown.regularHours.toFixed(2)}h ×{" "}
+        {formatMultiplier(billingBreakdown.regularMultiplier)} ={" "}
+        {money(billingBreakdown.regularBillCents)}
+      </div>
+
+      <div>
+        <b>OT:</b>{" "}
+        {billingBreakdown.overtimeHours.toFixed(2)}h ×{" "}
+        {formatMultiplier(billingBreakdown.overtimeMultiplier)} ={" "}
+        {money(billingBreakdown.overtimeBillCents)}
+      </div>
+
+      <div>
+        <b>DT:</b>{" "}
+        {billingBreakdown.doubleHours.toFixed(2)}h ×{" "}
+        {formatMultiplier(billingBreakdown.doubleMultiplier)} ={" "}
+        {money(billingBreakdown.doubleBillCents)}
+      </div>
+
+      <div style={{ marginTop: 4, fontWeight: 700 }}>
+        Total Bill: {money(billingBreakdown.totalBillCents)}
+      </div>
+
+      <div
+        style={{
+          marginTop: 4,
+          fontWeight: 700,
+          color: marginCents < 0 ? "#b91c1c" : "#166534",
+        }}
+      >
+        Margin: {money(marginCents)}
+      </div>
+    </>
+  ) : (
+    <div style={{ color: "#92400e", fontWeight: 700 }}>
+      Missing billing rate
+    </div>
+  )}
+</div>
                             {Array.isArray(calc.warnings) && calc.warnings.length > 0 ? (
                               <div style={{ marginTop: 6, color: "#b00020" }}>
                                 {calc.warnings.map((w, i) => (

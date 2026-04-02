@@ -1,0 +1,519 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  PAYROLL_ADMIN
+  HR_ADMIN
+  EMPLOYEE
+}
+
+enum TimeEntryStatus {
+  DRAFT
+  APPROVED
+  LOCKED
+}
+
+enum ShiftType {
+  AM
+  PM
+  NOC
+}
+
+enum EmployeeTitle {
+  CNA
+  LVN
+  RN
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  FINALIZED
+  VOIDED
+}
+
+enum PayrollLedgerType {
+  EARLY_PAY
+  PAYROLL_RUN
+  ADJUSTMENT
+  CORRECTION
+  RECOVERY
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(EMPLOYEE)
+  
+  name              String?
+  active            Boolean   @default(true)
+  mustChangePassword Boolean  @default(false)
+  passwordUpdatedAt DateTime?
+  lastLoginAt       DateTime?
+
+  // Employee link (employee can exist without a user)
+  employeeId String?   @unique
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+
+  // who created time entries (admin)
+  createdTimeEntries TimeEntry[] @relation("TimeEntryCreatedBy")
+
+  // who created invites (admin)
+  createdInvites                 Invite[]                  @relation("InviteCreatedBy")
+  lockedFacilityBillingContracts FacilityBillingContract[] @relation("FacilityBillingContractLockedBy")
+  payrollRunsCreated             PayrollRun[]              @relation("PayrollRunCreatedBy")
+  earlyPayrollPaymentsCreated    EarlyPayrollPayment[]     @relation("EarlyPayrollPaymentCreatedBy")
+  createdAt                      DateTime                  @default(now())
+  updatedAt                      DateTime                  @updatedAt
+}
+
+model Employee {
+  id                 String              @id @default(cuid())
+  legalName          String
+  preferredName      String?
+  email              String              @unique
+  hourlyRateCents    Int                 @default(0)
+  active             Boolean             @default(true)
+  title              EmployeeTitle       @default(CNA)
+  startDate          DateTime?
+  loans              EmployeeLoan[]
+  loanDeductions     LoanDeduction[]
+  billingRole        String?
+  addressLine1       String?
+  addressLine2       String?
+  city               String?
+  state              String?
+  zip                String?
+  ssnLast4           String?
+  payrollAdjustments PayrollAdjustment[]
+  payrollCorrections PayrollCorrection[]
+  earlyPayrollPayments EarlyPayrollPayment[]
+  payrollLedgerEntries EmployeePayrollLedger[]
+  // optional user
+  user               User?
+  // time entries exist even if user doesn't exist / invite not accepted
+  timeEntries        TimeEntry[]
+
+  // invites for this employee
+  invites                  Invite[]
+  payrollRunEmployees      PayrollRunEmployee[]
+  payrollRunEntrySnapshots PayrollRunEntrySnapshot[]
+  earlyPayrollPayments     EarlyPayrollPayment[]
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+}
+
+model TimeEntry {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  workDate      DateTime
+  shiftType     ShiftType?
+  startTime     DateTime?
+  endTime       DateTime?
+  breaks        TimeEntryBreak[]
+  minutesWorked Int              @default(0)
+  breakMinutes  Int              @default(0)
+  notes         String?
+  clientId      String?
+  client        Client?          @relation(fields: [clientId], references: [id])
+  facilityId    String?
+  facility      Facility?        @relation(fields: [facilityId], references: [id])
+  status        TimeEntryStatus  @default(DRAFT)
+  punchKey      String           @default("")
+  punchesJson   Json?
+  breaksJson    Json?
+  createdById   String?
+  createdBy     User?            @relation("TimeEntryCreatedBy", fields: [createdById], references: [id])
+  billedAt          DateTime?
+  invoiceNumber     String?
+  invoiceType       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, workDate, facilityId, shiftType, punchKey])
+  @@unique([employeeId, facilityId, workDate, shiftType], name: "uniq_employee_facility_date_shift")
+  @@index([clientId, employeeId, workDate])
+}
+
+model TimeEntryBreak {
+  id          String    @id @default(cuid())
+  timeEntryId String
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+
+  startTime DateTime
+  endTime   DateTime
+  minutes   Int
+
+  createdAt DateTime @default(now())
+
+  @@index([timeEntryId])
+}
+
+model Invite {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  email      String?
+  // token storage (store a random token; you can hash it later)
+  token      String   @unique
+
+  // who invited
+  createdById String?
+  createdBy   User?   @relation("InviteCreatedBy", fields: [createdById], references: [id])
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts   Contract[]
+  timeEntries TimeEntry[]
+}
+
+model Contract {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  // Contract effective window
+  effectiveFrom DateTime
+  effectiveTo   DateTime? // null = current
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rates ContractRate[]
+
+  @@index([clientId, effectiveFrom])
+}
+
+model ContractRate {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id])
+
+  title EmployeeTitle
+
+  billRegRateCents Int
+  billOtRateCents  Int
+  billDtRateCents  Int
+
+  @@unique([contractId, title])
+}
+
+model Facility {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rates            FacilityRate[]
+  timeEntries      TimeEntry[]
+  billingContracts FacilityBillingContract[]
+  payrollAdjustments PayrollAdjustment[]
+}
+
+model FacilityRate {
+  id            String        @id @default(cuid())
+  facilityId    String?
+  title         EmployeeTitle
+  effectiveFrom DateTime
+
+  // cents per hour
+  regRateCents Int
+  otRateCents  Int
+  dtRateCents  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  facility Facility? @relation(fields: [facilityId], references: [id])
+
+  @@index([facilityId, title, effectiveFrom])
+}
+
+model EmployeeLoan {
+  id               String   @id @default(cuid())
+  employeeId       String
+  principalCents   Int
+  outstandingCents Int
+  note             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  // ✅ weekly deduction default (admin can set once, then used each payroll)
+  weeklyDeductionCents Int @default(0)
+
+  // ✅ lock changes behind a PIN
+  weeklyDeductionLocked Boolean @default(false)
+
+  deductions LoanDeduction[]
+}
+
+model LoanDeduction {
+  id          String   @id @default(cuid())
+  loanId      String
+  employeeId  String
+  // pay-period this deduction belongs to
+  periodStart DateTime
+  periodEnd   DateTime
+  amountCents Int
+  note        String?
+  createdAt   DateTime @default(now())
+
+  loan     EmployeeLoan @relation(fields: [loanId], references: [id])
+  employee Employee     @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, periodStart, periodEnd])
+}
+
+model FacilityBillingContract {
+  id         String   @id @default(cuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id])
+
+  title         String    @default("Default Contract")
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  isLocked   Boolean               @default(false)
+  lockedAt   DateTime?
+  lockedById String?
+  lockedBy   User?                 @relation("FacilityBillingContractLockedBy", fields: [lockedById], references: [id])
+  rates      FacilityBillingRate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([facilityId, effectiveFrom])
+}
+
+model FacilityBillingRate {
+  id         String                  @id @default(cuid())
+  contractId String
+  contract   FacilityBillingContract @relation(fields: [contractId], references: [id])
+
+  role             String // "CNA", "LVN" (later can be enum)
+  regRateCents     Int
+  otRateCents      Int
+  dtRateCents      Int
+  holidayRateCents Int
+
+  @@unique([contractId, role])
+}
+
+model PayrollAdjustment {
+  id                  String             @id @default(cuid())
+  employeeId          String
+  payrollRunId        String?
+  amountCents         Int                @default(0)
+  reason              String?
+  createdAt           DateTime           @default(now())
+
+  paidImmediately     Boolean            @default(false)
+  paidAt              DateTime?
+  paidNote            String?
+  paidAmountCents     Int?
+
+  payrollRun          PayrollRun?        @relation(fields: [payrollRunId], references: [id])
+  employee            Employee           @relation(fields: [employeeId], references: [id])
+  correction          PayrollCorrection?
+
+  facilityId          String?
+  facility            Facility?          @relation(fields: [facilityId], references: [id])
+
+  workDate            DateTime?
+  shiftType           ShiftType?
+  punchesJson         Json?
+  breaksJson          Json?
+
+  payableMinutes      Int?
+  regularMinutes      Int?
+  overtimeMinutes     Int?
+  doubleMinutes       Int?
+
+  billAmountCents     Int?
+  billedAt            DateTime?
+  invoiceNumber       String?
+  invoiceType         String?
+  isSuperseded        Boolean  @default(false)
+  supersededById      String?
+  correctionOfId      String?
+  isCorrection        Boolean  @default(false)
+}
+
+model PayrollRun {
+  id          String           @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  status      PayrollRunStatus @default(DRAFT)
+  notes       String?
+
+  createdById String?
+  createdBy   User?   @relation("PayrollRunCreatedBy", fields: [createdById], references: [id])
+
+  finalizedAt          DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  adjustments          PayrollAdjustment[]
+  employees            PayrollRunEmployee[]
+  entrySnapshots       PayrollRunEntrySnapshot[]
+  corrections          PayrollCorrection[]
+  earlyPayrollPayments EarlyPayrollPayment[]
+
+  @@index([periodStart, periodEnd])
+  @@index([status])
+}
+
+model PayrollRunEmployee {
+  id           String @id @default(cuid())
+  payrollRunId String
+  employeeId   String
+
+  regularMinutes  Int @default(0)
+  overtimeMinutes Int @default(0)
+  doubleMinutes   Int @default(0)
+  breakMinutes    Int @default(0)
+  payableMinutes  Int @default(0)
+
+  regularPayCents  Int @default(0)
+  overtimePayCents Int @default(0)
+  doublePayCents   Int @default(0)
+  grossPayCents    Int @default(0)
+
+  adjustmentsCents     Int     @default(0)
+  loanDeductionCents   Int     @default(0)
+  netPayCents          Int     @default(0)
+  paidEarly            Boolean @default(false)
+  paidEarlyAmountCents Int     @default(0)
+  snapshotVersion      Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+}
+
+model PayrollRunEntrySnapshot {
+  id           String  @id @default(cuid())
+  payrollRunId String
+  employeeId   String
+  timeEntryId  String?
+
+  workDate     DateTime
+  status       String
+  snapshotJson Json
+  corrections  PayrollCorrection[] @relation("SnapshotCorrections")
+  createdAt    DateTime            @default(now())
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+  @@index([timeEntryId])
+  @@index([workDate])
+}
+
+model PayrollCorrection {
+  id                   String @id @default(cuid())
+  payrollRunId         String
+  payrollRunSnapshotId String
+  employeeId           String
+
+  workDate DateTime
+  reason   String?
+
+  originalSnapshotJson Json
+  correctedInputJson   Json
+  correctedResultJson  Json
+
+  adjustmentAmountCents Int
+  payrollAdjustmentId   String? @unique
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  payrollRun         PayrollRun              @relation(fields: [payrollRunId], references: [id])
+  employee           Employee                @relation(fields: [employeeId], references: [id])
+  payrollAdjustment  PayrollAdjustment?      @relation(fields: [payrollAdjustmentId], references: [id])
+  payrollRunSnapshot PayrollRunEntrySnapshot @relation("SnapshotCorrections", fields: [payrollRunSnapshotId], references: [id])
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+  @@index([workDate])
+}
+
+model EarlyPayrollPayment {
+  id           String   @id @default(cuid())
+  employeeId   String
+  periodStart  DateTime
+  periodEnd    DateTime
+  amountCents  Int
+  note         String?
+  paidAt       DateTime @default(now())
+  createdById  String?
+  payrollRunId String?
+
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  createdBy  User?       @relation("EarlyPayrollPaymentCreatedBy", fields: [createdById], references: [id])
+  payrollRun PayrollRun? @relation(fields: [payrollRunId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([employeeId, periodStart, periodEnd])
+}
+
+model EmployeePayrollLedger {
+  id            String   @id @default(cuid())
+
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  type          PayrollLedgerType
+  amountCents   Int
+
+  note          String?
+
+  createdById   String?
+  createdBy     User? @relation(fields: [createdById], references: [id])
+
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId, periodStart, periodEnd])
+}

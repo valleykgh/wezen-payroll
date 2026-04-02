@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { sendEmployeeInviteEmail } from "../../lib/email";
 import { prisma } from "../../prisma";
 import { signToken } from "../../auth";
+import { startOfDayUTC } from "./_shared";
+
 const router = express.Router();
 
 function requireFacilityPin(req: any) {
@@ -364,5 +366,175 @@ router.post("/dev/employee-token", async (req, res) => {
     return res.status(500).json({ error: "Failed to generate token" });
   }
 });
+router.get("/employees/:id/ledger", async (req, res) => {
+  try {
+    const employeeId = String(req.params.id || "").trim();
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
 
+    if (!employeeId) {
+      return res.status(400).json({ error: "employee id required" });
+    }
+    if (!from || !to) {
+      return res.status(400).json({ error: "from and to required" });
+    }
+
+    const fromDt = new Date(`${from}T00:00:00.000Z`);
+    const toDt = new Date(`${to}T00:00:00.000Z`);
+    const toExclusive = new Date(toDt);
+    toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        legalName: true,
+        preferredName: true,
+        email: true,
+        title: true,
+      },
+    });
+
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+      const ledger = await prisma.employeePayrollLedger.findMany({
+        where: {
+          employeeId,
+          periodEnd: {
+            gte: fromDt,
+          },
+          periodStart: {
+            lt: toExclusive,
+          },
+        },
+        orderBy: [
+          { periodStart: "asc" },
+          { createdAt: "asc" },
+        ],
+      });
+
+      let runningBalanceCents = 0;
+
+      const ledgerWithBalance = ledger.map((r) => {
+        runningBalanceCents += Number(r.amountCents || 0);
+
+        return {
+          id: r.id,
+          date: r.createdAt,
+          type: r.type,
+          note: r.note,
+          amountCents: Number(r.amountCents || 0),
+          runningBalanceCents,
+          runningBalance: runningBalanceCents / 100,
+        };
+      });
+
+      const payrollRuns = await prisma.payrollRunEmployee.findMany({
+        where: {
+          employeeId,
+          payrollRun: {
+            periodStart: {
+              gte: fromDt,
+            },
+            periodEnd: {
+              lte: toDt,
+            },
+          },
+        },
+        include: {
+          payrollRun: {
+            select: {
+              id: true,
+              periodStart: true,
+              periodEnd: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: [{ payrollRun: { periodStart: "asc" } }],
+      });
+
+const payrollTotals = payrollRuns.reduce(
+  (acc, r) => {
+    acc.grossPayCents += Number(r.grossPayCents || 0);
+    acc.netPayCents += Number(r.netPayCents || 0);
+    return acc;
+  },
+  {
+    grossPayCents: 0,
+    netPayCents: 0,
+  }
+);
+
+const ledgerTotals = ledger.reduce(
+  (acc, r) => {
+    const amt = Number(r.amountCents || 0);
+
+
+    if (r.type === "EARLY_PAY") {
+  if (amt < 0) {
+    acc.earlyPaidCents += Math.abs(amt);
+  } else {
+    acc.earlyPaidCents -= Math.abs(amt);
+  }
+}
+
+    if (r.type === "EARNINGS_ADJUSTMENT") {
+      acc.earningsAdjustmentCents += amt;
+    }
+
+    acc.ledgerNetCents += amt;
+    return acc;
+  },
+  {
+    earlyPaidCents: 0,
+    earningsAdjustmentCents: 0,
+    ledgerNetCents: 0,
+  }
+);
+
+const totalGrossPayCents =
+  payrollTotals.grossPayCents + ledgerTotals.earningsAdjustmentCents;
+
+const totalNetPayCents =
+  payrollTotals.netPayCents + ledgerTotals.earningsAdjustmentCents;
+
+const totals = {
+  ledgerNetCents: ledgerTotals.ledgerNetCents,
+  grossPayCents: totalGrossPayCents,
+  netPayCents: totalNetPayCents,
+  earlyPaidCents: ledgerTotals.earlyPaidCents,
+
+  ledgerNet: ledgerTotals.ledgerNetCents / 100,
+  grossPay: totalGrossPayCents / 100,
+  netPay: totalNetPayCents / 100,
+  earlyPaid: ledgerTotals.earlyPaidCents / 100,
+
+};
+
+
+return res.json({
+  employee,
+  ledger: ledgerWithBalance,
+  payrollRuns: payrollRuns.map((r) => ({
+    payrollRunId: r.payrollRunId,
+    periodStart: r.payrollRun?.periodStart,
+    periodEnd: r.payrollRun?.periodEnd,
+    grossPayCents: r.grossPayCents,
+    adjustmentsCents: r.adjustmentsCents,
+    loanDeductionCents: r.loanDeductionCents,
+    netPayCents: r.netPayCents,
+    paidEarly: r.paidEarly,
+    paidEarlyAmountCents: r.paidEarlyAmountCents,
+    status: r.payrollRun?.status,
+  })),
+  totals,
+});
+} catch (e: any) {
+    console.error("GET /api/admin/employees/:id/ledger failed:", e);
+    return res.status(500).json({ error: e?.message || "Failed to load employee ledger" });
+  }
+});
 export default router;
