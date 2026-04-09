@@ -7,19 +7,33 @@ exports.requireAuth = requireAuth;
 exports.requireRole = requireRole;
 exports.requireAdmin = requireAdmin;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const auth_1 = require("../auth");
 function requireAuth(req, res, next) {
     try {
-        const auth = String(req.headers.authorization || "");
-        if (!auth.toLowerCase().startsWith("bearer ")) {
+        let token = (0, auth_1.readAuthToken)(req);
+        if (!token) {
+            const auth = String(req.headers.authorization || "");
+            if (auth.toLowerCase().startsWith("bearer ")) {
+                token = auth.slice(7).trim();
+            }
+        }
+        token = String(token || "").replace(/[\u0000-\u001F\u007F]/g, "");
+        if (!token) {
             return res.status(401).json({ error: "Missing token" });
         }
-        let token = auth.slice(7).trim();
-        token = token.replace(/[\u0000-\u001F\u007F]/g, "");
         const secret = process.env.JWT_SECRET;
         if (!secret) {
             console.error("JWT_SECRET not set");
             return res.status(500).json({ error: "Server auth misconfigured" });
         }
+        console.log("AUTH DEBUG", {
+            hasCookieToken: Boolean((0, auth_1.readAuthToken)(req)),
+            hasBearer: String(req.headers.authorization || "").toLowerCase().startsWith("bearer "),
+            cookieName: process.env.AUTH_COOKIE_NAME || "wezen_auth",
+            nodeEnv: process.env.NODE_ENV,
+            cookieDomain: process.env.COOKIE_DOMAIN || null,
+            tokenPrefix: String(token || "").slice(0, 12),
+        });
         const payload = jsonwebtoken_1.default.verify(token, secret);
         const id = String(payload.sub || payload.id || payload.userId || "").trim();
         const role = String(payload.role || "").trim().toUpperCase();

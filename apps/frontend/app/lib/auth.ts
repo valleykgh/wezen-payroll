@@ -1,6 +1,5 @@
-// apps/frontend/app/lib/auth.ts
-
 export type Role = "ADMIN" | "SUPER_ADMIN" | "PAYROLL_ADMIN" | "HR_ADMIN" | "EMPLOYEE";
+
 export type AuthedUser = {
   id: string;
   email: string;
@@ -9,21 +8,7 @@ export type AuthedUser = {
   mustChangePassword?: boolean;
 };
 
-const TOKEN_KEY = "payroll_token";
 const USER_KEY = "payroll_user";
-
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
 
 export function getUser(): AuthedUser | null {
   if (typeof window === "undefined") return null;
@@ -44,12 +29,10 @@ export function clearUser() {
   localStorage.removeItem(USER_KEY);
 }
 
-export function logout() {
-  clearToken();
+export function logoutLocal() {
   clearUser();
 }
 
-export function setSession(token: string, user: AuthedUser) {
-  setToken(token);
+export function setSession(user: AuthedUser) {
   setUser(user);
 }

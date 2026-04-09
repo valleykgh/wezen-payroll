@@ -94,7 +94,7 @@ export default function AdminLoansPage() {
         method: "POST",
         body: JSON.stringify({
           employeeId: createEmployeeId,
-          amoutnCents: principalCents,
+          amountCents: principalCents,
           weeklyDeductionCents,
           note: createNote.trim() || undefined,
         }),
@@ -203,31 +203,50 @@ export default function AdminLoansPage() {
   }, []);
 
   return (
-    <div style={{ padding: 16, maxWidth: 1250, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Loans</h1>
-      <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 14 }}>
-        Create employee loans, set default payroll deduction, and make manual deductions.
+     <div style={{ padding: 0, maxWidth: 1250, margin: "0 auto" }}>
+  <h1
+    style={{
+      fontSize: 30,
+      fontWeight: 800,
+      marginBottom: 8,
+      color: "#0f172a",
+      letterSpacing: "-0.02em",
+    }}
+  >
+    Loans
+  </h1>
+  <div style={{ fontSize: 15, color: "#64748b", marginBottom: 18 }}>   
+	Create employee loans, set default payroll deduction, and make manual deductions.
       </div>
 
       <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 12,
-          padding: 14,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Create Loan</div>
+      style={{
+  border: "1px solid #e2e8f0",
+  borderRadius: 24,
+  padding: 20,
+  marginBottom: 16,
+  background: "#ffffff",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	>
 
+	<div style={{ fontWeight: 800, marginBottom: 12, color: "#0f172a" }}>Create Loan</div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 2fr auto", gap: 10, alignItems: "end" }}>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Employee</div>
-            <select
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Employee</div>
+	    <select
               value={createEmployeeId}
               onChange={(e) => setCreateEmployeeId(e.target.value)}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    >
               <option value="">Select employee</option>
               {sortedEmployees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -243,8 +262,16 @@ export default function AdminLoansPage() {
               value={createPrincipal}
               onChange={(e) => setCreatePrincipal(e.target.value)}
               placeholder="e.g. 250000"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
 
           <div>
@@ -253,8 +280,16 @@ export default function AdminLoansPage() {
               value={createWeeklyDeduction}
               onChange={(e) => setCreateWeeklyDeduction(e.target.value)}
               placeholder="e.g. 2500"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+           />
           </div>
 
           <div>
@@ -263,8 +298,16 @@ export default function AdminLoansPage() {
               value={createNote}
               onChange={(e) => setCreateNote(e.target.value)}
               placeholder="Optional note"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	   />
           </div>
 
           <button
@@ -272,79 +315,258 @@ export default function AdminLoansPage() {
             onClick={createLoan}
             disabled={loading}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 700,
-              height: 42,
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  height: 44,
+  opacity: loading ? 0.6 : 1,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.10)",
+}}
+	  >
             Create Loan
           </button>
         </div>
       </div>
 
-      {ok ? <div style={{ marginBottom: 10, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-      {err ? <div style={{ marginBottom: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+      {ok ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}      
+
+{err ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
 
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
-              <th style={{ padding: 10 }}>Employee</th>
-              <th style={{ padding: 10 }}>Principal</th>
-              <th style={{ padding: 10 }}>Outstanding</th>
-              <th style={{ padding: 10 }}>Weekly Deduction</th>
-              <th style={{ padding: 10 }}>Locked</th>
-              <th style={{ padding: 10 }}>Note</th>
-              <th style={{ padding: 10 }}>Created</th>
-              <th style={{ padding: 10 }}>Actions</th>
+            <tr style={{ background: "#f8fafc", textAlign: "left" }}>  
+              <th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Employee
+</th>
+              
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Principal
+</th>
+              
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Outstanding
+</th>
+        
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Weekly Deduction
+</th>      
+
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Locked
+</th>              
+        
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Note
+</th>      
+        
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Created
+</th>      
+
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Actions
+</th>
             </tr>
           </thead>
           <tbody>
             {loans.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
-                  No loans found.
-                </td>
-              </tr>
+              <td colSpan={8} style={{ padding: "14px 16px", color: "#64748b", fontSize: 13 }}>
+  No loans found.
+</td>
+	      </tr>
             ) : (
               loans.map((loan) => {
                 const isEditing = editingLoanId === loan.id;
                 const fullyPaid = Number(loan.outstandingCents || 0) <= 0;
 
                 return (
-                  <tr key={loan.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: 10 }}>
-                      <div style={{ fontWeight: 600 }}>{loan.employee?.legalName || loan.employeeId}</div>
-                      {loan.employee?.email ? (
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>{loan.employee.email}</div>
-                      ) : null}
+                 <tr key={loan.id} style={{ background: "#ffffff" }}>   
+                    <td
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #f1f5f9",
+    verticalAlign: "top",
+    color: "#0f172a",
+  }}
+>  
+          <div style={{ fontWeight: 700, color: "#0f172a" }}>
+  {loan.employee?.legalName || loan.employeeId}
+</div>            
+		    {loan.employee?.email ? (
+            <div style={{ fontSize: 12, color: "#64748b" }}>{loan.employee.email}</div>          
+		) : null}
                     </td>
 
-                    <td style={{ padding: 10 }}>{moneyFromCents(loan.principalCents)}</td>
-
-                    <td style={{ padding: 10 }}>
-                      <span style={{ fontWeight: 700, color: fullyPaid ? "#047857" : "#111" }}>
-                        {moneyFromCents(loan.outstandingCents)}
+		<td
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #f1f5f9",
+    verticalAlign: "top",
+    color: "#0f172a",
+  }}
+>
+  {moneyFromCents(loan.principalCents)}
+</td>
+		<td
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #f1f5f9",
+    verticalAlign: "top",
+  }}
+>
+                  <span style={{ fontWeight: 700, color: fullyPaid ? "#166534" : "#0f172a" }}>      
+			{moneyFromCents(loan.outstandingCents)}
                       </span>
                     </td>
 
-                    <td style={{ padding: 10 }}>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid #f1f5f9",
+                        verticalAlign: "top",
+                        color: "#0f172a",
+                      }}
+                    >
                       {isEditing ? (
                         <input
                           value={editingWeeklyDeduction}
                           onChange={(e) => setEditingWeeklyDeduction(e.target.value)}
-                          style={{ width: 120, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+                          style={{
+                            width: 120,
+                            padding: "10px 12px",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 14,
+                            background: "#ffffff",
+                            color: "#0f172a",
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                          }}
                         />
                       ) : (
                         moneyFromCents(loan.weeklyDeductionCents)
                       )}
                     </td>
 
-                    <td style={{ padding: 10 }}>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid #f1f5f9",
+                        verticalAlign: "top",
+                        color: "#0f172a",
+                      }}
+                    >
                       {isEditing ? (
                         <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <input
@@ -387,13 +609,30 @@ export default function AdminLoansPage() {
                       )}
                     </td>
 
-                    <td style={{ padding: 10 }}>{loan.note || "—"}</td>
 
-                    <td style={{ padding: 10, fontSize: 13, opacity: 0.8 }}>
+                    <td style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
+  verticalAlign: "top",
+  color: "#0f172a",
+}}>{loan.note || "—"}</td>
+
+                    <td style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
+  verticalAlign: "top",
+  color: "#64748b",
+  fontSize: 13,
+}}>
                       {loan.createdAt ? new Date(loan.createdAt).toLocaleString() : "—"}
                     </td>
 
-                    <td style={{ padding: 10 }}>
+                    <td style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
+  verticalAlign: "top",
+  color: "#0f172a",
+}}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {isEditing ? (
                           <>
@@ -402,13 +641,15 @@ export default function AdminLoansPage() {
                               disabled={loading}
                               onClick={() => saveWeeklyDeduction(loan)}
                               style={{
-                                padding: "8px 12px",
-                                borderRadius: 8,
-                                border: "1px solid #111",
-                                background: "#111",
-                                color: "#fff",
-                              }}
-                            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			    >
                               Save Deduction
                             </button>
 
@@ -417,12 +658,14 @@ export default function AdminLoansPage() {
                               disabled={loading}
                               onClick={cancelEdit}
                               style={{
-                                padding: "8px 12px",
-                                borderRadius: 8,
-                                border: "1px solid #ccc",
-                                background: "#fff",
-                              }}
-                            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}
+			    >
                               Cancel
                             </button>
                           </>
@@ -432,12 +675,14 @@ export default function AdminLoansPage() {
                             disabled={loading || fullyPaid}
                             onClick={() => startEdit(loan)}
                             style={{
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: "1px solid #ccc",
-                              background: "#fff",
-                            }}
-                          >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}  
+			>
                             Edit Deduction
                           </button>
                         )}
@@ -447,14 +692,15 @@ export default function AdminLoansPage() {
                           disabled={loading || fullyPaid}
                           onClick={() => manualDeduct(loan)}
                           style={{
-                            padding: "8px 12px",
-                            borderRadius: 8,
-                            border: "1px solid #047857",
-                            background: "#ecfdf5",
-                            color: "#047857",
-                            fontWeight: 700,
-                          }}
-                        >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			>
                           Manual Deduct
                         </button>
                       </div>

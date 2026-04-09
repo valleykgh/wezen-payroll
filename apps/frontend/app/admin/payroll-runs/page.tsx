@@ -191,43 +191,62 @@ export default function AdminPayrollRunsPage() {
   }, [items]);
 
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto" }}>
       <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24 }}>Payroll Runs</h1>
-          <div style={{ color: "#666", marginTop: 4 }}>
-            Finalized payroll snapshots and totals
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 6,
+  }}
+>  
+	<div>
+        <h1
+  style={{
+    margin: 0,
+    fontSize: 30,
+    fontWeight: 800,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Payroll Runs
+</h1>  
+            <div style={{ color: "#64748b", marginTop: 6, fontSize: 15 }}>
+		Finalized payroll snapshots and totals
           </div>
         </div>
       </div>
-
-      <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          border: "1px solid #ddd",
-          borderRadius: 10,
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "end",
-        }}
-      >
+<div
+  style={{
+    marginTop: 16,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+    alignItems: "end",
+  }}
+>
         <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Status</div>
-          <select
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Status</div>
+	  <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          >
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  >
             <option value="">ALL</option>
             <option value="DRAFT">DRAFT</option>
             <option value="FINALIZED">FINALIZED</option>
@@ -236,31 +255,52 @@ export default function AdminPayrollRunsPage() {
         </div>
 
         <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>From</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>From</div>
           <input
             type="date"
             value={from}
             onChange={(e) => { setPreset(""); setFrom(e.target.value)}}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  />
         </div>
 
         <div>
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>To</div>
-          <input
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>To</div>
+	  <input
             type="date"
             value={to}
             onChange={(e) => { setPreset(""); setTo(e.target.value)}}
-            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  />
         </div>
         
         <div>
-  <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Preset</div>
+    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Preset</div>
   <select
     value={preset}
     onChange={(e) => applyPreset(e.target.value)}
-    style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+    style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
   >
     <option value="">Custom</option>
     <option value="THIS_WEEK">This Week</option>
@@ -273,34 +313,52 @@ export default function AdminPayrollRunsPage() {
           onClick={load}
           disabled={loading}
           style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid #111",
-            background: "#111",
-            color: "#fff",
-            height: 40,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  height: 44,
+  fontWeight: 700,
+  cursor: loading ? "not-allowed" : "pointer",
+  opacity: loading ? 0.6 : 1,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.10)",
+}}
         >
           {loading ? "Loading..." : "Load"}
         </button>
       </div>
 
-      {err ? <div style={{ marginTop: 12, color: "#b00020" }}>{err}</div> : null}
-
-      <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          border: "1px solid #ddd",
-          borderRadius: 10,
-          background: "#fafafa",
-          display: "flex",
-          gap: 18,
-          flexWrap: "wrap",
-          fontSize: 13,
-        }}
-      >
+{err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+      fontSize: 13,
+    }}
+  >
+    {err}
+  </div>
+) : null}
+        <div
+  style={{
+    marginTop: 16,
+    padding: 18,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+    display: "flex",
+    gap: 18,
+    flexWrap: "wrap",
+    fontSize: 13,
+    color: "#334155",
+  }}
+>
         <div>
           Runs: <b>{items.length}</b>
         </div>
@@ -321,11 +379,20 @@ export default function AdminPayrollRunsPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: 16, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
-          <thead>
-            <tr style={{ background: "#f9fafb" }}>
-              <th style={th}>Pay Period</th>
+        <div
+  style={{
+    marginTop: 16,
+    overflowX: "auto",
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+       <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 980 }}>   
+	 <thead>
+            <tr style={{ background: "#f8fafc" }}>  
+	      <th style={th}>Pay Period</th>
               <th style={th}>Status</th>
               <th style={th}>Employees</th>
               <th style={th}>Gross</th>
@@ -359,15 +426,16 @@ export default function AdminPayrollRunsPage() {
                   <Link
                     href={`/admin/payroll-runs/${r.id}`}
                     style={{
-                      display: "inline-block",
-                      padding: "8px 10px",
-                      border: "1px solid #ccc",
-                      borderRadius: 8,
-                      textDecoration: "none",
-                      color: "#111",
-                      background: "#fff",
-                    }}
-                  >
+  display: "inline-block",
+  padding: "8px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 999,
+  textDecoration: "none",
+  color: "#0f172a",
+  background: "#ffffff",
+  fontWeight: 700,
+}}  
+		>
                     View
                   </Link>
                 </td>
@@ -390,14 +458,19 @@ export default function AdminPayrollRunsPage() {
 
 const th: React.CSSProperties = {
   textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #ddd",
-  fontSize: 13,
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #eee",
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
   fontSize: 13,
   verticalAlign: "top",
+  color: "#0f172a",
 };

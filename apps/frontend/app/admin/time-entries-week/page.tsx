@@ -12,11 +12,6 @@ type EmployeeLite = {
   email?: string | null;
 };
 
-type FacilityLite = {
-  id: string;
-  name: string;
-};
-
 type EntryRow = {
   id: string;
   employeeId: string;
@@ -70,6 +65,7 @@ function minutesToHHMM(min: number) {
   const m = Math.max(0, Number(min || 0));
   return (m / 60).toFixed(2);
 }
+
 function formatEmployeeName(e?: EmployeeLite | null) {
   if (!e) return "Unknown";
   return e.preferredName ? `${e.legalName} (${e.preferredName})` : e.legalName;
@@ -77,14 +73,26 @@ function formatEmployeeName(e?: EmployeeLite | null) {
 
 function startOfWeekISO(baseISO?: string) {
   const d = baseISO ? new Date(`${baseISO}T00:00:00`) : new Date();
-  const day = d.getDay(); // 0=Sun, 1=Mon, ...
-  const diff = day === 0 ? -6 : 1 - day; // make Monday the start
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   return d.toISOString().slice(0, 10);
 }
 
 function endOfWeekISO(baseISO?: string) {
   return addDaysISO(startOfWeekISO(baseISO), 6);
+}
+
+function statusBadgeClass(status: EntryStatus) {
+  if (status === "LOCKED") {
+    return "inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700";
+  }
+
+  if (status === "APPROVED") {
+    return "inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700";
+  }
+
+  return "inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700";
 }
 
 export default function AdminTimeEntriesWeekPage() {
@@ -98,39 +106,41 @@ export default function AdminTimeEntriesWeekPage() {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
-    const [rowStatusFilter, setRowStatusFilter] = useState<"ALL" | EntryStatus>("ALL");  
+  const [rowStatusFilter, setRowStatusFilter] = useState<"ALL" | EntryStatus>("ALL");
+
   function applyPreset(value: string) {
-  setPreset(value);
+    setPreset(value);
 
-  if (value === "THIS_WEEK") {
-    setFrom(startOfWeekISO());
-    setTo(endOfWeekISO());
-    return;
+    if (value === "THIS_WEEK") {
+      setFrom(startOfWeekISO());
+      setTo(endOfWeekISO());
+      return;
+    }
+
+    if (value === "LAST_WEEK") {
+      const thisWeekStart = startOfWeekISO();
+      const lastWeekStart = addDaysISO(thisWeekStart, -7);
+      setFrom(lastWeekStart);
+      setTo(addDaysISO(lastWeekStart, 6));
+      return;
+    }
+
+    if (value === "LAST_2_WEEKS") {
+      const thisWeekStart = startOfWeekISO();
+      const start = addDaysISO(thisWeekStart, -14);
+      const end = addDaysISO(thisWeekStart, -1);
+      setFrom(start);
+      setTo(end);
+      return;
+    }
+
+    if (value === "LAST_7_DAYS") {
+      setFrom(addDaysISO(todayISO(), -6));
+      setTo(todayISO());
+      return;
+    }
   }
 
-  if (value === "LAST_WEEK") {
-    const thisWeekStart = startOfWeekISO();
-    const lastWeekStart = addDaysISO(thisWeekStart, -7);
-    setFrom(lastWeekStart);
-    setTo(addDaysISO(lastWeekStart, 6));
-    return;
-  }
-
-  if (value === "LAST_2_WEEKS") {
-    const thisWeekStart = startOfWeekISO();
-    const start = addDaysISO(thisWeekStart, -14);
-    const end = addDaysISO(thisWeekStart, -1);
-    setFrom(start);
-    setTo(end);
-    return;
-  }
-
-  if (value === "LAST_7_DAYS") {
-    setFrom(addDaysISO(todayISO(), -6));
-    setTo(todayISO());
-    return;
-  }
-}
   async function load() {
     setLoading(true);
     setErr("");
@@ -147,6 +157,7 @@ export default function AdminTimeEntriesWeekPage() {
       const list = data.entries || [];
       setEntries(list);
       setEmployeeSearch("");
+
       const employeeIds = Array.from(new Set(list.map((e) => e.employeeId).filter(Boolean)));
       setSelectedEmployeeId((prev) => {
         if (prev && employeeIds.includes(prev)) return prev;
@@ -164,7 +175,7 @@ export default function AdminTimeEntriesWeekPage() {
   useEffect(() => {
     load();
   }, []);
-  
+
   const byEmployee = useMemo(() => {
     const map = new Map<
       string,
@@ -220,37 +231,38 @@ export default function AdminTimeEntriesWeekPage() {
     return map;
   }, [entries]);
 
-const employeeRows = useMemo(() => {
-  const rows = Array.from(byEmployee.entries())
-    .map(([employeeId, value]) => ({
-      employeeId,
-      employee: value.employee,
-      entries: value.entries,
-      payableMinutes: value.payableMinutes,
-      draftCount: value.draftCount,
-      approvedCount: value.approvedCount,
-      lockedCount: value.lockedCount,
-    }))
-    .sort((a, b) =>
-      formatEmployeeName(a.employee).localeCompare(formatEmployeeName(b.employee))
-    );
+  const employeeRows = useMemo(() => {
+    const rows = Array.from(byEmployee.entries())
+      .map(([employeeId, value]) => ({
+        employeeId,
+        employee: value.employee,
+        entries: value.entries,
+        payableMinutes: value.payableMinutes,
+        draftCount: value.draftCount,
+        approvedCount: value.approvedCount,
+        lockedCount: value.lockedCount,
+      }))
+      .sort((a, b) =>
+        formatEmployeeName(a.employee).localeCompare(formatEmployeeName(b.employee))
+      );
 
-  const q = employeeSearch.trim().toLowerCase();
-  if (!q) return rows;
+    const q = employeeSearch.trim().toLowerCase();
+    if (!q) return rows;
 
-  return rows.filter((row) => {
-    const name = formatEmployeeName(row.employee).toLowerCase();
-    const email = String(row.employee?.email || "").toLowerCase();
-    return name.includes(q) || email.includes(q);
-  });
-}, [byEmployee, employeeSearch]);
-const selected = selectedEmployeeId ? byEmployee.get(selectedEmployeeId) : null;
-  
-const filteredSelectedEntries = useMemo(() => {
-  if (!selected) return [];
-  if (rowStatusFilter === "ALL") return selected.entries;
-  return selected.entries.filter((e) => e.status === rowStatusFilter);
-}, [selected, rowStatusFilter]);
+    return rows.filter((row) => {
+      const name = formatEmployeeName(row.employee).toLowerCase();
+      const email = String(row.employee?.email || "").toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [byEmployee, employeeSearch]);
+
+  const selected = selectedEmployeeId ? byEmployee.get(selectedEmployeeId) : null;
+
+  const filteredSelectedEntries = useMemo(() => {
+    if (!selected) return [];
+    if (rowStatusFilter === "ALL") return selected.entries;
+    return selected.entries.filter((e) => e.status === rowStatusFilter);
+  }, [selected, rowStatusFilter]);
 
   const filteredSelectedSummary = useMemo(() => {
     let workedMinutes = 0;
@@ -283,36 +295,27 @@ const filteredSelectedEntries = useMemo(() => {
     return selected.entries.filter((e) => e.status === "DRAFT").map((e) => e.id);
   }, [selected]);
 
-  const approvableEntryIdsForSelected = useMemo(() => {
-    if (!selected) return [];
-    return selected.entries
-      .filter((e) => e.status === "DRAFT" || e.status === "APPROVED")
-      .map((e) => e.id);
-  }, [selected]);
-
   const approvedEntryIdsForSelected = useMemo(() => {
     if (!selected) return [];
     return selected.entries.filter((e) => e.status === "APPROVED").map((e) => e.id);
   }, [selected]);
 
-const allSelectedVisible =
+  const allSelectedVisible =
     filteredSelectedEntries.length > 0 &&
     filteredSelectedEntries.every((e) => selectedEntryIds.includes(e.id));
 
+  useEffect(() => {
+    const validIds = new Set((selected?.entries || []).map((e) => e.id));
+    setSelectedEntryIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [selected]);
 
+  function toggleEntry(id: string) {
+    setSelectedEntryIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
-useEffect(() => {
-  const validIds = new Set((selected?.entries || []).map((e) => e.id));
-  setSelectedEntryIds((prev) => prev.filter((id) => validIds.has(id)));
-}, [selected]);
-
-function toggleEntry(id: string) {
-  setSelectedEntryIds((prev) =>
-    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-  );
-}
-
-   function toggleSelectAllVisible() {
+  function toggleSelectAllVisible() {
     const ids = filteredSelectedEntries.map((e) => e.id);
     if (ids.length === 0) return;
 
@@ -323,9 +326,9 @@ function toggleEntry(id: string) {
       }
       return Array.from(new Set([...prev, ...ids]));
     });
-  } 
+  }
 
- const selectedSummary = useMemo(() => {
+  const selectedSummary = useMemo(() => {
     if (!selected) {
       return {
         workedMinutes: 0,
@@ -371,10 +374,8 @@ function toggleEntry(id: string) {
     };
   }, [selected]);
 
-  
   async function approveWeekForSelected() {
     if (!selectedEmployeeId) return;
-
     const ok = window.confirm("Approve this employee's entries for the selected pay period?");
     if (!ok) return;
 
@@ -398,7 +399,6 @@ function toggleEntry(id: string) {
 
   async function lockWeekForSelected() {
     if (!selectedEmployeeId) return;
-
     const ok = window.confirm("Lock this employee's entries for the selected pay period?");
     if (!ok) return;
 
@@ -420,10 +420,11 @@ function toggleEntry(id: string) {
     }
   }
 
-   async function approveSelectedEntries() {
+  async function approveSelectedEntries() {
     if (selectedEntryIds.length === 0) return;
-
-    const ok = window.confirm(`Approve ${selectedEntryIds.length} selected entr${selectedEntryIds.length === 1 ? "y" : "ies"}?`);
+    const ok = window.confirm(
+      `Approve ${selectedEntryIds.length} selected entr${selectedEntryIds.length === 1 ? "y" : "ies"}?`
+    );
     if (!ok) return;
 
     try {
@@ -443,8 +444,9 @@ function toggleEntry(id: string) {
 
   async function lockSelectedEntries() {
     if (selectedEntryIds.length === 0) return;
-
-    const ok = window.confirm(`Lock ${selectedEntryIds.length} selected entr${selectedEntryIds.length === 1 ? "y" : "ies"}?`);
+    const ok = window.confirm(
+      `Lock ${selectedEntryIds.length} selected entr${selectedEntryIds.length === 1 ? "y" : "ies"}?`
+    );
     if (!ok) return;
 
     try {
@@ -461,10 +463,9 @@ function toggleEntry(id: string) {
       setLoading(false);
     }
   }
- 
-    async function approveAllDraftsForSelected() {
-    if (draftEntryIdsForSelected.length === 0) return;
 
+  async function approveAllDraftsForSelected() {
+    if (draftEntryIdsForSelected.length === 0) return;
     const ok = window.confirm(
       `Approve all ${draftEntryIdsForSelected.length} draft entr${
         draftEntryIdsForSelected.length === 1 ? "y" : "ies"
@@ -489,7 +490,6 @@ function toggleEntry(id: string) {
 
   async function lockAllApprovedForSelected() {
     if (approvedEntryIdsForSelected.length === 0) return;
-
     const ok = window.confirm(
       `Lock all ${approvedEntryIdsForSelected.length} approved entr${
         approvedEntryIdsForSelected.length === 1 ? "y" : "ies"
@@ -510,111 +510,97 @@ function toggleEntry(id: string) {
     } finally {
       setLoading(false);
     }
-  } 
+  }
 
   return (
-    <div style={{ padding: 16, maxWidth: 1400, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>
-        Admin — Time Entries (Week)
-      </h1>
+    <div className="space-y-6">
+      <section className="rounded-[2rem] bg-gradient-to-r from-slate-900 to-cyan-700 p-8 text-white shadow-xl">
+        <div className="max-w-4xl">
+          <div className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-100">
+            Weekly Review
+          </div>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight">
+            Time Entries by Pay Period
+          </h1>
+          <p className="mt-4 max-w-3xl text-lg leading-8 text-cyan-50/90">
+            Review employee time entries across a selected date range, approve records, and lock payroll-ready entries.
+          </p>
+        </div>
+      </section>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-          <div>
-            <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>From</div>
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,220px))_auto] lg:items-end">
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-slate-700">From</span>
             <input
               type="date"
               value={from}
-              onChange={(e) => { setPreset(""); setFrom(e.target.value)}}
-              style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+              onChange={(e) => {
+                setPreset("");
+                setFrom(e.target.value);
+              }}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
             />
-          </div>
+          </label>
 
-          <div>
-            <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>To</div>
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-slate-700">To</span>
             <input
               type="date"
               value={to}
-              onChange={(e) => { setPreset(""); setTo(e.target.value)}}
-              style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+              onChange={(e) => {
+                setPreset("");
+                setTo(e.target.value);
+              }}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
             />
-          </div>
-          <div>
-  <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Preset</div>
-  <select
-    value={preset}
-    onChange={(e) => applyPreset(e.target.value)}
-    style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-  >
-    <option value="">Custom</option>
-    <option value="THIS_WEEK">This Week</option>
-    <option value="LAST_WEEK">Last Week</option>
-    <option value="LAST_2_WEEKS">Last 2 Weeks</option>
-    <option value="LAST_7_DAYS">Last 7 Days</option>
-  </select>
-</div>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-slate-700">Preset</span>
+            <select
+              value={preset}
+              onChange={(e) => applyPreset(e.target.value)}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+            >
+              <option value="">Custom</option>
+              <option value="THIS_WEEK">This Week</option>
+              <option value="LAST_WEEK">Last Week</option>
+              <option value="LAST_2_WEEKS">Last 2 Weeks</option>
+              <option value="LAST_7_DAYS">Last 7 Days</option>
+            </select>
+          </label>
+
           <button
             onClick={load}
             disabled={loading}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
+            className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Loading..." : "Load"}
           </button>
         </div>
 
-        {err ? <div style={{ marginTop: 12, color: "#b00020" }}>{err}</div> : null}
-      </div>
+        {err ? (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {err}
+          </div>
+        ) : null}
+      </section>
 
-      <div
-        style={{
-          marginTop: 16,
-          display: "grid",
-          gridTemplateColumns: "320px 1fr",
-          gap: 16,
-          alignItems: "start",
-        }}
-      >
-        <aside
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 12,
-            background: "#fff",
-            minHeight: 420,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>
+      <section className="grid gap-6 xl:grid-cols-[340px_1fr]">
+        <aside className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-lg font-bold tracking-tight text-slate-950">
             Employees in pay period
-            <input
-  value={employeeSearch}
-  onChange={(e) => setEmployeeSearch(e.target.value)}
-  placeholder="Search employee name/email"
-  style={{
-    width: "100%",
-    padding: 10,
-    border: "1px solid #ccc",
-    borderRadius: 8,
-    marginBottom: 10,
-  }}
-/>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <input
+            value={employeeSearch}
+            onChange={(e) => setEmployeeSearch(e.target.value)}
+            placeholder="Search employee name/email"
+            className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+          />
+
+          <div className="mt-4 flex flex-col gap-3">
             {employeeRows.map((row) => {
               const active = row.employeeId === selectedEmployeeId;
 
@@ -623,152 +609,113 @@ function toggleEntry(id: string) {
                   key={row.employeeId}
                   type="button"
                   onClick={() => setSelectedEmployeeId(row.employeeId)}
-                  style={{
-                    textAlign: "left",
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid #ddd",
-                    background: active ? "#f5f5f5" : "#fff",
-                    cursor: "pointer",
-                  }}
+                  className={
+                    active
+                      ? "rounded-[1.5rem] border border-cyan-200 bg-cyan-50 p-4 text-left shadow-sm"
+                      : "rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                  }
                 >
-                  <div style={{ fontWeight: 700 }}>
+                  <div className="font-bold text-slate-950">
                     {formatEmployeeName(row.employee)}
                   </div>
 
-                  <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                  <div className="mt-1 text-xs text-slate-500">
                     {row.employee?.email || "-"}
                   </div>
 
-                  <div style={{ fontSize: 12, marginTop: 6 }}>
-                    Entries: <b>{row.entries.length}</b> • Payable:{" "}
-                    <b>{minutesToHHMM(row.payableMinutes)}</b>
+                  <div className="mt-3 text-xs text-slate-600">
+                    Entries: <span className="font-semibold text-slate-900">{row.entries.length}</span> · Payable:{" "}
+                    <span className="font-semibold text-slate-900">
+                      {minutesToHHMM(row.payableMinutes)}
+                    </span>
                   </div>
 
-                  <div style={{ fontSize: 12, marginTop: 4, color: "#666" }}>
-                    Draft: <b>{row.draftCount}</b> • Approved: <b>{row.approvedCount}</b> • Locked:{" "}
-                    <b>{row.lockedCount}</b>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Draft: <span className="font-semibold text-slate-700">{row.draftCount}</span> · Approved:{" "}
+                    <span className="font-semibold text-slate-700">{row.approvedCount}</span> · Locked:{" "}
+                    <span className="font-semibold text-slate-700">{row.lockedCount}</span>
                   </div>
                 </button>
               );
             })}
 
             {employeeRows.length === 0 ? (
-              <div style={{ color: "#666", fontSize: 13 }}>
+              <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
                 No employees found for this pay period.
               </div>
             ) : null}
           </div>
         </aside>
 
-        <main
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 12,
-            background: "#fff",
-            minHeight: 420,
-          }}
-        >
+        <main className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
           {!selected ? (
-            <div style={{ color: "#666" }}>
+            <div className="rounded-2xl bg-slate-50 px-5 py-5 text-sm text-slate-600">
               Select a pay period to load employees, then click an employee to review entries.
             </div>
           ) : (
             <>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  flexWrap: "wrap",
-                  alignItems: "flex-start",
-                }}
-              >
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>
+                  <div className="text-2xl font-bold tracking-tight text-slate-950">
                     {formatEmployeeName(selected.employee)}
                   </div>
-                  <div style={{ color: "#666", fontSize: 13 }}>
+                  <div className="mt-1 text-sm text-slate-500">
                     {selected.employee?.email || "-"}
                   </div>
-                  <div style={{ marginTop: 6, fontSize: 13 }}>
-                    Pay period: <b>{from}</b> → <b>{to}</b>
+                  <div className="mt-2 text-sm text-slate-600">
+                    Pay period: <span className="font-semibold text-slate-900">{from}</span> →{" "}
+                    <span className="font-semibold text-slate-900">{to}</span>
                   </div>
                 </div>
-		
-		                <div
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: 10,
-                    padding: 12,
-                    background: "#fafafa",
-                    minWidth: 280,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                    Employee Summary
-                  </div>
 
-                  <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 xl:min-w-[280px]">
+                  <div className="font-bold text-slate-950">Employee Summary</div>
+                  <div className="mt-3 grid gap-2 text-sm text-slate-600">
                     <div>
-                      Worked: <b>{minutesToHHMM(selectedSummary.workedMinutes)}</b>
+                      Worked: <span className="font-semibold text-slate-900">{minutesToHHMM(selectedSummary.workedMinutes)}</span>
                     </div>
                     <div>
-                      Break: <b>{minutesToHHMM(selectedSummary.breakMinutes)}</b>
+                      Break: <span className="font-semibold text-slate-900">{minutesToHHMM(selectedSummary.breakMinutes)}</span>
                     </div>
                     <div>
-                      Payable: <b>{minutesToHHMM(selectedSummary.payableMinutes)}</b>
+                      Payable: <span className="font-semibold text-slate-900">{minutesToHHMM(selectedSummary.payableMinutes)}</span>
                     </div>
                     <div>
-                      Draft: <b>{selectedSummary.draftCount}</b>
+                      Draft: <span className="font-semibold text-slate-900">{selectedSummary.draftCount}</span>
                     </div>
                     <div>
-                      Approved: <b>{selectedSummary.approvedCount}</b>
+                      Approved: <span className="font-semibold text-slate-900">{selectedSummary.approvedCount}</span>
                     </div>
                     <div>
-                      Locked: <b>{selectedSummary.lockedCount}</b>
+                      Locked: <span className="font-semibold text-slate-900">{selectedSummary.lockedCount}</span>
                     </div>
                   </div>
                 </div>
-		
-		                  <div>
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-                      Show
-                    </div>
-                    <select
-                      value={rowStatusFilter}
-                      onChange={(e) =>
-                        setRowStatusFilter(e.target.value as "ALL" | EntryStatus)
-                      }
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        border: "1px solid #ccc",
-                        background: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      <option value="ALL">All</option>
-                      <option value="DRAFT">Draft only</option>
-                      <option value="APPROVED">Approved only</option>
-                      <option value="LOCKED">Locked only</option>
-                    </select>
-                  </div>
+              </div>
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Show</div>
+                  <select
+                    value={rowStatusFilter}
+                    onChange={(e) =>
+                      setRowStatusFilter(e.target.value as "ALL" | EntryStatus)
+                    }
+                    className="mt-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                  >
+                    <option value="ALL">All</option>
+                    <option value="DRAFT">Draft only</option>
+                    <option value="APPROVED">Approved only</option>
+                    <option value="LOCKED">Locked only</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={approveWeekForSelected}
                     disabled={loading}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #1d4ed8",
-                      background: "#eff6ff",
-                      color: "#1d4ed8",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Approve Week
                   </button>
@@ -777,30 +724,16 @@ function toggleEntry(id: string) {
                     type="button"
                     onClick={lockWeekForSelected}
                     disabled={loading}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #b91c1c",
-                      background: "#fef2f2",
-                      color: "#b91c1c",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Lock Week
                   </button>
 
-		                    <button
+                  <button
                     type="button"
                     onClick={approveSelectedEntries}
                     disabled={loading || selectedEntryIds.length === 0}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #2563eb",
-                      background: "#fff",
-                      color: "#2563eb",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Approve Selected ({selectedEntryIds.length})
                   </button>
@@ -809,30 +742,16 @@ function toggleEntry(id: string) {
                     type="button"
                     onClick={lockSelectedEntries}
                     disabled={loading || selectedEntryIds.length === 0}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #dc2626",
-                      background: "#fff",
-                      color: "#dc2626",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Lock Selected ({selectedEntryIds.length})
                   </button>
 
-                                    <button
+                  <button
                     type="button"
                     onClick={approveAllDraftsForSelected}
                     disabled={loading || draftEntryIdsForSelected.length === 0}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #2563eb",
-                      background: "#dbeafe",
-                      color: "#1d4ed8",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Approve All Drafts ({draftEntryIdsForSelected.length})
                   </button>
@@ -841,67 +760,65 @@ function toggleEntry(id: string) {
                     type="button"
                     onClick={lockAllApprovedForSelected}
                     disabled={loading || approvedEntryIdsForSelected.length === 0}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #dc2626",
-                      background: "#fee2e2",
-                      color: "#b91c1c",
-                      fontWeight: 700,
-                    }}
+                    className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Lock All Approved ({approvedEntryIdsForSelected.length})
                   </button>
-
-                </div>
-              </div>
-              
-                            <div
-                style={{
-                  marginTop: 16,
-                  padding: 12,
-                  border: "1px solid #ddd",
-                  borderRadius: 10,
-                  background: "#fafafa",
-                  display: "flex",
-                  gap: 18,
-                  flexWrap: "wrap",
-                  fontSize: 13,
-                }}
-              >
-                <div>
-                  Visible Rows: <b>{filteredSelectedSummary.rowCount}</b>
-                </div>
-                <div>
-                  Worked: <b>{minutesToHHMM(filteredSelectedSummary.workedMinutes)}</b>
-                </div>
-                <div>
-                  Break: <b>{minutesToHHMM(filteredSelectedSummary.breakMinutes)}</b>
-                </div>
-                <div>
-                  Payable: <b>{minutesToHHMM(filteredSelectedSummary.payableMinutes)}</b>
                 </div>
               </div>
 
-              <div style={{ marginTop: 16, overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+              <div className="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                <div className="flex flex-wrap gap-5">
+                  <div>
+                    Visible Rows: <span className="font-semibold text-slate-900">{filteredSelectedSummary.rowCount}</span>
+                  </div>
+                  <div>
+                    Worked: <span className="font-semibold text-slate-900">{minutesToHHMM(filteredSelectedSummary.workedMinutes)}</span>
+                  </div>
+                  <div>
+                    Break: <span className="font-semibold text-slate-900">{minutesToHHMM(filteredSelectedSummary.breakMinutes)}</span>
+                  </div>
+                  <div>
+                    Payable: <span className="font-semibold text-slate-900">{minutesToHHMM(filteredSelectedSummary.payableMinutes)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 overflow-x-auto">
+                <table className="min-w-[900px] w-full border-collapse">
                   <thead>
-                    <tr style={{ background: "#f9fafb" }}>
-                      <th style={th}>
- 			 <input
-   			 type="checkbox"
-   			 checked={allSelectedVisible}
-  	 		 onChange={toggleSelectAllVisible}
- 			 />
-			 </th>
-		      <th style={th}>Work Date</th>
-                      <th style={th}>Facility</th>
-                      <th style={th}>Shift</th>
-                      <th style={th}>Worked</th>
-                      <th style={th}>Break</th>
-                      <th style={th}>Payable</th>
-                      <th style={th}>Status</th>
-		      <th style={th}>Action</th>
+                    <tr className="bg-slate-50">
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={allSelectedVisible}
+                          onChange={toggleSelectAllVisible}
+                        />
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Work Date
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Facility
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Shift
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Worked
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Break
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Payable
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Status
+                      </th>
+                      <th className="border-b border-slate-200 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Action
+                      </th>
                     </tr>
                   </thead>
 
@@ -917,61 +834,58 @@ function toggleEntry(id: string) {
                             );
 
                       return (
-                        <tr key={e.id}>
-                         <td style={td}>
- 			 <input
-   			 type="checkbox"
-   			 checked={selectedEntryIds.includes(e.id)}
-   			 onChange={() => toggleEntry(e.id)}
- 			 />
-			 </td>
-			  <td style={td}>{String(e.workDate).slice(0, 10)}</td>
-                          <td style={td}>{e.facility?.name || "-"}</td>
-                          <td style={td}>{e.shiftType}</td>
-                          <td style={td}>{minutesToHHMM(Number(e.minutesWorked ?? 0))}</td>
-                          <td style={td}>
+                        <tr key={e.id} className="border-b border-slate-100">
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={selectedEntryIds.includes(e.id)}
+                              onChange={() => toggleEntry(e.id)}
+                            />
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            {String(e.workDate).slice(0, 10)}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            {e.facility?.name || "-"}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            {e.shiftType || "-"}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            {minutesToHHMM(Number(e.minutesWorked ?? 0))}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-slate-700">
                             {minutesToHHMM(
                               Number(e.computedBreakMinutes ?? e.breakMinutes ?? 0)
                             )}
                           </td>
-                          <td style={td}>
-                            <b>{minutesToHHMM(payable)}</b>
+                          <td className="px-3 py-3 text-sm font-semibold text-slate-900">
+                            {minutesToHHMM(payable)}
                           </td>
-                          <td style={td}>
-                            <span style={statusBadge(e.status)}>{e.status}</span>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            <span className={statusBadgeClass(e.status)}>{e.status}</span>
                           </td>
-                        
-			  <td style={td}>
-  <a
-    href={
-      e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
-        ? `/admin/time-entry/${e.id}?sourceType=PAYROLL_ADJUSTMENT`
-        : `/admin/time-entry/${e.id}`
-    }
-    style={{
-      display: "inline-block",
-      padding: "6px 10px",
-      borderRadius: 8,
-      border: "1px solid #ccc",
-      background: "#fff",
-      color: "#111",
-      textDecoration: "none",
-      fontSize: 12,
-      fontWeight: 700,
-    }}
-  >
-    {e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
-      ? "Create Correction"
-      : "Edit"}
-  </a>
-</td>
-			</tr>
+                          <td className="px-3 py-3 text-sm text-slate-700">
+                            <a
+                              href={
+                                e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
+                                  ? `/admin/time-entry/${e.id}?sourceType=PAYROLL_ADJUSTMENT`
+                                  : `/admin/time-entry/${e.id}`
+                              }
+                              className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
+                            >
+                              {e.isMissedAdjustment || e.sourceType === "PAYROLL_ADJUSTMENT"
+                                ? "Create Correction"
+                                : "Edit"}
+                            </a>
+                          </td>
+                        </tr>
                       );
                     })}
 
                     {filteredSelectedEntries.length === 0 ? (
                       <tr>
-                        <td style={td} colSpan={8}>
+                        <td className="px-3 py-4 text-sm text-slate-500" colSpan={9}>
                           No entries match the current filter for this employee in the selected pay period.
                         </td>
                       </tr>
@@ -982,60 +896,7 @@ function toggleEntry(id: string) {
             </>
           )}
         </main>
-      </div>
+      </section>
     </div>
   );
-}
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #ddd",
-  fontSize: 13,
-};
-
-const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #eee",
-  fontSize: 13,
-  verticalAlign: "top",
-};
-
-function statusBadge(status: EntryStatus): React.CSSProperties {
-  if (status === "LOCKED") {
-    return {
-      display: "inline-block",
-      padding: "4px 8px",
-      borderRadius: 999,
-      background: "#fef2f2",
-      color: "#b91c1c",
-      border: "1px solid #fecaca",
-      fontSize: 12,
-      fontWeight: 700,
-    };
-  }
-
-  if (status === "APPROVED") {
-    return {
-      display: "inline-block",
-      padding: "4px 8px",
-      borderRadius: 999,
-      background: "#eff6ff",
-      color: "#1d4ed8",
-      border: "1px solid #bfdbfe",
-      fontSize: 12,
-      fontWeight: 700,
-    };
-  }
-
-  return {
-    display: "inline-block",
-    padding: "4px 8px",
-    borderRadius: 999,
-    background: "#f3f4f6",
-    color: "#374151",
-    border: "1px solid #e5e7eb",
-    fontSize: 12,
-    fontWeight: 700,
-  };
 }

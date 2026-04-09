@@ -1408,32 +1408,61 @@ async function payNowForDay(date: string, day: DayDraft) {
   }, []);
 
   return (
-    <div
-      style={{
-        padding: 16,
-        maxWidth: 1300,
-        margin: "0 auto",
-        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto",
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Admin — Time Entry</h1>
-
+       <div
+  style={{
+    padding: 0,
+    maxWidth: 1300,
+    margin: "0 auto",
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto",
+  }}
+>
+<h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    marginBottom: 10,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Admin — Time Entry
+</h1>
       {!props?.lockEmployeeTabs ? (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Select Employees → Open Tabs</div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <select
+          <div
+  style={{
+    marginTop: 16,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+<div
+  style={{
+    fontWeight: 800,
+    marginBottom: 12,
+    color: "#0f172a",
+    fontSize: 18,
+  }}
+>
+  Select Employees → Open Tabs
+</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+	    <select
               multiple
               value={pickIds}
               onChange={(e) => setPickIds(Array.from(e.target.selectedOptions).map((o) => o.value))}
               style={{
-                minWidth: 420,
-                height: 180,
-                padding: 10,
-                border: "1px solid #ccc",
-                borderRadius: 8,
-              }}
+  minWidth: 420,
+  height: 180,
+  padding: 12,
+  border: "1px solid #cbd5e1",
+  borderRadius: 16,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
             >
               {sortedEmployees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -1441,19 +1470,20 @@ async function payNowForDay(date: string, day: DayDraft) {
                 </option>
               ))}
             </select>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button
                 type="button"
                 onClick={openTabsForSelected}
                 style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #111",
-                  background: "#111",
-                  color: "#fff",
-                }}
-              >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.10)",
+}}
+	      >
                 Open Tabs ({pickIds.length})
               </button>
 
@@ -1464,21 +1494,23 @@ async function payNowForDay(date: string, day: DayDraft) {
                   setSelectedEmployeeIds([]);
                   setActiveEmpId("");
                 }}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  background: "#fff",
-                }}
-              >
+                 style={{
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}
+	      >
                 Clear
               </button>
             </div>
           </div>
 
           {selectedEmployeeIds.length > 0 ? (
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {selectedEmployeesSorted.map((emp) => {
+             <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}> 
+		{selectedEmployeesSorted.map((emp) => {
                 const id = emp.id;
                 const label = emp.preferredName || emp.legalName;
                 return (
@@ -1487,14 +1519,15 @@ async function payNowForDay(date: string, day: DayDraft) {
                     type="button"
                     onClick={() => setActiveEmpId(id)}
                     style={{
-                      padding: "8px 10px",
-                      borderRadius: 999,
-                      border: "1px solid #ccc",
-                      background: activeEmpId === id ? "#111" : "#fff",
-                      color: activeEmpId === id ? "#fff" : "#111",
-                      cursor: "pointer",
-                    }}
-                    title={`${emp.legalName} (${emp.email})`}
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: activeEmpId === id ? "1px solid #0f172a" : "1px solid #cbd5e1",
+  background: activeEmpId === id ? "#0f172a" : "#ffffff",
+  color: activeEmpId === id ? "#ffffff" : "#0f172a",
+  cursor: "pointer",
+  fontWeight: 700,
+}}
+			title={`${emp.legalName} (${emp.email})`}
                   >
                     {label}
                   </button>
@@ -1502,44 +1535,52 @@ async function payNowForDay(date: string, day: DayDraft) {
               })}
             </div>
           ) : (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.7 }}>
-              Select employees, then click Open Tabs.
+              <div style={{ marginTop: 12, fontSize: 13, color: "#64748b" }}>
+		Select employees, then click Open Tabs.
             </div>
           )}
         </div>
       ) : null}
 
       {activeEmpId && activeDraft ? (
-        <div style={{ marginTop: 14, padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
-              Enter Week — {activeEmp ? activeEmp.legalName : activeEmpId}
+          <div
+  style={{
+    marginTop: 18,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+             <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: "#0f172a" }}> 
+		 Enter Week — {activeEmp ? activeEmp.legalName : activeEmpId}
             </h2>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>
-              Tip: type <b>13:00</b> and we’ll infer <b>PM</b> on blur.
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+	      Tip: type <b>13:00</b> and we’ll infer <b>PM</b> on blur.
             </div>
           </div>
           
 	    {props?.allowStatusOverrideEdit && (
             <div
               style={{
-                marginTop: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #fde68a",
-                background: "#fffbeb",
-                color: "#92400e",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
+  marginTop: 12,
+  padding: "12px 14px",
+  borderRadius: 16,
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+  color: "#92400e",
+  fontSize: 13,
+  fontWeight: 700,
+}}
+	    >
               PIN Override Mode — editing an approved or locked entry will reset it to DRAFT when saved.
             </div>
           )}
-
-	     <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+	    <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
             <div>
-              <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Start Date</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Start Date</div>
               <input
                 value={activeDraft.startDate}
                 onChange={(e) => {
@@ -1548,8 +1589,15 @@ async function payNowForDay(date: string, day: DayDraft) {
                   ensureDraftRange(activeEmpId, { startDate: start, endDate: end });
                 }}
                 type="date"
-                style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                disabled={!!props?.lockEmployeeTabs}
+                style={{
+  padding: "8px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	        disabled={!!props?.lockEmployeeTabs}
               />
             </div>
 
@@ -1562,35 +1610,52 @@ async function payNowForDay(date: string, day: DayDraft) {
                   ensureDraftRange(activeEmpId, { endDate: end });
                 }}
                 type="date"
-                style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                disabled={!!props?.lockEmployeeTabs}
+                style={{
+  padding: "8px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+		disabled={!!props?.lockEmployeeTabs}
               />
             </div>
 
             <div style={{ flex: "1 1 360px" }}>
-              <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
-                Notes (applies to saved entries)
-              </div>
-              <input
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  Notes (applies to saved entries)
+</div>
+	      <input
                 value={activeDraft.notes}
                 onChange={(e) => ensureDraftRange(activeEmpId, { notes: e.target.value })}
                 placeholder="Optional notes"
-                style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-              />
+                style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	      />
             </div>
 
             <button
               disabled={loading || !canSaveThisEmployee}
               onClick={saveWeekForActiveTab}
               style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                height: 42,
-              }}
-            >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  height: 42,
+  fontWeight: 700,
+  opacity: loading || !canSaveThisEmployee ? 0.6 : 1,
+}}
+	    >
               Save (this employee)
             </button>
 
@@ -1598,12 +1663,12 @@ async function payNowForDay(date: string, day: DayDraft) {
               type="button"
               disabled={loading || !activeEmpId || !activeDraft || !canApproveWeek}
               onClick={approveWeekForActiveTab}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #1d4ed8",
-                background: "#eff6ff",
-                color: "#1d4ed8",
+                style={{
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+		color: "#1d4ed8",
                 height: 42,
                 cursor: loading ? "not-allowed" : "pointer",
                 opacity: loading || !activeEmpId || !activeDraft || !canApproveWeek ? 0.6 : 1,
@@ -1617,16 +1682,17 @@ async function payNowForDay(date: string, day: DayDraft) {
               disabled={loading || !activeEmpId || !activeDraft || !canLockWeek}
               onClick={lockWeekForActiveTab}
               style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid #b91c1c",
-                background: "#fef2f2",
-                color: "#b91c1c",
-                height: 42,
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading || !activeEmpId || !activeDraft || !canLockWeek ? 0.6 : 1,
-              }}
-            >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  height: 42,
+  fontWeight: 700,
+  cursor: loading ? "not-allowed" : "pointer",
+  opacity: loading || !activeEmpId || !activeDraft || !canLockWeek ? 0.6 : 1,
+}}
+	    >
               Lock Week
             </button>
 
@@ -1635,13 +1701,16 @@ async function payNowForDay(date: string, day: DayDraft) {
                 disabled={loading || selectedEmployeeIds.length === 0}
                 onClick={saveWeekForAllTabs}
                 style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  background: "#fff",
-                  height: 42,
-                }}
-              >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  height: 42,
+  fontWeight: 700,
+  opacity: loading || selectedEmployeeIds.length === 0 ? 0.6 : 1,
+}}
+	      >
                 Save (all open tabs)
               </button>
             ) : null}
@@ -1650,91 +1719,105 @@ async function payNowForDay(date: string, day: DayDraft) {
           {Object.values(activeDraft.days || {}).some(
             (d) => dayHasPunches(d) && !String(d.facilityId || "").trim()
           ) ? (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#b00020" }}>
-              Please select a Facility for each worked day before saving.
+             <div
+  style={{
+    marginTop: 10,
+    fontSize: 13,
+    color: "#b91c1c",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 12,
+    padding: "10px 12px",
+    display: "inline-block",
+  }}
+> 
+		Please select a Facility for each worked day before saving.
             </div>
           ) : null}
 
           <div
             style={{
-              marginTop: 12,
-              marginBottom: 12,
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
+  marginTop: 14,
+  marginBottom: 14,
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+}}
+	  >
             <div
               style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                background: "#f9fafb",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 700,
+}}
+	    >
               Loaded: {activeWeekStatusCounts.totalLoaded}
             </div>
 
             <div
               style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                background: "#f9fafb",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  color: "#0f172a",
+  fontSize: 13,
+  fontWeight: 700,
+}}
+	    >
               Draft: {activeWeekStatusCounts.draft}
             </div>
 
             <div
               style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #bfdbfe",
-                background: "#eff6ff",
-                color: "#1d4ed8",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 13,
+  fontWeight: 700,
+}}
+	    >
               Approved: {activeWeekStatusCounts.approved}
             </div>
 
             <div
               style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid #fecaca",
-                background: "#fef2f2",
-                color: "#b91c1c",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontSize: 13,
+  fontWeight: 700,
+}}
+	    >
               Locked: {activeWeekStatusCounts.locked}
             </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Week Grid (preloads existing entries)</div>
-
+          <div style={{ marginTop: 14 }}>
+	  <div style={{ fontWeight: 800, marginBottom: 10, fontSize: 18, color: "#0f172a" }}>
+  Week Grid (preloads existing entries)
+</div>
             <div
               style={{
-                marginBottom: 12,
-                border: "1px solid #ddd",
-                borderRadius: 10,
-                padding: 12,
-                background: "#fafafa",
-                display: "inline-block",
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Week Totals</div>
-	      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13 }}>
+  marginBottom: 14,
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  padding: 14,
+  background: "#f8fafc",
+  display: "inline-block",
+}}
+	    >
+	     <div style={{ fontWeight: 800, marginBottom: 8, color: "#0f172a" }}>Week Totals</div> 
+	     <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13, color: "#334155" }}>
   <div>
     Payable: <b>{minutesToHHMM(activeWeekTotals.payableMinutes)}</b>
   </div>
@@ -1761,10 +1844,10 @@ async function payNowForDay(date: string, day: DayDraft) {
                   paddingBottom: 6,
                 }}
               >
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Date</div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Facility</div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Shift</div>
-
+		<div style={{ fontSize: 12, color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>Date</div>
+<div style={{ fontSize: 12, color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>Facility</div>
+<div style={{ fontSize: 12, color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>Shift</div>
+		
                 {[
                   "Clock In",
                   "Meal Out",
@@ -1775,13 +1858,21 @@ async function payNowForDay(date: string, day: DayDraft) {
                   "Meal In",
                   "Clock Out",
                 ].map((h, i) => (
-                  <div key={`${h}-${i}`} style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>
-                    {h}
-                  </div>
-                ))}
+                 <div
+  key={`${h}-${i}`}
+  style={{
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  {h}
+</div>
+	        ))}
 
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 700 }}>Pay Summary</div>
-
+<div style={{ fontSize: 12, color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>Pay Summary</div>
                 {listDatesInclusive(activeDraft.startDate, activeDraft.endDate).map((date) => {
 		  const day = activeDraft.days?.[date] ?? defaultDayDraft(date);
 const calcKey = `${activeEmpId}__${date}`;
@@ -1817,32 +1908,33 @@ const marginCents =
                   return (
                     <React.Fragment key={date}>
                     <div
-  style={{
-    fontSize: 13,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: 4,
-    background: isHoliday ? "#fffaf0" : undefined,
-    border: isHoliday ? "1px solid #f59e0b" : undefined,
-    borderRadius: 10,
-    padding: isHoliday ? 8 : 0,
-  }}
+style={{
+  fontSize: 13,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: 4,
+  background: isHoliday ? "#fffaf0" : "#ffffff",
+  border: isHoliday ? "1px solid #f59e0b" : "1px solid #e2e8f0",
+  borderRadius: 16,
+  padding: 10,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 >    
-			<div style={{ whiteSpace: "nowrap" }}>
-  {date}
+<div style={{ whiteSpace: "nowrap", color: "#0f172a", fontWeight: 700 }}> 
+ {date}
 {isHoliday ? (
   <div
     style={{
-      marginTop: 6,
-      padding: "6px 8px",
-      borderRadius: 6,
-      border: "1px solid #f59e0b",
-      background: "#fffbeb",
-      color: "#92400e",
-      fontSize: 11,
-      fontWeight: 700,
-    }}
+  marginTop: 6,
+  padding: "6px 8px",
+  borderRadius: 8,
+  border: "1px solid #f59e0b",
+  background: "#fffbeb",
+  color: "#92400e",
+  fontSize: 11,
+  fontWeight: 700,
+}}
   >
     🎉 {holidayName || "Holiday"}
     <div style={{ fontWeight: 500 }}>
@@ -1852,8 +1944,8 @@ const marginCents =
 ) : null}
 
 {day.entryId ? (
-    <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.65 }}>(loaded)</span>
-  ) : null}
+ <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b", fontWeight: 500 }}>(loaded)</span> 
+ ) : null}
 </div>
 			{day.status ? statusBadge(day) : null}
 			
@@ -1868,34 +1960,35 @@ const marginCents =
                             disabled={loading || !calc || payCents <= 0}
    			    onClick={() => payNowForDay(date, day)}
                             style={{
-                              marginTop: 4,
-                              padding: "6px 10px",
-                              borderRadius: 8,
-                              border: "1px solid #065f46",
-                              background: "#ecfdf5",
-                              color: "#065f46",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: loading ? "not-allowed" : "pointer",
-                            }}
-                          >
+  marginTop: 4,
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid #86efac",
+  background: "#ecfdf5",
+  color: "#065f46",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: loading ? "not-allowed" : "pointer",
+  opacity: loading || !calc || payCents <= 0 ? 0.6 : 1,
+}}
+			  >
                             Pay Now
                           </button>
                         ) : null}
 
 {day.paidNow ? (
   <div
-    style={{
-      marginTop: 4,
-      padding: "6px 10px",
-      borderRadius: 8,
-      border: "1px solid #86efac",
-      background: "#f0fdf4",
-      color: "#166534",
-      fontSize: 12,
-      fontWeight: 700,
-      lineHeight: 1.35,
-    }}
+  style={{
+  marginTop: 4,
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid #86efac",
+  background: "#f0fdf4",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
+}}
   >
     Paid Now ${(Number(day.paidNowAmountCents || 0) / 100).toFixed(2)}
     {day.paidNowAt ? (
@@ -1906,33 +1999,33 @@ const marginCents =
   </div>
 ) : day.paidViaPayrollWeek ? (
   <div
-    style={{
-      marginTop: 4,
-      padding: "6px 10px",
-      borderRadius: 8,
-      border: "1px solid #bfdbfe",
-      background: "#eff6ff",
-      color: "#1d4ed8",
-      fontSize: 12,
-      fontWeight: 700,
-      lineHeight: 1.35,
-    }}
+   style={{
+  marginTop: 4,
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
+}}
   >
     Included in finalized payroll
   </div>
 ) : day.addedAfterFinalizedWeek ? (
   <div
     style={{
-      marginTop: 4,
-      padding: "6px 10px",
-      borderRadius: 8,
-      border: "1px solid #fcd34d",
-      background: "#fffbeb",
-      color: "#92400e",
-      fontSize: 12,
-      fontWeight: 700,
-      lineHeight: 1.35,
-    }}
+  marginTop: 4,
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid #fcd34d",
+  background: "#fffbeb",
+  color: "#92400e",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
+}}
   >
     Added after payroll finalized
   </div>
@@ -1946,7 +2039,7 @@ const marginCents =
         color: "#b45309",
         background: "#fffbeb",
         border: "1px solid #fde68a",
-        borderRadius: 8,
+        borderRadius: 10,
         padding: "4px 6px",
         maxWidth: 130,
         whiteSpace: "normal",
@@ -1965,8 +2058,15 @@ const marginCents =
                           updateDay(activeEmpId, date, { facilityId: e.target.value });
                           scheduleCalc(activeEmpId, date, nextDay);
                         }}
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      >
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			>
                         <option value="">Select facility</option>
                         {facilities.map((f) => (
                           <option key={f.id} value={f.id}>
@@ -1983,8 +2083,15 @@ const marginCents =
                           updateDay(activeEmpId, date, { shiftType: e.target.value });
                           scheduleCalc(activeEmpId, date, nextDay);
                         }}
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      >
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			>
                         <option value="AM">AM</option>
                         <option value="PM">PM</option>
                         <option value="NOC">NOC</option>
@@ -1999,32 +2106,60 @@ const marginCents =
                         onChange={(e) => updateDayPunch(activeEmpId, date, "p1", "clockIn", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="e.g. 07:00 or 13:00"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.b1.startTime}
                         onChange={(e) => updateDayBreak(activeEmpId, date, "b1", "startTime", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.b1.endTime}
                         onChange={(e) => updateDayBreak(activeEmpId, date, "b1", "endTime", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.p1.clockOut}
                         onChange={(e) => updateDayPunch(activeEmpId, date, "p1", "clockOut", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="e.g. 15:30"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
 
                       <input
                         disabled={isApprovedOrLocked(day)}
@@ -2032,74 +2167,103 @@ const marginCents =
                         onChange={(e) => updateDayPunch(activeEmpId, date, "p2", "clockIn", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                      style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.b2.startTime}
                         onChange={(e) => updateDayBreak(activeEmpId, date, "b2", "startTime", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                         style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.b2.endTime}
                         onChange={(e) => updateDayBreak(activeEmpId, date, "b2", "endTime", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                        style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       <input
                         disabled={isApprovedOrLocked(day)}
                         value={day.p2.clockOut}
                         onChange={(e) => updateDayPunch(activeEmpId, date, "p2", "clockOut", e.target.value)}
                         onBlur={() => normalizeTimesOnBlur(activeEmpId, date)}
                         placeholder="(optional)"
-                        style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-                      />
+                        style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
 
                       <div
-                        style={{
-    			  border: isHoliday ? "1px solid #f59e0b" : "1px solid #ddd",
-			  borderRadius: 8,
-			  padding: 10,
-                          fontSize: 12,
-                          lineHeight: 1.35,
-			  background: isHoliday ? "#fffaf0" : "#fafafa",
-			  minWidth: 260,
-                        }}
-                      >
+                       style={{
+  border: isHoliday ? "1px solid #f59e0b" : "1px solid #e2e8f0",
+  borderRadius: 16,
+  padding: 12,
+  fontSize: 12,
+  lineHeight: 1.35,
+  background: isHoliday ? "#fffaf0" : "#f8fafc",
+  minWidth: 260,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+		      >
                         {!calc ? (
-                          <div style={{ opacity: 0.7 }}>—</div>
-                        ) : (
+                        <div style={{ color: "#64748b" }}>—</div>
+			) : (
                           <>
-                            <div>
-                            <b>Payable:</b> {calc.display.calculatedHours_decimal.toFixed(2)}
-			    </div>
-                            <div style={{ marginTop: 4 }}>
-                            <b>Reg:</b> {calc.buckets.regular_decimal.toFixed(2)}
+                            <div style={{ color: "#0f172a" }}>
+  <b>Payable:</b> {calc.display.calculatedHours_decimal.toFixed(2)}
+</div>
+                            <div style={{ marginTop: 4, color: "#334155" }}>
+			    <b>Reg:</b> {calc.buckets.regular_decimal.toFixed(2)}
 			    <b>OT:</b> {calc.buckets.overtime_decimal.toFixed(2)}
 			    <b>DT:</b> {calc.buckets.double_decimal.toFixed(2)}
 			    </div>
 			    {activeEmp ? (
-  <div style={{ marginTop: 4 }}>
+    <div style={{ marginTop: 4, color: "#0f172a", fontWeight: 700 }}>
     <b>Amount:</b>{" "}
     {(payCents / 100).toFixed(2)}
   </div>
 ) : null}
 
 <div
-  style={{
-    marginTop: 8,
-    paddingTop: 8,
-    borderTop: "1px solid #e5e7eb",
-    fontSize: 11,
-    lineHeight: 1.5,
-  }}
+style={{
+  marginTop: 8,
+  paddingTop: 8,
+  borderTop: "1px solid #e2e8f0",
+  fontSize: 11,
+  lineHeight: 1.5,
+  color: "#334155",
+}}
 >
-  <div style={{ fontWeight: 700, marginBottom: 4 }}>Employee Pay</div>
-
+<div style={{ fontWeight: 800, marginBottom: 4, color: "#0f172a" }}>Employee Pay</div>
   {isHoliday ? (
     <div
       style={{
@@ -2144,8 +2308,7 @@ const marginCents =
     lineHeight: 1.5,
   }}
 >
-  <div style={{ fontWeight: 700, marginBottom: 4 }}>Client Billing</div>
-
+<div style={{ fontWeight: 800, marginBottom: 4, color: "#0f172a" }}>Client Billing</div>
   {billingBreakdown.hasRate ? (
     <>
       <div>
@@ -2184,14 +2347,23 @@ const marginCents =
       </div>
     </>
   ) : (
-    <div style={{ color: "#92400e", fontWeight: 700 }}>
-      Missing billing rate
+    <div style={{ color: "#92400e", fontWeight: 700, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 8px", display: "inline-block" }}>  
+	Missing billing rate
     </div>
   )}
 </div>
                             {Array.isArray(calc.warnings) && calc.warnings.length > 0 ? (
-                              <div style={{ marginTop: 6, color: "#b00020" }}>
-                                {calc.warnings.map((w, i) => (
+                                <div
+  style={{
+    marginTop: 8,
+    color: "#b91c1c",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 10,
+    padding: "8px 10px",
+  }}
+>
+				{calc.warnings.map((w, i) => (
                                   <div key={i}>⚠ {w}</div>
                                 ))}
                               </div>
@@ -2206,12 +2378,52 @@ const marginCents =
             </div>
           </div>
 
-          {ok ? <div style={{ marginTop: 10, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-          {err ? <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
-        </div>
+        {ok ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}
+  
+        {err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+	</div>
       ) : (
-        <div style={{ marginTop: 14, color: "#666" }}>
-          {props?.lockEmployeeTabs ? "Loading entry…" : "Select employees and open tabs."}
+	<div
+  style={{
+    marginTop: 16,
+    color: "#64748b",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 20,
+    padding: "18px 20px",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>          
+
+		{props?.lockEmployeeTabs ? "Loading entry…" : "Select employees and open tabs."}
         </div>
       )}
     </div>

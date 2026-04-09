@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const authRoutes_1 = require("./routes/authRoutes");
 const meRoutes_1 = require("./routes/meRoutes");
 const adminTimeRoutes_1 = require("./routes/adminTimeRoutes");
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
     }
     next();
 });
+app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.json());
 /**
  * Public routes (NO auth)

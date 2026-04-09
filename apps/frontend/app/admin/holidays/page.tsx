@@ -201,18 +201,29 @@ export default function HolidaysPage() {
   }, [holidays]);
 
   return (
-    <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
-      <h2 style={{ marginBottom: 8 }}>Holidays</h2>
-
-      <div
-        style={{
-          marginBottom: 14,
-          fontSize: 12,
-          color: "#6b7280",
-          lineHeight: 1.5,
-        }}
-      >
-        Multipliers apply to hourly rates.
+     <div style={{ padding: 0, maxWidth: 1100, margin: "0 auto" }}> 
+      <h2
+  style={{
+    marginTop: 0,
+    marginBottom: 10,
+    fontSize: 30,
+    fontWeight: 800,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Holidays
+</h2>
+       <div
+  style={{
+    marginBottom: 14,
+    fontSize: 14,
+    color: "#475569",
+    lineHeight: 1.7,
+    fontWeight: 500,
+  }}
+> 
+       Multipliers apply to hourly rates.
         <br />
         • 1.5× = Time-and-a-half
         <br />
@@ -221,15 +232,17 @@ export default function HolidaysPage() {
 
       <div
         style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 18,
-          background: "#fafafa",
-        }}
+        border: "1px solid #e2e8f0",
+borderRadius: 24,
+padding: 20,
+marginBottom: 18,
+background: "#ffffff",
+boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+	}}
       >
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>Add Holiday</div>
-
+<div style={{ fontWeight: 800, marginBottom: 14, color: "#0f172a", fontSize: 24 }}>
+  Add Holiday
+</div>
         <div
           style={{
             display: "grid",
@@ -242,15 +255,29 @@ export default function HolidaysPage() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+             style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	   />
 
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Holiday name"
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	 />
 
           <input
             type="number"
@@ -258,8 +285,15 @@ export default function HolidaysPage() {
             value={payMultiplier}
             onChange={(e) => setPayMultiplier(e.target.value)}
             placeholder="Employee pay"
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	 />
 
           <input
             type="number"
@@ -267,64 +301,137 @@ export default function HolidaysPage() {
             value={billMultiplier}
             onChange={(e) => setBillMultiplier(e.target.value)}
             placeholder="Client billing"
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	 />
         </div>
 
-        <div style={{ marginTop: 12, display: "flex", gap: 18, flexWrap: "wrap" }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(e) => setActive(e.target.checked)}
-            />{" "}
-            Active
-          </label>
 
-          <label>
-            <input
-              type="checkbox"
-              checked={appliesToRegularOnly}
-              onChange={(e) => setAppliesToRegularOnly(e.target.checked)}
-            />{" "}
-            Apply multiplier to first 8 hours only
-          </label>
-        </div>
+	<div style={{ marginTop: 12, display: "flex", gap: 18, flexWrap: "wrap" }}>
+  <label
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      color: "#475569",
+      fontSize: 14,
+      fontWeight: 600,
+    }}
+  >
+    <input
+      type="checkbox"
+      checked={active}
+      onChange={(e) => setActive(e.target.checked)}
+    />
+    Active
+  </label>
+
+  <label
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      color: "#475569",
+      fontSize: 14,
+      fontWeight: 600,
+    }}
+  >
+    <input
+      type="checkbox"
+      checked={appliesToRegularOnly}
+      onChange={(e) => setAppliesToRegularOnly(e.target.checked)}
+    />
+    Apply multiplier to first 8 hours only
+  </label>
+</div>
 
         <div style={{ marginTop: 12 }}>
           <button
             type="button"
             onClick={createHoliday}
             style={{
-              padding: "10px 14px",
-              borderRadius: 8,
-              border: "1px solid #2563eb",
-              background: "#2563eb",
-              color: "#fff",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #2563eb",
+  background: "#2563eb",
+  color: "#ffffff",
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 1px 2px rgba(37, 99, 235, 0.18)",
+}}
+	  >
             Add Holiday
           </button>
         </div>
       </div>
 
       {loading ? <div style={{ marginBottom: 12 }}>Loading...</div> : null}
-      {err ? <div style={{ marginBottom: 12, color: "#b91c1c" }}>{err}</div> : null}
-      {ok ? <div style={{ marginBottom: 12, color: "#166534" }}>{ok}</div> : null}
 
-      <table border={1} cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
+{err ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+
+{ok ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}
+
+<div
+  style={{
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    overflow: "hidden",
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+  <table
+    style={{
+      width: "100%",
+      borderCollapse: "collapse",
+      minWidth: 900,
+    }}
+  >
+
         <thead>
-          <tr>
-            <th>Date</th>
-            <th>Name</th>
-            <th>Employee Pay</th>
-            <th>Client Billing</th>
-            <th>Active</th>
-            <th>Regular Hours Only</th>
-            <th>Actions</th>
-          </tr>
+         <tr style={{ background: "#f8fafc" }}>   
+         <th style={th}>Date</th>
+<th style={th}>Name</th>
+<th style={th}>Employee Pay</th>
+<th style={th}>Client Billing</th>
+<th style={th}>Active</th>
+<th style={th}>Regular Hours Only</th>
+<th style={th}>Actions</th> 
+	 </tr>
         </thead>
         <tbody>
           {sortedHolidays.map((h) => {
@@ -334,29 +441,41 @@ export default function HolidaysPage() {
               <tr
                 key={h.id}
                 style={{
-                  background: h.active ? "#fff7ed" : undefined,
-                }}
+                background: h.active ? "#fffbeb" : "#ffffff",
+		 }}
               >
-                <td>
-                  {editing ? (
+                 <td style={td}> 
+	         {editing ? (
                     <input
                       type="date"
                       value={editDate}
                       onChange={(e) => setEditDate(e.target.value)}
-                      style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                    />
+                      style={{
+  padding: "8px 10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 12,
+  background: "#ffffff",
+  color: "#0f172a",
+}} 
+	           />
                   ) : (
                     h.date
                   )}
                 </td>
 
-                <td>
+                <td style={td}>
                   {editing ? (
                     <input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, width: "100%" }}
-                    />
+                      style={{
+  padding: "8px 10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 12,
+  background: "#ffffff",
+  color: "#0f172a",
+}} 
+		   />
                   ) : (
                     <>
                       <span>{h.name}</span>
@@ -380,20 +499,26 @@ export default function HolidaysPage() {
                   )}
                 </td>
 
-                <td>
-                  {editing ? (
+                <td style={td}>  
+		{editing ? (
                     <input
                       type="number"
                       step="0.1"
                       value={editPayMultiplier}
                       onChange={(e) => setEditPayMultiplier(e.target.value)}
-                      style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, width: 90 }}
-                    />
+                      style={{
+  padding: "8px 10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 12,
+  background: "#ffffff",
+  color: "#0f172a",
+}} 
+		   />
                   ) : (
                     <>
                       <b>{h.payMultiplier}×</b>
-                      <div style={{ fontSize: 11, color: "#6b7280" }}>
-                        {Number(h.payMultiplier) === 1.5
+                      <div style={{ fontSize: 11, color: "#475569", fontWeight: 500 }}>  
+			{Number(h.payMultiplier) === 1.5
                           ? "Time-and-a-half"
                           : Number(h.payMultiplier) === 2
                           ? "Double-time"
@@ -403,8 +528,8 @@ export default function HolidaysPage() {
                   )}
                 </td>
 
-                <td>
-                  {editing ? (
+                <td style={td}>  
+	  	{editing ? (
                     <input
                       type="number"
                       step="0.1"
@@ -415,8 +540,8 @@ export default function HolidaysPage() {
                   ) : (
                     <>
                       <b>{h.billMultiplier}×</b>
-                      <div style={{ fontSize: 11, color: "#6b7280" }}>
-                        {Number(h.billMultiplier) === 1.5
+                      <div style={{ fontSize: 11, color: "#475569", fontWeight: 500 }}>  
+			{Number(h.billMultiplier) === 1.5
                           ? "Time-and-a-half"
                           : Number(h.billMultiplier) === 2
                           ? "Double-time"
@@ -426,8 +551,8 @@ export default function HolidaysPage() {
                   )}
                 </td>
 
-                <td>
-                  {editing ? (
+                <td style={td}>  
+		{editing ? (
                     <label>
                       <input
                         type="checkbox"
@@ -443,8 +568,8 @@ export default function HolidaysPage() {
                   )}
                 </td>
 
-                <td>
-                  {editing ? (
+                <td style={td}>  
+		{editing ? (
                     <label>
                       <input
                         type="checkbox"
@@ -460,8 +585,8 @@ export default function HolidaysPage() {
                   )}
                 </td>
 
-                <td>
-                  {editing ? (
+                <td style={td}>  
+		{editing ? (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         type="button"
@@ -470,9 +595,9 @@ export default function HolidaysPage() {
                           padding: "6px 10px",
                           borderRadius: 8,
                           border: "1px solid #166534",
-                          background: "#166534",
-                          color: "#fff",
-                          fontWeight: 700,
+background: "#166534",
+color: "#ffffff",
+fontWeight: 700,
                           cursor: "pointer",
                         }}
                       >
@@ -484,10 +609,10 @@ export default function HolidaysPage() {
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-                          border: "1px solid #6b7280",
-                          background: "#fff",
-                          color: "#374151",
-                          fontWeight: 700,
+                          border: "1px solid #cbd5e1",
+background: "#ffffff",
+color: "#0f172a",
+fontWeight: 700,
                           cursor: "pointer",
                         }}
                       >
@@ -518,10 +643,10 @@ export default function HolidaysPage() {
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-                          border: "1px solid #92400e",
-                          background: "#fff",
-                          color: "#92400e",
-                          fontWeight: 700,
+                          border: "1px solid #fdba74",
+background: "#fff7ed",
+color: "#92400e",
+fontWeight: 700,
                           cursor: "pointer",
                         }}
                       >
@@ -534,10 +659,10 @@ export default function HolidaysPage() {
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-                          border: "1px solid #b91c1c",
-                          background: "#fff",
-                          color: "#b91c1c",
-                          fontWeight: 700,
+                          border: "1px solid #fecaca",
+background: "#fef2f2",
+color: "#b91c1c",
+fontWeight: 700,
                           cursor: "pointer",
                         }}
                       >
@@ -552,13 +677,33 @@ export default function HolidaysPage() {
 
           {sortedHolidays.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#6b7280" }}>
-                No holidays found.
+             <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#475569", fontWeight: 500 }}>   
+		No holidays found.
               </td>
             </tr>
           ) : null}
         </tbody>
       </table>
     </div>
+     </div>
   );
 }
+const th: React.CSSProperties = {
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  textAlign: "left",
+};
+
+const td: React.CSSProperties = {
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
+  verticalAlign: "top",
+  color: "#334155",
+  fontSize: 14,
+  fontWeight: 500,
+};

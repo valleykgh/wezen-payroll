@@ -207,24 +207,34 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200 }}>
-      <h1 style={{ marginTop: 0 }}>Admin Users</h1>
-
-      <div
-        style={{
-          marginTop: 12,
-          marginBottom: 20,
-          padding: 14,
-          border: "1px solid #d1d5db",
-          borderRadius: 12,
-          background: "#f9fafb",
-          maxWidth: 1000,
-        }}
-      >
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Role Permissions</div>
-
-        <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-          <div>
+      <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto" }}>
+<h1
+  style={{
+    marginTop: 0,
+    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: 800,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Admin Users
+</h1>
+	<div
+  style={{
+    marginTop: 12,
+    marginBottom: 20,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+    maxWidth: 1000,
+  }}
+>        
+	<div style={{ fontWeight: 800, marginBottom: 10, color: "#0f172a", fontSize: 22 }}>Role Permissions</div>
+	  <div style={{ fontSize: 14, lineHeight: 1.7, color: "#475569", fontWeight: 500 }}>
+	  <div>
             <strong>SUPER_ADMIN</strong>: Full system access, including admin user
             management, payroll, employees, facilities, loans, and password resets.
           </div>
@@ -243,16 +253,19 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 20,
-          background: "#fff",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Create User</h3>
+        <div
+  style={{
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+	<h3 style={{ marginTop: 0, marginBottom: 14, color: "#0f172a", fontSize: 24, fontWeight: 800 }}>
+  Create User
+</h3>
 
         <div
           style={{
@@ -265,64 +278,97 @@ export default function AdminUsersPage() {
             placeholder="Name"
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	 />
 
-          <input
-            placeholder="Email"
-            value={createEmail}
-            onChange={(e) => setCreateEmail(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-
-          <select
-            value={createRole}
-            onChange={(e) => setCreateRole(e.target.value as User["role"])}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          >
-            {ROLE_OPTIONS.map((role) => (
+<input
+  placeholder="Email"
+  value={createEmail}
+  onChange={(e) => setCreateEmail(e.target.value)}
+  style={{
+    padding: "10px 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 14,
+    background: "#ffffff",
+    color: "#0f172a",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+/>
+        
+<select
+  value={createRole}
+  onChange={(e) => setCreateRole(e.target.value as User["role"])}
+  style={{
+    padding: "10px 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 14,
+    background: "#ffffff",
+    color: "#0f172a",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+> 
+   
+	{ROLE_OPTIONS.map((role) => (
               <option key={role} value={role}>
                 {role}
               </option>
             ))}
           </select>
 
-          <input
-            placeholder="Temporary password"
-            value={createPassword}
-            onChange={(e) => setCreatePassword(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
-        </div>
+<input
+  placeholder="Temporary password"
+  value={createPassword}
+  onChange={(e) => setCreatePassword(e.target.value)}
+  style={{
+    padding: "10px 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 14,
+    background: "#ffffff",
+    color: "#0f172a",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+/>
+</div>
 
         <div style={{ marginTop: 12 }}>
           <button
             onClick={createUser}
             disabled={createBusy}
             style={{
-              padding: "10px 14px",
-              borderRadius: 8,
-              border: "1px solid #111",
-              background: "#fff",
-              fontWeight: 700,
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: createBusy ? 0.6 : 1,
+}}
+	  >
             {createBusy ? "Creating..." : "Create User"}
           </button>
         </div>
       </div>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 20,
-          background: "#fff",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Search & Filter</h3>
-
+<div
+  style={{
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+<h3 style={{ marginTop: 0, marginBottom: 14, color: "#0f172a", fontSize: 24, fontWeight: 800 }}>
+  Search & Filter
+</h3>
         <div
           style={{
             display: "grid",
@@ -334,14 +380,28 @@ export default function AdminUsersPage() {
             placeholder="Search by name or email"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+        style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+	/>
 
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          >
+          style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+	>
             <option value="ALL">All Roles</option>
             {ROLE_OPTIONS.map((role) => (
               <option key={role} value={role}>
@@ -353,8 +413,15 @@ export default function AdminUsersPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          >
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  >
             <option value="ALL">All Status</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
@@ -363,15 +430,17 @@ export default function AdminUsersPage() {
       </div>
 
       <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          overflow: "hidden",
-          background: "#fff",
-        }}
-      >
-        <div style={{ padding: 16, fontWeight: 700 }}>
-          Users ({filteredUsers.length})
+  style={{
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    overflow: "hidden",
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+	
+        <div style={{ padding: 20, fontWeight: 800, color: "#0f172a", fontSize: 22 }}>  
+	Users ({filteredUsers.length})
         </div>
 
         {loading ? (
@@ -382,29 +451,93 @@ export default function AdminUsersPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#f9fafb" }}>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                <tr style={{ background: "#f8fafc" }}>  
+	  	  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Name
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Email
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Role
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Active
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Must Change Password
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Last Login
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Password Updated
                   </th>
-                  <th align="left" style={{ padding: 12, borderTop: "1px solid #eee" }}>
+                  <th align="left" style={{
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>
                     Actions
                   </th>
                 </tr>
@@ -413,38 +546,60 @@ export default function AdminUsersPage() {
               <tbody>
                 {filteredUsers.map((u) => (
                   <tr key={u.id}>
-                    <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 180 }}>
+                    <td style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    minWidth: 180,
+    verticalAlign: "top",
+    color: "#0f172a",
+    fontSize: 13,
+  }}>
                       <input
                         value={u.name || ""}
                         onChange={(e) =>
                           patchLocalUser(u.id, { name: e.target.value || null })
                         }
-                        style={{
-                          width: "100%",
-                          padding: 8,
-                          border: "1px solid #ccc",
-                          borderRadius: 8,
-                        }}
-                      />
+                     	style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+		     />
                     </td>
 
                     <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 220 }}>
                       {u.email}
                     </td>
-
-                    <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 180 }}>
+	
+			<td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    minWidth: 180,
+    verticalAlign: "top",
+    color: "#0f172a",
+    fontSize: 13,
+  }}
+>
                       <select
                         value={u.role}
                         onChange={(e) =>
                           patchLocalUser(u.id, { role: e.target.value as User["role"] })
                         }
                         style={{
-                          width: "100%",
-                          padding: 8,
-                          border: "1px solid #ccc",
-                          borderRadius: 8,
-                        }}
-                      >
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+		     >
                         {ROLE_OPTIONS.map((role) => (
                           <option key={role} value={role}>
                             {role}
@@ -453,12 +608,28 @@ export default function AdminUsersPage() {
                       </select>
                     </td>
 
-                    <td style={{ padding: 12, borderTop: "1px solid #eee" }}>
-                      {u.active ? "Yes" : "No"}
-                    </td>
-
-                    <td style={{ padding: 12, borderTop: "1px solid #eee" }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+			<td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    verticalAlign: "top",
+    color: "#0f172a",
+    fontSize: 13,
+  }}
+>
+  {u.active ? "Yes" : "No"}
+</td>
+	
+                      <td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    verticalAlign: "top",
+    color: "#0f172a",
+    fontSize: 13,
+  }}
+>
+			<label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <input
                           type="checkbox"
                           checked={u.mustChangePassword}
@@ -472,25 +643,54 @@ export default function AdminUsersPage() {
                       </label>
                     </td>
 
-                    <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 170 }}>
-                      {fmtDate(u.lastLoginAt)}
-                    </td>
+		    <td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    minWidth: 170,
+    verticalAlign: "top",
+    color: "#475569",
+    fontSize: 13,
+  }}
+>
+  {fmtDate(u.lastLoginAt)}
+</td>
+	
+		<td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    minWidth: 170,
+    verticalAlign: "top",
+    color: "#475569",
+    fontSize: 13,
+  }}
+>
+  {fmtDate(u.passwordUpdatedAt)}
+</td>
 
-                    <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 170 }}>
-                      {fmtDate(u.passwordUpdatedAt)}
-                    </td>
-
-                    <td style={{ padding: 12, borderTop: "1px solid #eee", minWidth: 260 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <td
+  style={{
+    padding: "12px 14px",
+    borderTop: "1px solid #f1f5f9",
+    minWidth: 260,
+    verticalAlign: "top",
+    color: "#0f172a",
+    fontSize: 13,
+  }}
+>      
+		<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button
                           onClick={() => saveUser(u)}
                           disabled={savingId === u.id}
                           style={{
                             padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #111",
-                            background: "#fff",
-                          }}
+                            borderRadius: 999,
+                            border: "1px solid #0f172a",
+background: "#0f172a",
+color: "#ffffff",
+fontWeight: 700,  
+			}}
                         >
                           Save
                         </button>
@@ -515,10 +715,12 @@ export default function AdminUsersPage() {
                             disabled={savingId === u.id}
                             style={{
                               padding: "8px 10px",
-                              borderRadius: 8,
-                              border: "1px solid #111",
-                              background: "#fff",
-                            }}
+                              borderRadius: 999,
+			      border: "1px solid #cbd5e1",
+			      background: "#ffffff",
+color: "#0f172a",
+fontWeight: 700,  
+			}}
                           >
                             {u.active ? "Deactivate" : "Activate"}
                           </button>
@@ -529,10 +731,12 @@ export default function AdminUsersPage() {
                           disabled={savingId === u.id}
                           style={{
                             padding: "8px 10px",
-                            borderRadius: 8,
-                            border: "1px solid #111",
-                            background: "#fff",
-                          }}
+                            borderRadius: 999,
+                            border: "1px solid #cbd5e1",
+background: "#ffffff",
+color: "#0f172a",
+fontWeight: 700,  
+			}}
                         >
                           Reset Password
                         </button>
@@ -542,11 +746,12 @@ export default function AdminUsersPage() {
                             disabled={savingId === u.id}
                             style={{
                               padding: "8px 10px",
-                              borderRadius: 8,
-                              border: "1px solid #b91c1c",
-                              background: "#fff",
-                              color: "#b91c1c",
-                            }}
+                              borderRadius: 999,
+                              border: "1px solid #fecaca",
+background: "#fef2f2",
+color: "#b91c1c",
+fontWeight: 700, 
+			   }}
                           >
                             Delete
                           </button>

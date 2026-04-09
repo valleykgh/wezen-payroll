@@ -35,12 +35,13 @@ function LoginPageInner() {
       const r = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error || `Login failed (${r.status})`);
-      if (!j?.token || !j?.user) throw new Error("Login response missing token/user");
+      if (!j?.user) throw new Error("Login response missing user");
 
       const role = String(j.user.role || "").toUpperCase();
 
@@ -54,9 +55,8 @@ function LoginPageInner() {
           throw new Error("This is the ADMIN login page. Please use an Admin account.");
         }
 
-        localStorage.setItem("admin_token", j.token);
-        localStorage.removeItem("emp_token");
         router.push("/admin/time-entry");
+        router.refresh();
         return;
       }
 
@@ -64,9 +64,8 @@ function LoginPageInner() {
         throw new Error("This is the EMPLOYEE login page. Please use an Employee account.");
       }
 
-      localStorage.setItem("emp_token", j.token);
-      localStorage.removeItem("admin_token");
       router.push("/employee");
+      router.refresh();
     } catch (e: any) {
       setErr(e?.message || "Login failed");
     } finally {

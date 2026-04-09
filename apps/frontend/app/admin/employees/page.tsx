@@ -194,34 +194,185 @@ async function sendInvite(employeeId: string) {
   }
 }
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Employees</h1>
-      <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 14 }}>
-        Edit employee details and deactivate or restore employees. Deactivate and restore are PIN protected.
+   <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto" }}>   
+    <h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    margin: 0,
+    marginBottom: 8,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Employees
+</h1>  
+     <div style={{ fontSize: 15, color: "#64748b", marginBottom: 16 }}>   
+	Edit employee details and deactivate or restore employees. Deactivate and restore are PIN protected.
       </div>
 
-      {ok ? <div style={{ marginBottom: 10, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-      {err ? <div style={{ marginBottom: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+	{ok ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}      
 
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+	{err ? (
+  <div
+    style={{
+      marginBottom: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+ 
+	<div
+  style={{
+    overflowX: "auto",
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 980 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
-              <th style={{ padding: 10 }}>Employee</th>
-              <th style={{ padding: 10 }}>Email</th>
-              <th style={{ padding: 10 }}>Title</th>
-              <th style={{ padding: 10 }}>Rate</th>
-              <th style={{ padding: 10 }}>Status</th>
-              <th style={{ padding: 10 }}>Invite</th>
-              <th style={{ padding: 10 }}>Updated</th>
-              <th style={{ padding: 10 }}>Actions</th>
-            </tr>
+            <tr style={{ textAlign: "left", background: "#f8fafc" }}>  
+             <th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Employee
+</th> 
+              
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Email
+</th>
+             
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Title
+</th> 
+             
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Rate
+</th> 
+             
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Status
+</th> 
+              
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Invite
+</th>
+              
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Updated
+</th>
+            
+<th
+  style={{
+    padding: "12px 14px",
+    borderBottom: "1px solid #e2e8f0",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>
+  Actions
+</th>
+		</tr>
           </thead>
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>
-                  No employees found.
+                <td colSpan={8} style={{ padding: "14px 16px", color: "#64748b", fontSize: 13 }}>  
+		  No employees found.
                 </td>
               </tr>
             ) : (
@@ -229,87 +380,151 @@ async function sendInvite(employeeId: string) {
                 const isEditing = editingId === emp.id;
 
                 return (
-                  <tr key={emp.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: 10, minWidth: 220 }}>
-                      {isEditing ? (
+                 <tr key={emp.id} style={{ background: "#ffffff" }}>   
+                   <td style={{ padding: "12px 14px", minWidth: 220, borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}>   
+		     {isEditing ? (
                         <div style={{ display: "grid", gap: 8 }}>
                           <input
                             value={form.legalName}
                             onChange={(e) => setForm((p) => ({ ...p, legalName: e.target.value }))}
                             placeholder="Legal name"
-                            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			  />
                           <input
                             value={form.preferredName}
                             onChange={(e) => setForm((p) => ({ ...p, preferredName: e.target.value }))}
                             placeholder="Preferred name"
-                            style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+			/>
 			  <input
   value={form.addressLine1}
   onChange={(e) => setForm((p) => ({ ...p, addressLine1: e.target.value }))}
   placeholder="Address line 1"
-  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+  style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 />
 
 <input
   value={form.addressLine2}
   onChange={(e) => setForm((p) => ({ ...p, addressLine2: e.target.value }))}
   placeholder="Address line 2"
-  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+  style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 />
 
 <input
   value={form.city}
   onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))}
   placeholder="City"
-  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+  style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 />
 
 <input
   value={form.state}
   onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))}
   placeholder="State"
-  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+  style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 />
 
 <input
   value={form.zip}
   onChange={(e) => setForm((p) => ({ ...p, zip: e.target.value }))}
   placeholder="Zip"
-  style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+  style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 />
                         </div>
                       ) : (
                         <div>
-                          <div style={{ fontWeight: 600 }}>{emp.legalName}</div>
-                          {emp.preferredName ? (
-                            <div style={{ fontSize: 12, opacity: 0.7 }}>Preferred: {emp.preferredName}</div>
-                          ) : null}
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{emp.legalName}</div>
+			  {emp.preferredName ? (
+                          <div style={{ fontSize: 12, color: "#64748b" }}>Preferred: {emp.preferredName}</div>
+			  ) : null}
                         </div>
                       )}
                     </td>
 
-                    <td style={{ padding: 10, minWidth: 220 }}>
+		    <td style={{ padding: "12px 14px", minWidth: 220, borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}>
                       {isEditing ? (
                         <input
                           value={form.email}
                           onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                           placeholder="Email"
-                          style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                        />
+                          style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       ) : (
                         emp.email
                       )}
                     </td>
 
-                    <td style={{ padding: 10 }}>
+		<td style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}>
                       {isEditing ? (
                         <select
                           value={form.title}
                           onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                          style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                        >
+                          style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			>
                           <option value="CNA">CNA</option>
                           <option value="LVN">LVN</option>
                           <option value="RN">RN</option>
@@ -319,21 +534,29 @@ async function sendInvite(employeeId: string) {
                       )}
                     </td>
 
-                    <td style={{ padding: 10 }}>
-                      {isEditing ? (
+                      <td style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}> 
+		     {isEditing ? (
                         <input
                           value={form.hourlyRate}
                           onChange={(e) => setForm((p) => ({ ...p, hourlyRate: e.target.value }))}
                           placeholder="Hourly rate ($)"
-			  style={{ width: 120, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-                        />
+                          style={{
+  width: 120,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+			/>
                       ) : (
                         moneyFromCents(emp.hourlyRateCents)
                       )}
                     </td>
 
-                    <td style={{ padding: 10 }}>
-                      {emp.active ? (
+                     <td style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}> 
+		     {emp.active ? (
                         <span
                           style={{
                             display: "inline-block",
@@ -366,8 +589,8 @@ async function sendInvite(employeeId: string) {
                       )}
                     </td>
 
-		    <td style={{ padding: 10, fontSize: 13 }}>
-  {emp.user ? (
+		<td style={{ padding: "12px 14px", fontSize: 13, borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#0f172a" }}>  
+{emp.user ? (
     <span
       style={{
         display: "inline-block",
@@ -430,11 +653,10 @@ async function sendInvite(employeeId: string) {
   )}
 </td>
 
-                    <td style={{ padding: 10, fontSize: 13, opacity: 0.8 }}>
+		    <td style={{ padding: "12px 14px", fontSize: 13, borderBottom: "1px solid #f1f5f9", verticalAlign: "top", color: "#64748b" }}>
                       {emp.updatedAt ? new Date(emp.updatedAt).toLocaleString() : "—"}
                     </td>
-
-                    <td style={{ padding: 10 }}>
+		      <td style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top" }}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {isEditing ? (
                           <>
@@ -443,13 +665,15 @@ async function sendInvite(employeeId: string) {
                               disabled={loading}
                               onClick={() => saveEmployee(emp.id)}
                               style={{
-                                padding: "8px 12px",
-                                borderRadius: 8,
-                                border: "1px solid #111",
-                                background: "#111",
-                                color: "#fff",
-                              }}
-                            >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			    >
                               Save
                             </button>
 
@@ -457,13 +681,16 @@ async function sendInvite(employeeId: string) {
                               type="button"
                               disabled={loading}
                               onClick={cancelEdit}
-                              style={{
-                                padding: "8px 12px",
-                                borderRadius: 8,
-                                border: "1px solid #ccc",
-                                background: "#fff",
-                              }}
-                            >
+                               style={{
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#334155",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			    >
                               Cancel
                             </button>
                           </>
@@ -473,12 +700,15 @@ async function sendInvite(employeeId: string) {
                             disabled={loading}
                             onClick={() => startEdit(emp)}
                             style={{
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: "1px solid #ccc",
-                              background: "#fff",
-                            }}
-                          >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#334155",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}  
+			>
                             Edit
                           </button>
                         )}
@@ -486,15 +716,15 @@ async function sendInvite(employeeId: string) {
 			<Link
   href={`/admin/employees/${emp.id}/ledger`}
   style={{
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid #7c3aed",
-    background: "#f5f3ff",
-    color: "#6d28d9",
-    fontWeight: 700,
-    textDecoration: "none",
-    display: "inline-block",
-  }}
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #c4b5fd",
+  background: "#f5f3ff",
+  color: "#6d28d9",
+  fontWeight: 700,
+  textDecoration: "none",
+  display: "inline-block",
+}}
 >
   Ledger
 </Link>			
@@ -504,14 +734,14 @@ async function sendInvite(employeeId: string) {
     type="button"
     disabled
     style={{
-      padding: "8px 12px",
-      borderRadius: 8,
-      border: "1px solid #ccc",
-      background: "#f3f4f6",
-      color: "#6b7280",
-      fontWeight: 700,
-      opacity: 0.8,
-    }}
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  color: "#64748b",
+  fontWeight: 700,
+  opacity: 0.85,
+}}
   >
     User Exists
   </button>
@@ -521,14 +751,15 @@ async function sendInvite(employeeId: string) {
     disabled={loading}
     onClick={() => sendInvite(emp.id)}
     style={{
-      padding: "8px 12px",
-      borderRadius: 8,
-      border: "1px solid #2563eb",
-      background: "#eff6ff",
-      color: "#1d4ed8",
-      fontWeight: 700,
-    }}
-  >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}  
+>
     Send Invite
   </button>
 )}			
@@ -539,14 +770,15 @@ async function sendInvite(employeeId: string) {
                             disabled={loading}
                             onClick={() => deactivateEmployee(emp)}
                             style={{
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: "1px solid #b91c1c",
-                              background: "#fef2f2",
-                              color: "#b91c1c",
-                              fontWeight: 700,
-                            }}
-                          >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			  >
                             Deactivate
                           </button>
                         ) : (
@@ -555,14 +787,15 @@ async function sendInvite(employeeId: string) {
                             disabled={loading}
                             onClick={() => restoreEmployee(emp)}
                             style={{
-                              padding: "8px 12px",
-                              borderRadius: 8,
-                              border: "1px solid #047857",
-                              background: "#ecfdf5",
-                              color: "#047857",
-                              fontWeight: 700,
-                            }}
-                          >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #a7f3d0",
+  background: "#ecfdf5",
+  color: "#047857",
+  fontWeight: 700,
+  opacity: loading ? 0.6 : 1,
+}}
+			  >
                             Restore
                           </button>
                         )}

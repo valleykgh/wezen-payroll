@@ -1,72 +1,132 @@
+'use client';
+
 import Link from 'next/link';
-import { Footer } from '@/components/shared/footer';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/shared/navbar';
+import { Footer } from '@/components/shared/footer';
+import { LoginForm } from '@/components/shared/login-form';
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next') || '';
+
+  const isFacilityFlow = next.startsWith('/facility');
+  const isWorkerFlow = next.startsWith('/worker');
+  const isAdminFlow = next.startsWith('/admin');
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-slate-50">
       <Navbar />
-      <main className="mx-auto max-w-6xl px-6 py-20">
-        <div className="max-w-2xl">
-          <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
-            Access
-          </div>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-            Choose your login
-          </h1>
-          <p className="mt-4 text-lg leading-8 text-slate-600">
-            Access the right dashboard for your role inside the Wezen Staffing platform.
-          </p>
-        </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2">
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-            <div className="text-2xl font-bold tracking-tight text-slate-950">
-              Facility Login
+      <div className="mx-auto max-w-7xl px-6 py-16">
+        <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+          <div>
+            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
+              Access
             </div>
-            <p className="mt-3 text-slate-600">
-              Post shifts, review applicants, manage compliance, and fill coverage fast.
+
+            <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950">
+              Sign in to Wezen Staffing
+            </h1>
+
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+              {isAdminFlow
+                ? 'Internal administrators can manage worker approvals, facility invite codes, and operational controls.'
+                : isFacilityFlow
+                  ? 'Facilities can manage shift coverage, applicants, and approvals.'
+                  : isWorkerFlow
+                    ? 'Professionals can browse shifts, manage onboarding, and track requests.'
+                    : 'Facilities can manage shift coverage and applicants. Professionals can browse shifts and manage onboarding.'}
             </p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-600">
-              <li>• Post AM / PM / NOC shifts</li>
-              <li>• Review clinician documents</li>
-              <li>• Approve or reject applicants</li>
-            </ul>
-            <Link
-              href="/facility/dashboard"
-              className="mt-8 inline-flex rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm"
-            >
-              Continue as Facility
-            </Link>
+
+            <div className="mt-10 grid gap-4 sm:max-w-2xl">
+              {isAdminFlow ? (
+                <div className="rounded-[1.75rem] border border-cyan-200 bg-cyan-50 px-6 py-6 shadow-sm">
+                  <div className="text-2xl font-bold tracking-tight text-slate-950">
+                    Internal admin access
+                  </div>
+                  <div className="mt-3 text-slate-600">
+                    Sign in with your Wezen internal admin account to manage invite codes and platform operations.
+                  </div>
+                </div>
+              ) : null}
+
+              {isFacilityFlow ? (
+                <Link
+                  href="/signup/facility"
+                  className="block rounded-[1.75rem] border border-cyan-200 bg-cyan-50 px-6 py-6 shadow-sm transition hover:bg-cyan-100"
+                >
+                  <div className="text-2xl font-bold tracking-tight text-slate-950">
+                    Facility access
+                  </div>
+                  <div className="mt-3 text-slate-600">
+                    Post shifts, manage applicants, and approve workers.
+                  </div>
+                  <div className="mt-6 inline-flex rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white">
+                    Activate Facility Account
+                  </div>
+                </Link>
+              ) : null}
+
+              {isWorkerFlow ? (
+                <Link
+                  href="/signup/professional"
+                  className="block rounded-[1.75rem] border border-cyan-200 bg-cyan-50 px-6 py-6 shadow-sm transition hover:bg-cyan-100"
+                >
+                  <div className="text-2xl font-bold tracking-tight text-slate-950">
+                    Professional access
+                  </div>
+                  <div className="mt-3 text-slate-600">
+                    Search shifts, manage requests, and keep documents current.
+                  </div>
+                  <div className="mt-6 inline-flex rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white">
+                    Create Professional Account
+                  </div>
+                </Link>
+              ) : null}
+
+              {!isFacilityFlow && !isWorkerFlow && !isAdminFlow ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Link
+                    href="/signup/facility"
+                    className="block rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50"
+                  >
+                    <div className="text-2xl font-bold tracking-tight text-slate-950">
+                      Facility access
+                    </div>
+                    <div className="mt-3 text-slate-600">
+                      Post shifts, manage applicants, and approve workers.
+                    </div>
+                    <div className="mt-6 inline-flex rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white">
+                      Activate Facility Account
+                    </div>
+                  </Link>
+
+                  <Link
+                    href="/signup/professional"
+                    className="block rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50"
+                  >
+                    <div className="text-2xl font-bold tracking-tight text-slate-950">
+                      Professional access
+                    </div>
+                    <div className="mt-3 text-slate-600">
+                      Search shifts, manage requests, and keep documents current.
+                    </div>
+                    <div className="mt-6 inline-flex rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white">
+                      Create Professional Account
+                    </div>
+                  </Link>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-            <div className="text-2xl font-bold tracking-tight text-slate-950">
-              Professional Login
-            </div>
-            <p className="mt-3 text-slate-600">
-              Manage your profile, complete documents, search nearby shifts, and track requests.
-            </p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-600">
-              <li>• Complete onboarding and agreements</li>
-              <li>• Search shifts by miles and location</li>
-              <li>• Track approvals and schedule</li>
-            </ul>
-            <Link
-              href="/worker/dashboard"
-              className="mt-8 inline-flex rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm"
-            >
-              Continue as Professional
-            </Link>
-            <a
-              href="https://payroll.wezenstaffing.com"
-              className="mt-5 block text-sm font-medium text-slate-700 underline underline-offset-4"
-            >
-              Need payroll access?
-            </a>
+            <LoginForm />
           </div>
         </div>
-      </main>
+      </div>
+
       <Footer />
     </div>
   );

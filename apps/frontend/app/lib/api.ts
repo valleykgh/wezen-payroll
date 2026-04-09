@@ -1,5 +1,3 @@
-import { getToken } from "./auth";
-
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_URL;
   if (!base) return "http://localhost:4000";
@@ -25,11 +23,6 @@ export async function apiFetch<T>(
 
   if (hasBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
-  }
-
-  if (opts.auth !== false) {
-    const token = getToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
   if (typeof window !== "undefined") {

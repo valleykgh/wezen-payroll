@@ -341,20 +341,31 @@ const previewPaidEarlyCents = Number(preview?.totals?.paidEarlyCents || 0);
 const previewRemainingCents = Number(preview?.totals?.underpaidCents || 0);
 const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ margin: 0, fontSize: 24 }}>Finalize Payroll Run</h1>
-      <div style={{ color: "#666", marginTop: 4 }}>
-        Preview payroll, mark paid early, then create a frozen payroll snapshot
+      <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto" }}>
+      <h1
+  style={{
+    margin: 0,
+    fontSize: 30,
+    fontWeight: 800,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Finalize Payroll Run
+</h1>
+        <div style={{ color: "#475569", marginTop: 8, fontSize: 15 }}>
+	Preview payroll, mark paid early, then create a frozen payroll snapshot
       </div>
 
       <div
         style={{
           marginTop: 16,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-          display: "grid",
+          border: "1px solid #e2e8f0",
+borderRadius: 24,
+padding: 20,
+background: "#ffffff",
+boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+	   display: "grid",
           gap: 14,
         }}
       >
@@ -363,8 +374,15 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
           <select
             value={preset}
             onChange={(e) => applyPreset(e.target.value)}
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          >
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  >
             <option value="">Custom</option>
             <option value="THIS_WEEK">This Week</option>
             <option value="LAST_WEEK">Last Week</option>
@@ -383,8 +401,15 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
                 setPreset("");
                 setPeriodStart(e.target.value);
               }}
-              style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+               style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
@@ -396,8 +421,15 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
                 setPreset("");
                 setPeriodEnd(e.target.value);
               }}
-              style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+               style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </label>
         </div>
 
@@ -407,18 +439,26 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes for this payroll run"
-            style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  />
         </label>
 
         <div
           style={{
-            border: "1px solid #eee",
-            borderRadius: 10,
-            padding: 12,
-            background: "#fafafa",
-            fontSize: 13,
-            lineHeight: 1.5,
+            border: "1px solid #e2e8f0",
+borderRadius: 16,
+padding: 14,
+background: "#f8fafc",
+	    fontSize: 13,
+            lineHeight: 1.6,
+	    color: "#475569",
           }}
         >
           This will include time entries in the selected pay period that are currently
@@ -433,12 +473,12 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
             onClick={loadPreview}
             disabled={previewLoading}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#fff",
-              color: "#111",
-              fontWeight: 700,
+              padding: "10px 16px",
+              borderRadius: 999,
+              border: "1px solid #cbd5e1",
+background: "#ffffff",
+color: "#0f172a",
+fontWeight: 700,
               cursor: previewLoading ? "not-allowed" : "pointer",
             }}
           >
@@ -450,12 +490,13 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
             onClick={finalizeRun}
             disabled={loading}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 700,
+              padding: "10px 16px",
+              borderRadius: 999,
+              border: "1px solid #0f172a",
+background: "#0f172a",
+color: "#ffffff",
+fontWeight: 700,
+opacity: loading ? 0.6 : 1,
               cursor: loading ? "not-allowed" : "pointer",
             }}
           >
@@ -466,34 +507,65 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
             type="button"
             onClick={() => router.push("/admin/payroll-runs")}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              background: "#fff",
-              fontWeight: 700,
+              padding: "10px 16px",
+              borderRadius:999,
+              border: "1px solid #cbd5e1",
+background: "#ffffff",
+color: "#0f172a",	
+fontWeight: 700,
             }}
           >
             Back to Payroll Runs
           </button>
         </div>
 
-        {ok ? <div style={{ color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-        {err ? <div style={{ color: "#b00020", fontSize: 13 }}>{err}</div> : null}
-      </div>
+      {ok ? (
+  <div
+    style={{
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}
+
+{err ? (
+  <div
+    style={{
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+
+
+	</div>
 
       {preview ? (
         <>
           <div
             style={{
               marginTop: 16,
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 16,
-              background: "#fff",
-            }}
+              border: "1px solid #e2e8f0",
+borderRadius: 24,
+padding: 20,
+background: "#ffffff",
+boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+	    }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 12, fontSize: 18 }}>
-              Payroll Preview Summary
+              <div style={{ fontWeight: 800, marginBottom: 14, fontSize: 22, color: "#0f172a" }}>
+	      Payroll Preview Summary
             </div>
             <div
               style={{
@@ -511,24 +583,26 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
             </div>
           </div>
 
-          <div
-            style={{
-              marginTop: 16,
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 16,
-              background: "#fff",
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 12, fontSize: 18 }}>
+	   <div
+  style={{
+    marginTop: 16,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>	            
+
+	    <div style={{ fontWeight: 800, marginBottom: 12, fontSize: 18 }}>
               Employee Payroll Preview
             </div>
 
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
                 <thead>
-                  <tr style={{ background: "#f9fafb" }}>
-                    <th style={th}>Employee</th>
+                  <tr style={{ background: "#f8fafc" }}>  
+		    <th style={th}>Employee</th>
                     <th style={th}>Title</th>
                     <th style={th}>Entries</th>
                     <th style={th}>Payable</th>
@@ -550,8 +624,8 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
                         <tr>
                           <td style={td}>
                             <div style={{ fontWeight: 700 }}>{employeeLabel(emp.employee)}</div>
-                            <div style={{ fontSize: 12, color: "#666" }}>{emp.employee?.email || "-"}</div>
-                          </td>
+                            <div style={{ fontSize: 12, color: "#475569" }}>{emp.employee?.email || "-"}</div>
+			  </td>
                           <td style={td}>{emp.employee?.title || "-"}</td>
                           <td style={td}>{emp.entryCount}</td>
                           <td style={td}>{minutesToDecimalHours(emp.payableMinutes)}</td>
@@ -599,10 +673,10 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
       </div>
 
       {emp.earlyPayment.note && (
-        <div style={{ fontSize: 12, color: "#666" }}>
-          {emp.earlyPayment.note}
-        </div>
-      )}
+      <div style={{ fontSize: 12, color: "#475569" }}>
+  {emp.earlyPayment.note}
+</div>
+	)}
     </div>
   ) : (
     "-"
@@ -654,11 +728,11 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
                                 }}
                               >
                                 <div>
-                                 <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
- 				 Payment To Add Now ($)
+ 				<div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}> 
+				Payment To Add Now ($)
 				</div> 
-				<div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
- 				 Already paid: {dollars(earlyPaidCentsForEmp(emp))} ·
+ 				 <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>
+				 Already paid: {dollars(earlyPaidCentsForEmp(emp))} ·
  				 Remaining: {dollars(remainingCentsForEmp(emp))} ·
  				 Overpaid: {dollars(overpaidCentsForEmp(emp))}
 				</div>
@@ -671,8 +745,8 @@ const previewOverpaidCents = Number(preview?.totals?.overpaidCents || 0);
                                 </div>
 
                                 <div>
-                                  <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-                                    Note
+                                 <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>   
+					Note
                                   </div>
                                   <input
                                     value={earlyNote}
@@ -723,37 +797,45 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
     <div
       style={{
-        border: "1px solid #eee",
-        borderRadius: 10,
-        padding: 12,
-        background: "#fafafa",
+        border: "1px solid #e2e8f0",
+        borderRadius: 18,
+        padding: 16,
+        background: "#f8fafc",
       }}
     >
-      <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800 }}>{value}</div>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6, fontWeight: 700 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>{value}</div>
     </div>
   );
 }
-
 const th: React.CSSProperties = {
   textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #ddd",
-  fontSize: 13,
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #eee",
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
   fontSize: 13,
   verticalAlign: "top",
+  color: "#0f172a",
 };
-
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: 10,
-  border: "1px solid #ccc",
-  borderRadius: 8,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
 const actionBtn: React.CSSProperties = {
@@ -767,11 +849,11 @@ const actionBtn: React.CSSProperties = {
 };
 
 const secondaryBtn: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #ccc",
-  background: "#fff",
-  color: "#111",
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
   fontWeight: 700,
   cursor: "pointer",
 };

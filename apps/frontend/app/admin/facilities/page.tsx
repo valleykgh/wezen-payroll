@@ -269,27 +269,27 @@ export default function FacilitiesAdminPage() {
       .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)));
 
     if (rows.length === 0) {
-      return <div style={{ fontSize: 12, color: "#666" }}>No saved rates yet.</div>;
+     return <div style={{ fontSize: 12, color: "#64748b" }}>No saved rates yet.</div>;
     }
 
     return (
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-            <th style={{ padding: "6px 4px", fontSize: 12 }}>Effective From</th>
-            <th style={{ padding: "6px 4px", fontSize: 12 }}>Reg</th>
-            <th style={{ padding: "6px 4px", fontSize: 12 }}>OT</th>
-            <th style={{ padding: "6px 4px", fontSize: 12 }}>DT</th>
-          </tr>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8, background: "#ffffff" }}>  
+	<thead>
+          <tr style={{ textAlign: "left", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>  
+          <th style={{ padding: "8px 10px", fontSize: 12, fontWeight: 800, color: "#64748b" }}>Effective From</th>
+<th style={{ padding: "8px 10px", fontSize: 12, fontWeight: 800, color: "#64748b" }}>Reg</th>
+<th style={{ padding: "8px 10px", fontSize: 12, fontWeight: 800, color: "#64748b" }}>OT</th>
+<th style={{ padding: "8px 10px", fontSize: 12, fontWeight: 800, color: "#64748b" }}>DT</th>
+	  </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
-              <td style={{ padding: "6px 4px", fontSize: 12 }}>{isoDateOnly(r.effectiveFrom)}</td>
-              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.regRateCents)}</td>
-              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.otRateCents)}</td>
-              <td style={{ padding: "6px 4px", fontSize: 12 }}>${dollarsFromCents(r.dtRateCents)}</td>
-            </tr>
+           <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>   
+           <td style={{ padding: "8px 10px", fontSize: 12, color: "#0f172a" }}>{isoDateOnly(r.effectiveFrom)}</td>
+<td style={{ padding: "8px 10px", fontSize: 12, color: "#0f172a" }}>${dollarsFromCents(r.regRateCents)}</td>
+<td style={{ padding: "8px 10px", fontSize: 12, color: "#0f172a" }}>${dollarsFromCents(r.otRateCents)}</td>
+<td style={{ padding: "8px 10px", fontSize: 12, color: "#0f172a" }}>${dollarsFromCents(r.dtRateCents)}</td> 
+           </tr>
           ))}
         </tbody>
       </table>
@@ -297,50 +297,128 @@ export default function FacilitiesAdminPage() {
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Facilities</h1>
-      <div style={{ fontSize: 13, color: "#666" }}>
-        Review facilities and manage billing rates by designation.
+   <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>   
+      <h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    margin: 0,
+    marginBottom: 8,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Facilities
+</h1>
+     <div style={{ fontSize: 15, color: "#64748b" }}>   
+	Review facilities and manage billing rates by designation.
       </div>
 
-      <div style={{ marginTop: 16, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Create Facility</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+	<div
+  style={{
+    marginTop: 16,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+        <div style={{ fontWeight: 800, marginBottom: 12, color: "#0f172a" }}>Create Facility</div>
+	<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
             value={newFacilityName}
             onChange={(e) => setNewFacilityName(e.target.value)}
             placeholder="Facility name"
-            style={{ minWidth: 280, padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  minWidth: 280,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+	/>
           <button
             type="button"
             disabled={saving}
             onClick={createFacility}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: saving ? 0.6 : 1,
+}} 
+	 >
             Add Facility
           </button>
         </div>
       </div>
 
-      {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-      {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+	{ok ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}      
 
-      <div style={{ marginTop: 18, padding: 14, border: "1px solid #ddd", borderRadius: 12 }}>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+        {err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+
+        <div
+  style={{
+    marginTop: 18,
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+	<div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Select Facility</div>
-            <select
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  Select Facility
+</div>
+	    <select
               value={selectedFacilityId}
               onChange={(e) => setSelectedFacilityId(e.target.value)}
-              style={{ minWidth: 280, padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  minWidth: 280,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	   >
               {sortedFacilities.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}{f.active ? "" : " (Archived)"}
@@ -354,12 +432,15 @@ export default function FacilitiesAdminPage() {
             disabled={loading || saving}
             onClick={loadFacilities}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              background: "#fff",
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+  opacity: loading || saving ? 0.6 : 1,
+}}
+	  >
             Refresh
           </button>
         </div>
@@ -368,9 +449,18 @@ export default function FacilitiesAdminPage() {
           <>
             <div style={{ marginTop: 18, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedFacility.name}</div>
-                <div style={{ fontSize: 12, marginTop: 4, color: selectedFacility.active ? "#0a7a2f" : "#b45309" }}>
-                  {selectedFacility.active ? "Active" : "Archived"}
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
+  {selectedFacility.name}
+</div>
+                  <div
+  style={{
+    fontSize: 12,
+    marginTop: 6,
+    color: selectedFacility.active ? "#166534" : "#b45309",
+    fontWeight: 700,
+  }}
+>
+		  {selectedFacility.active ? "Active" : "Archived"}
                 </div>
               </div>
 
@@ -378,19 +468,30 @@ export default function FacilitiesAdminPage() {
                 <input
                   value={renameDraft}
                   onChange={(e) => setRenameDraft(e.target.value)}
-                  style={{ minWidth: 220, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                />
+                   style={{
+  minWidth: 220,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	        />
                 <button
                   type="button"
                   disabled={saving}
                   onClick={renameFacility}
                   style={{
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #ccc",
-                    background: "#fff",
-                  }}
-                >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+  opacity: saving ? 0.6 : 1,
+}}
+		>
                   Rename
                 </button>
                 <button
@@ -398,21 +499,22 @@ export default function FacilitiesAdminPage() {
                   disabled={saving}
                   onClick={archiveOrRestoreFacility}
                   style={{
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    border: selectedFacility.active ? "1px solid #b91c1c" : "1px solid #0a7a2f",
-                    background: selectedFacility.active ? "#fef2f2" : "#f0fdf4",
-                    color: selectedFacility.active ? "#b91c1c" : "#0a7a2f",
-                  }}
-                >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: selectedFacility.active ? "1px solid #fecaca" : "1px solid #a7f3d0",
+  background: selectedFacility.active ? "#fef2f2" : "#ecfdf5",
+  color: selectedFacility.active ? "#b91c1c" : "#047857",
+  fontWeight: 700,
+  opacity: saving ? 0.6 : 1,
+}}
+		>
                   {selectedFacility.active ? "Archive" : "Restore"}
                 </button>
               </div>
             </div>
 
             <div style={{ marginTop: 18 }}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>Billing Rates</div>
-
+	    <div style={{ fontWeight: 800, marginBottom: 12, color: "#0f172a" }}>Billing Rates</div>
               <div style={{ display: "grid", gap: 16 }}>
                 {TITLES.map((title) => {
                   const draft = rateDrafts[title] || {
@@ -426,56 +528,95 @@ export default function FacilitiesAdminPage() {
                     <div
                       key={title}
                       style={{
-                        border: "1px solid #eee",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fcfcfc",
-                      }}
-                    >
-                      <div style={{ fontWeight: 700 }}>{title}</div>
-
+  border: "1px solid #e2e8f0",
+  borderRadius: 20,
+  padding: 18,
+  background: "#f8fafc",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
+}} 
+		   >
+		     <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 16 }}>{title}</div>
                       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
                         <div>
-                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Effective From</div>
-                          <input
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  Effective From
+</div>  
+			<input
                             type="date"
                             value={draft.effectiveFrom}
                             onChange={(e) => setRateDraft(title, { effectiveFrom: e.target.value })}
-                            style={{ padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                            style={{
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+			/>
                         </div>
 
                         <div>
-                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Regular Rate ($)</div>
-                          <input
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  Regular Rate ($)
+</div>  
+			<input
                             value={draft.regRate}
                             onChange={(e) => setRateDraft(title, { regRate: e.target.value })}
-                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                            style={{
+  width: 110,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+			/>
                         </div>
 
                         <div>
-                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>OT Rate ($)</div>
-                          <input
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  OT Rate ($)
+</div>  
+			<input
                             value={draft.otRate}
                             onChange={(e) => setRateDraft(title, { otRate: e.target.value })}
-                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                            style={{
+  width: 110,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+			 />
                         </div>
 
                         <div>
-                          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>DT Rate ($)</div>
-                          <input
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>
+  DT Rate ($)
+</div>  
+			<input
                             value={draft.dtRate}
                             onChange={(e) => setRateDraft(title, { dtRate: e.target.value })}
-                            style={{ width: 110, padding: 9, border: "1px solid #ccc", borderRadius: 8 }}
-                          />
+                        style={{
+  width: 110,
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+			/>
                         </div>
                       </div>
 
                       <div style={{ marginTop: 10 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>Saved Rates</div>
-                        {renderSavedRates(title)}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>Saved Rates</div>
+			{renderSavedRates(title)}
                       </div>
                     </div>
                   );
@@ -488,22 +629,23 @@ export default function FacilitiesAdminPage() {
                   disabled={saving}
                   onClick={saveAllRates}
                   style={{
-                    padding: "10px 14px",
-                    borderRadius: 10,
-                    border: "1px solid #111",
-                    background: "#111",
-                    color: "#fff",
-                    fontWeight: 700,
-                  }}
-                >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: saving ? 0.6 : 1,
+}}
+		>
                   Save All Rates
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div style={{ marginTop: 16, color: "#666" }}>
-            {loading ? "Loading facilities..." : "No facility selected."}
+          <div style={{ marginTop: 16, color: "#64748b" }}>  
+		{loading ? "Loading facilities..." : "No facility selected."}
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-
+import cookieParser from "cookie-parser";
 import { authRoutes } from "./routes/authRoutes";
 import { meRoutes } from "./routes/meRoutes";
 import { adminTimeRoutes } from "./routes/adminTimeRoutes";
@@ -24,13 +24,14 @@ console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
  */
 
 const allowedOrigins = new Set([
+  "https://wezenstaffing.com",
+  "https://www.wezenstaffing.com",
   "https://payroll.wezenstaffing.com",
   "https://api.payroll.wezenstaffing.com",
   "https://dcvnabxhc4tbc.cloudfront.net",
   "http://localhost:3000",
   "http://localhost:4001",
 ]);
-
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
@@ -41,11 +42,10 @@ app.use((req, res, next) => {
 
   res.header("Vary", "Origin");
 
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, Accept, X-Requested-With, x-admin-pin"
-  );
-
+res.header(
+  "Access-Control-Allow-Headers",
+  "Content-Type, Authorization, Accept, X-Requested-With, X-Admin-Pin"
+);
   res.header(
     "Access-Control-Expose-Headers",
     "Content-Type, Authorization"
@@ -63,6 +63,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cookieParser());
 app.use(express.json());
 
 /**

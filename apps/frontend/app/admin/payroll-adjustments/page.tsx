@@ -242,38 +242,60 @@ async function markPaidNow(adjustment: AdjustmentRow) {
 }
 
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, margin: 0 }}>Payroll Adjustments</h1>
-      <div style={{ color: "#666", marginTop: 6 }}>
-        Use this for missed shifts or retro pay after a payroll week has already been locked.
+     <div style={{ padding: 0, maxWidth: 1200, margin: "0 auto" }}> 
+       <h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    margin: 0,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Payroll Adjustments
+</h1>
+        <div style={{ color: "#64748b", marginTop: 8, fontSize: 15 }}>
+	Use this for missed shifts or retro pay after a payroll week has already been locked.
       </div>
 
-      <div
-        style={{
-          marginTop: 16,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>Add Missed Shift / Retro Pay</div>
+	<div
+  style={{
+    marginTop: 16,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>        
+
+        <div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a", marginBottom: 14 }}>
+  Add Missed Shift / Retro Pay
+</div>
 
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.2fr 1.2fr 180px 140px 1fr",
-            gap: 12,
-            alignItems: "end",
-          }}
-        >
+           style={{
+  display: "grid",
+  gridTemplateColumns: "1.2fr 1.2fr 180px 140px 1fr",
+  gap: 12,
+  alignItems: "end",
+}}
+	>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Employee</div>
-            <select
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Employee</div>
+	    <select
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}  
+	  >
               <option value="">Select employee</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -283,11 +305,19 @@ async function markPaidNow(adjustment: AdjustmentRow) {
             </select>
           </div>
            <div>
-  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Facility</div>
+  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Facility</div>
   <select
     value={facilityId}
     onChange={(e) => setFacilityId(e.target.value)}
-    style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+    style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
   >
     <option value="">Select facility</option>
     {facilities.map((f) => (
@@ -299,47 +329,72 @@ async function markPaidNow(adjustment: AdjustmentRow) {
 </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Missed Shift Date</div>
-            <input
+           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Missed Shift Date</div> 
+	   <input
               type="date"
               value={workDate}
               onChange={(e) => setWorkDate(e.target.value)}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Payable Hours</div>
-            <input
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Payable Hours</div>  
+	  <input
               value={hours}
               onChange={(e) => setHours(e.target.value)}
               placeholder="e.g. 8"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	   />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Optional Note</div>
-            <input
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Optional Note</div>
+	    <input
               value={reasonNote}
               onChange={(e) => setReasonNote(e.target.value)}
               placeholder="e.g. entered after payroll lock"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
         </div>
 
         <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            border: "1px solid #eee",
-            borderRadius: 10,
-            background: "#fafafa",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
+        style={{
+  marginTop: 14,
+  padding: 14,
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  background: "#f8fafc",
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "#334155",
+}}
+	>
           <div>
             Hourly Rate: <b>{selectedEmployee ? money(selectedEmployee.hourlyRateCents) : "—"}</b>
           </div>
@@ -357,38 +412,72 @@ async function markPaidNow(adjustment: AdjustmentRow) {
             disabled={saving}
             onClick={createAdjustment}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 700,
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  opacity: saving ? 0.6 : 1,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.10)",
+}}
+	  >
             {saving ? "Saving..." : "Create Adjustment"}
           </button>
         </div>
 
-        {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-        {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
-      </div>
+        {ok ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#166534",
+      fontSize: 13,
+      background: "#f0fdf4",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {ok}
+  </div>
+) : null}
 
-      <div
-        style={{
-          marginTop: 18,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>Recent Adjustments</div>
+      {err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+    }}
+  >
+    {err}
+  </div>
+) : null}
+	</div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-            <thead>
-              <tr style={{ background: "#f9fafb" }}>
-                <th style={th}>Created</th>
+          <div
+  style={{
+    marginTop: 18,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+
+	<div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a", marginBottom: 14 }}>
+  Recent Adjustments
+</div>
+        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 20, background: "#ffffff" }}>  
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 900 }}>  
+	    <thead>
+              <tr style={{ background: "#f8fafc" }}>  
+	        <th style={th}>Created</th>
                 <th style={th}>Employee</th>
                 <th style={th}>Reason</th>
                 <th style={th}>Amount</th>
@@ -413,8 +502,8 @@ async function markPaidNow(adjustment: AdjustmentRow) {
                   <td style={td}>
   {a.paidImmediately ? (
     <div>
-      <div style={{ fontWeight: 700, color: "#0a7a2f" }}>Paid Immediately</div>
-      <div style={{ fontSize: 12, opacity: 0.75 }}>
+      <div style={{ fontWeight: 700, color: "#166534" }}>Paid Immediately</div>
+	<div style={{ fontSize: 12, opacity: 0.75 }}>
         {a.paidAt ? new Date(a.paidAt).toLocaleString() : ""}
       </div>
       {a.paidNote ? (
@@ -427,7 +516,7 @@ async function markPaidNow(adjustment: AdjustmentRow) {
        {String(a.payrollRun.periodEnd).slice(0, 10)} ({a.payrollRun.status})
     </span>
   ) : (
-    <span style={{ opacity: 0.7 }}>Pending next payroll</span>
+     <span style={{ color: "#64748b" }}>Pending next payroll</span>
   )}
 </td>
 
@@ -438,15 +527,16 @@ async function markPaidNow(adjustment: AdjustmentRow) {
         type="button"
         disabled={payingId === a.id}
         onClick={() => markPaidNow(a)}
-        style={{
-          padding: "8px 12px",
-          borderRadius: 8,
-          border: "1px solid #1d4ed8",
-          background: "#eff6ff",
-          color: "#1d4ed8",
-          fontWeight: 700,
-        }}
-      >
+      style={{
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  opacity: payingId === a.id ? 0.6 : 1,
+}}
+	>
         {payingId === a.id ? "Saving..." : "Pay Now"}
       </button>
     ) : (
@@ -478,14 +568,18 @@ async function markPaidNow(adjustment: AdjustmentRow) {
 
 const th: React.CSSProperties = {
   textAlign: "left",
-  padding: "10px 12px",
-  borderBottom: "1px solid #ddd",
-  fontSize: 13,
+  padding: "12px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
-
 const td: React.CSSProperties = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #eee",
+  padding: "12px 14px",
+  borderBottom: "1px solid #f1f5f9",
   fontSize: 13,
   verticalAlign: "top",
+  color: "#0f172a",
 };

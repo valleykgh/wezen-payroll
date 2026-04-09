@@ -39,6 +39,16 @@ exports.authRoutes.post("/register", async (req, res) => {
         },
     });
     const token = (0, auth_1.signToken)({ sub: user.id, role: user.role, employeeId: user.employeeId });
+    (0, auth_1.setAuthCookie)(res, token);
+    res.json({
+        user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            employeeId: user.employeeId,
+        },
+        mustChangePassword: user.mustChangePassword,
+    });
     res.json({
         token,
         user: { id: user.id, email: user.email, role: user.role, employeeId: user.employeeId },
@@ -114,6 +124,7 @@ exports.authRoutes.post("/login", async (req, res) => {
         role: user.role,
         employeeId: user.employeeId,
     });
+    (0, auth_1.setAuthCookie)(res, token);
     res.json({
         token,
         user: {
@@ -188,10 +199,52 @@ exports.authRoutes.post("/accept-invite", async (req, res) => {
             data: { usedAt: new Date() },
         });
         const jwt = (0, auth_1.signToken)({ sub: user.id, role: user.role, employeeId: user.employeeId });
-        res.json({ token: jwt, user });
+        (0, auth_1.setAuthCookie)(res, jwt);
+        res.json({ user });
     }
     catch (e) {
         console.error("POST /api/auth/accept-invite failed:", e);
         res.status(500).json({ error: "Failed to accept invite" });
     }
+});
+exports.authRoutes.get("/me", authMiddleware_1.requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await prisma_1.prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                employeeId: true,
+                active: true,
+                mustChangePassword: true,
+            },
+        });
+        if (!user) {
+            (0, auth_1.clearAuthCookie)(res);
+            return res.status(404).json({ error: "User not found" });
+        }
+        if (!user.active) {
+            (0, auth_1.clearAuthCookie)(res);
+            return res.status(403).json({ error: "User is inactive" });
+        }
+        res.json({
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                employeeId: user.employeeId,
+            },
+            mustChangePassword: user.mustChangePassword,
+        });
+    }
+    catch (e) {
+        console.error("GET /api/auth/me failed:", e);
+        res.status(500).json({ error: "Failed to fetch current user" });
+    }
+});
+exports.authRoutes.post("/logout", async (_req, res) => {
+    (0, auth_1.clearAuthCookie)(res);
+    res.json({ ok: true });
 });

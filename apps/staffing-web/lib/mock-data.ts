@@ -1,3 +1,5 @@
+import type { MarketplaceShift, ShiftFilterOptions } from '@/types/shift';
+
 export const facilityDashboardStats = [
   { label: 'Open Shifts', value: '18', helper: 'Live now', tone: 'info' as const },
   { label: 'Pending Applicants', value: '24', helper: 'Needs review', tone: 'warning' as const },
@@ -60,5 +62,70 @@ export const workerUpcomingShifts = [
     date: 'Apr 5, 2026',
     distance: '19 miles',
     status: 'Approved',
+  },
+];
+
+export const availableShiftFilters: ShiftFilterOptions = {
+  roles: ['CNA', 'LVN', 'RN'],
+  shiftTypes: ['AM', 'PM', 'NOC'],
+  radii: ['5 miles', '10 miles', '25 miles', '50 miles'],
+};
+
+export const marketplaceShifts: MarketplaceShift[] = [
+  {
+    id: 'M-3001',
+    role: 'CNA',
+    facilityName: 'Sunrise Care Center',
+    city: 'Fresno',
+    state: 'CA',
+    distanceMiles: 8,
+    shiftType: 'AM',
+    date: 'Apr 6, 2026',
+    time: '7:00 AM - 3:00 PM',
+    payRateLabel: '$26/hr',
+    applicants: 4,
+    status: 'AVAILABLE',
+  },
+  {
+    id: 'M-3002',
+    role: 'LVN',
+    facilityName: 'Mission Ridge Rehab',
+    city: 'Bakersfield',
+    state: 'CA',
+    distanceMiles: 14,
+    shiftType: 'PM',
+    date: 'Apr 6, 2026',
+    time: '3:00 PM - 11:00 PM',
+    payRateLabel: '$38/hr',
+    applicants: 2,
+    status: 'AVAILABLE',
+  },
+  {
+    id: 'M-3003',
+    role: 'RN',
+    facilityName: 'Northview Hospital',
+    city: 'Modesto',
+    state: 'CA',
+    distanceMiles: 22,
+    shiftType: 'NOC',
+    date: 'Apr 7, 2026',
+    time: '11:00 PM - 7:00 AM',
+    payRateLabel: '$54/hr',
+    applicants: 6,
+    status: 'AVAILABLE',
+  },
+  {
+    id: 'M-3004',
+    role: 'CNA',
+    facilityName: 'Golden Meadow Skilled Nursing',
+    city: 'Clovis',
+    state: 'CA',
+    distanceMiles: 11,
+    shiftType: 'PM',
+    date: 'Apr 7, 2026',
+    time: '3:00 PM - 11:00 PM',
+    payRateLabel: '$27/hr',
+    applicants: 3,
+    status: 'AVAILABLE',
   },
 ];

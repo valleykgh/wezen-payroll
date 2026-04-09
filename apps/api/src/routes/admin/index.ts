@@ -10,8 +10,9 @@ import payrollRunsRoutes from "./payrollRuns";
 import payrollRoutes from "./payroll";
 import utilsRoutes from "./utils";
 import adminUsersRoutes from "./adminUsers";
-import exceptionsRoutes from "./exceptions"
-;
+import exceptionsRoutes from "./exceptions";
+import systemRoutes from "./system";
+
 const router = express.Router();
 
 router.use("/", facilitiesRoutes);
@@ -24,6 +25,7 @@ router.use("/", payrollRunsRoutes);
 router.use("/", payrollRoutes);
 router.use("/", utilsRoutes);
 router.use("/", adminUsersRoutes);
-router.use("/admin", exceptionsRoutes);
+router.use("/", exceptionsRoutes);
+router.use("/", systemRoutes);
 
 export default router;

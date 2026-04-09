@@ -1,6 +1,8 @@
+import "../src/app/globals.css";
+
 export const metadata = {
   title: "Wezen Payroll",
-  description: "Payroll System",
+  description: "Secure payroll portal for Wezen Staffing contractors and administrators.",
 };
 
 export default function RootLayout({
@@ -10,9 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../../lib/api";
-import { getToken } from "../../lib/auth";
 function safeNum(x: any) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
@@ -263,12 +262,6 @@ const resp = await apiFetch<{ entries: any[] }>(
   }
 
   try {
-    const token = getToken();
-
-    if (!token) {
-      setErr("Missing token. Please log in again.");
-      return;
-    }
 
     const apiBase =
       process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:4000";
@@ -290,11 +283,9 @@ const resp = await apiFetch<{ entries: any[] }>(
       invoiceNumber,
     });
 
-    const resp = await fetch(`${apiBase}/api/admin/billing-export?${qs.toString()}`, {
+      const resp = await fetch(`${apiBase}/api/admin/billing-export?${qs.toString()}`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: "include",
     });
 
     if (!resp.ok) {
@@ -323,11 +314,6 @@ const resp = await apiFetch<{ entries: any[] }>(
 }  
 
 async function openSupplementalModal() {
-  const token = getToken();
-  if (!token) {
-    setErr("Missing token. Please log in again.");
-    return;
-  }
 
   const qs = new URLSearchParams({
     facilityId,
@@ -335,19 +321,16 @@ async function openSupplementalModal() {
     to,
   });
 
-  const resp = await fetch(
+   const resp = await fetch(
     `${apiBase}/api/admin/billing-export/eligible-employees?${qs.toString()}`,
     {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: "include",
     }
-  );
-
-  if (!resp.ok) {
+   );
+   if (!resp.ok) {
     setErr("Failed to load eligible employees");
     return;
-  }
+   }
 
   const data = await resp.json();
 
@@ -466,22 +449,25 @@ r.bill += baseBill;
   }, [payPeriodGrouped]);
 
 const controlStyle: React.CSSProperties = {
-  height: 44,
+  height: 46,
   padding: "0 14px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
+  borderRadius: 14,
+  border: "1px solid #cbd5e1",
   background: "#ffffff",
-  color: "#111827",
-  fontSize: 16,
-  lineHeight: "44px",
+  color: "#0f172a",
+  fontSize: 15,
+  lineHeight: "46px",
   outline: "none",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
+
 const labelStyle: React.CSSProperties = {
   display: "block",
-  marginBottom: 6,
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#4b5563",
+  marginBottom: 8,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#475569",
+  letterSpacing: "0.02em",
 };
 
 useEffect(() => {
@@ -490,19 +476,32 @@ useEffect(() => {
 }, []);
 
   return (
-    <div style={{ padding: 16, maxWidth: 1300, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Pay Period Summary (by Facility)</h1>
-
+        <div style={{ padding: 0, maxWidth: 1300, margin: "0 auto" }}>
+	<h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    marginBottom: 18,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Pay Period Summary
+</h1>
 <div
   style={{
-    marginTop: 16,
+    marginTop: 12,
     display: "flex",
     gap: 16,
     flexWrap: "wrap",
     alignItems: "flex-end",
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
   }}
->  
-
+>
 <div>
     <div style={labelStyle}>From</div>
     <input
@@ -551,30 +550,37 @@ useEffect(() => {
 
 
 </div>
-  <div
-    style={{
-      display: "flex",
-      gap: 10,
-      flexWrap: "wrap",
-      alignItems: "center",
-    }}
-  >
+    <div
+  style={{
+    marginTop: 14,
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    alignItems: "center",
+    padding: 20,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
     <button
       type="button"
       disabled={loading}
       onClick={loadEntries}
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid #111",
-        background: "#111",
-        color: "#fff",
-        fontWeight: 700,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 44,
-      }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  height: 44,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.10)",
+}}
     >
       {loading ? "Loading..." : "Load Pay Period Summary"}
     </button>
@@ -583,19 +589,19 @@ useEffect(() => {
       onClick={() => downloadBillingExport("regular")}
       disabled={regularBillingStatus?.status === "LOCKED"}
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid #1d4ed8",
-        background: "#eff6ff",
-        color: "#1d4ed8",
-        fontWeight: 700,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 44,
-        cursor: regularBillingStatus?.status === "LOCKED" ? "not-allowed" : "pointer",
-        opacity: regularBillingStatus?.status === "LOCKED" ? 0.5 : 1,
-      }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  height: 44,
+  cursor: regularBillingStatus?.status === "LOCKED" ? "not-allowed" : "pointer",
+  opacity: regularBillingStatus?.status === "LOCKED" ? 0.5 : 1,
+}}
     >
       Export Regular Invoice
     </button>
@@ -603,18 +609,18 @@ useEffect(() => {
     <button
       type="button"
       onClick={openSupplementalModal}
-      style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid #1d4ed8",
-        background: "#eff6ff",
-        color: "#1d4ed8",
-        fontWeight: 700,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 44,
-      }}
+     style={{
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  height: 44,
+}}
     >
       Export Supplemental Invoice
     </button>
@@ -655,19 +661,19 @@ useEffect(() => {
         }
       }}
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid #b45309",
-        background: regularBillingStatus?.status === "LOCKED" ? "#fff7ed" : "#ffffff",
-        color: "#92400e",
-        fontWeight: 700,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 44,
-        cursor: regularBillingStatus?.status === "LOCKED" ? "not-allowed" : "pointer",
-        opacity: regularBillingStatus?.status === "LOCKED" ? 0.7 : 1,
-      }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #fcd34d",
+  background: regularBillingStatus?.status === "LOCKED" ? "#fff7ed" : "#ffffff",
+  color: "#92400e",
+  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  height: 44,
+  cursor: regularBillingStatus?.status === "LOCKED" ? "not-allowed" : "pointer",
+  opacity: regularBillingStatus?.status === "LOCKED" ? 0.7 : 1,
+}}
     >
       {regularBillingStatus?.status === "LOCKED"
         ? "Regular Invoice Locked"
@@ -676,19 +682,20 @@ useEffect(() => {
   </div>
 {regularBillingStatus ? (
     <div
-  style={{
-    marginTop: 12,
-    fontSize: 13,
-    color: regularBillingStatus.status === "LOCKED" ? "#92400e" : "#065f46",
-    background: regularBillingStatus.status === "LOCKED" ? "#fff7ed" : "#ecfdf5",
-    border:
-      regularBillingStatus.status === "LOCKED"
-        ? "1px solid #fcd34d"
-        : "1px solid #86efac",
-    borderRadius: 8,
-    padding: "8px 10px",
-    display: "inline-block",
-  }}
+    style={{
+  marginTop: 14,
+  fontSize: 13,
+  color: regularBillingStatus.status === "LOCKED" ? "#92400e" : "#065f46",
+  background: regularBillingStatus.status === "LOCKED" ? "#fff7ed" : "#ecfdf5",
+  border:
+    regularBillingStatus.status === "LOCKED"
+      ? "1px solid #fcd34d"
+      : "1px solid #86efac",
+  borderRadius: 14,
+  padding: "10px 12px",
+  display: "inline-block",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
 >
     {regularBillingStatus.status === "LOCKED" ? "🔒" : "🟢"}{" "}
     Regular invoice status: <b>{regularBillingStatus.status}</b>
@@ -701,44 +708,198 @@ useEffect(() => {
   </div>
 ) : null}
 
-      {err ? <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
+{err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+      display: "inline-block",
+    }}
+  >
+    {err}
+  </div>
+) : null}
 
       {/* Grand totals */}
       <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 260px", border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Total Pay</div>
-          <div style={{ fontSize: 22, fontWeight: 900 }}>{money(payPeriodGrand.pay)}</div>
+          <div
+  style={{
+    flex: "1 1 260px",
+    border: "1px solid #e2e8f0",
+    borderRadius: 20,
+    padding: 18,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>Total Pay</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{money(payPeriodGrand.pay)}</div>
         </div>
-        <div style={{ flex: "1 1 260px", border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Total Bill</div>
-          <div style={{ fontSize: 22, fontWeight: 900 }}>{money(payPeriodGrand.bill)}</div>
+          <div
+  style={{
+    flex: "1 1 260px",
+    border: "1px solid #e2e8f0",
+    borderRadius: 20,
+    padding: 18,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>Total Bill</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{money(payPeriodGrand.bill)}</div>
         </div>
       </div>
 
       {/* Table */}
-      <div style={{ marginTop: 12, overflowX: "auto" }}>
+        <div
+  style={{
+    marginTop: 16,
+    overflowX: "auto",
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-              <th style={{ padding: 8 }}>Facility</th>
-              <th style={{ padding: 8 }}>Employee</th>
-              <th style={{ padding: 8 }}>Reg</th>
-              <th style={{ padding: 8 }}>Holiday</th>
-	      <th style={{ padding: 8 }}>OT</th>
-              <th style={{ padding: 8 }}>DT</th>
-              <th style={{ padding: 8 }}>Total</th>
-              <th style={{ padding: 8 }}>Regular Pay ($)</th>
-              <th style={{ padding: 8 }}>Holiday Pay ($)</th>
-	      <th style={{ padding: 8 }}>Pay ($)</th>
-              <th style={{ padding: 8 }}>Bill ($)</th>
+           <tr
+  style={{
+    textAlign: "left",
+    borderBottom: "1px solid #e2e8f0",
+    background: "#f8fafc",
+  }}
+>   
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Facility</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Employee</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Reg</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Holiday</th>
+	      <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>OT</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>DT</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Total</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Regular Pay ($)</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Holiday Pay ($)</th>
+	      <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Pay ($)</th>
+              <th
+  style={{
+    padding: "12px 10px",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  }}
+>Bill ($)</th>
             </tr>
           </thead>
 
           <tbody>
             {payPeriodGrouped.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ padding: 12, opacity: 0.7 }}>
-                  No entries in this pay period (or not loaded yet).
+                  <td
+  colSpan={11}
+  style={{
+    padding: 16,
+    color: "#64748b",
+    fontSize: 14,
+  }}
+>
+			No entries in this pay period (or not loaded yet).
                 </td>
               </tr>
             ) : (
@@ -748,35 +909,49 @@ useEffect(() => {
                     <td
                       colSpan={8}
                       style={{
-                        padding: "10px 8px",
-                        fontWeight: 900,
-                        background: "#fafafa",
-                        borderTop: "1px solid #eee",
-                      }}
-                    >
+  padding: "12px 10px",
+  fontWeight: 900,
+  background: "#f8fafc",
+  borderTop: "1px solid #e2e8f0",
+  color: "#0f172a",
+}}
+		    >
                       {g.facilityName}
                     </td>
                   </tr>
 
                   {g.rows.map((r: any) => (
-                    <tr key={`${r.facilityId}-${r.employeeId}`} style={{ borderBottom: "1px solid #f2f2f2" }}>
-                      <td style={{ padding: 8 }}></td>
-                      <td style={{ padding: 8, whiteSpace: "nowrap" }}>{r.employeeName}</td>
-                      <td style={{ padding: 8 }}>{decimalHoursFixed(r.reg)}</td>
- 		      <td style={{ padding: 8 }}>{decimalHoursFixed(r.holiday)}</td>
-                      <td style={{ padding: 8 }}>{decimalHoursFixed(r.ot)}</td>
-                      <td style={{ padding: 8 }}>{decimalHoursFixed(r.dt)}</td>
-                      <td style={{ padding: 8 }}>{decimalHoursFixed(r.total)}</td>
-                      <td style={{ padding: 8 }}>{money(r.regularPay)}</td>
-		      <td style={{ padding: 8 }}>{money(r.holidayPay)}</td>
-		      <td style={{ padding: 8 }}>{money(r.pay)}</td>
-                      <td style={{ padding: 8 }}>{money(r.bill)}</td>
+                   <tr
+  key={`${r.facilityId}-${r.employeeId}`}
+  style={{
+    borderBottom: "1px solid #f1f5f9",
+    background: "#ffffff",
+  }}
+>   
+		      <td style={{ padding: "10px 10px", color: "#334155", fontSize: 14 }}></td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{r.employeeName}</td>
+                      <td style={{ padding: "10px 10px", color: "#334155", fontSize: 14 }}>{decimalHoursFixed(r.reg)}</td>
+ 		      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{decimalHoursFixed(r.holiday)}</td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{decimalHoursFixed(r.ot)}</td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{decimalHoursFixed(r.dt)}</td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{decimalHoursFixed(r.total)}</td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{money(r.regularPay)}</td>
+		      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{money(r.holidayPay)}</td>
+		      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{money(r.pay)}</td>
+                      <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#0f172a", fontSize: 14, fontWeight: 600 }}>{money(r.bill)}</td>
                     </tr>
                   ))}
 
                   {/* Facility subtotal */}
-                  <tr style={{ background: "#f5f5f5", fontWeight: 800, borderTop: "1px solid #eee" }}>
-                    <td style={{ padding: 8 }}></td>
+                    <tr
+  style={{
+    background: "#f8fafc",
+    fontWeight: 800,
+    borderTop: "1px solid #e2e8f0",
+    color: "#0f172a",
+  }}
+>
+		    <td style={{ padding: 8 }}></td>
                     <td style={{ padding: 8 }}>Facility Total</td>
                     <td style={{ padding: 8 }}>{decimalHoursFixed(g.reg)}</td>
                     <td style={{ padding: 8 }}>{decimalHoursFixed(g.holiday)}</td>
@@ -795,24 +970,46 @@ useEffect(() => {
         </table>
       </div>
        {showSupplementalModal && (
-  <div style={{
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: "rgba(0,0,0,0.4)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000,
-  }}>
-    <div style={{ background: "#fff", padding: 20, borderRadius: 8, width: 400 }}>
-      <h3>Select Employees for Supplemental Invoice</h3>
-          <div style={{ marginBottom: 10 }}>
+   
+   <div style={{
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  background: "rgba(15, 23, 42, 0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1000,
+  padding: 20,
+}}> 
+    <div
+  style={{
+    background: "#fff",
+    padding: 24,
+    borderRadius: 24,
+    width: 440,
+    maxWidth: "100%",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
+  }}
+>  
+        <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
+  Select Employees for Supplemental Invoice
+</h3>  
+	<div style={{ marginBottom: 10 }}>
   <button
     type="button"
     onClick={() => setSelectedEmployeeIds(eligibleEmployees.map((e: any) => e.id))}
+    style={{
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}
   >
     Select All
   </button>
@@ -820,8 +1017,15 @@ useEffect(() => {
   <button
     type="button"
     onClick={() => setSelectedEmployeeIds([])}
-    style={{ marginLeft: 8 }}
-  >
+   style={{
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}  
+>
     Clear All
   </button>
 </div>
@@ -859,21 +1063,12 @@ useEffect(() => {
             });
 
             (async () => {
-  const token = getToken();
-  if (!token) {
-    setErr("Missing token. Please log in again.");
-    return;
-  }
-
   const resp = await fetch(
     `${apiBase}/api/admin/billing-export?${qs.toString()}`,
     {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: "include",
     }
   );
-
   if (!resp.ok) {
     setErr("Export failed");
     return;
@@ -893,12 +1088,29 @@ useEffect(() => {
   setShowSupplementalModal(false);
 })();
           }}
+       style={{
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0891b2",
+  background: "#0891b2",
+  color: "#fff",
+  fontWeight: 700,
+}}
         >
           Export
         </button>
 
-        <button onClick={() => setShowSupplementalModal(false)}>
-          Cancel
+        <button onClick={() => setShowSupplementalModal(false)}
+style={{
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}
+  >
+        Cancel
         </button>
       </div>
     </div>

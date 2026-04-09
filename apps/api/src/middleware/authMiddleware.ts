@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { readAuthToken } from "../auth";
 
 export type AppUserRole =
   | "SUPER_ADMIN"
@@ -19,20 +20,34 @@ export interface AuthRequest extends Request {
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const auth = String(req.headers.authorization || "");
-    if (!auth.toLowerCase().startsWith("bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
+    let token = readAuthToken(req);
+
+    if (!token) {
+      const auth = String(req.headers.authorization || "");
+      if (auth.toLowerCase().startsWith("bearer ")) {
+        token = auth.slice(7).trim();
+      }
     }
 
-    let token = auth.slice(7).trim();
-    token = token.replace(/[\u0000-\u001F\u007F]/g, "");
+    token = String(token || "").replace(/[\u0000-\u001F\u007F]/g, "");
+
+    if (!token) {
+      return res.status(401).json({ error: "Missing token" });
+    }
 
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       console.error("JWT_SECRET not set");
       return res.status(500).json({ error: "Server auth misconfigured" });
     }
-
+    console.log("AUTH DEBUG", {
+  hasCookieToken: Boolean(readAuthToken(req)),
+  hasBearer: String(req.headers.authorization || "").toLowerCase().startsWith("bearer "),
+  cookieName: process.env.AUTH_COOKIE_NAME || "wezen_auth",
+  nodeEnv: process.env.NODE_ENV,
+  cookieDomain: process.env.COOKIE_DOMAIN || null,
+  tokenPrefix: String(token || "").slice(0, 12),
+});
     const payload = jwt.verify(token, secret) as any;
 
     const id = String(payload.sub || payload.id || payload.userId || "").trim();

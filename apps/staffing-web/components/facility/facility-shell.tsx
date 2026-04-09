@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { AppLogo } from '@/components/shared/app-logo';
+import { CurrentUserCard } from '@/components/shared/current-user-card';
 
 const facilityNav = [
   { href: '/facility/dashboard', label: 'Dashboard' },
@@ -9,8 +10,8 @@ const facilityNav = [
   { href: '/facility/workers', label: 'Workers' },
   { href: '/facility/compliance', label: 'Compliance' },
   { href: '/facility/favorites', label: 'Favorites' },
-  { href: '/facility/billing', label: 'Billing' },
   { href: '/facility/settings', label: 'Settings' },
+  { href: '/facility/schedule', label: 'Schedule' }
 ];
 
 export function FacilityShell({ children }: { children: React.ReactNode }) {
@@ -42,18 +43,17 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
                   Wezen Staffing
                 </div>
               </div>
+             <div className="flex items-center gap-3">
+  <CurrentUserCard />
 
-              <div className="flex items-center gap-3">
-                <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
-                  Notifications
-                </button>
-                <Link
-                  href="/facility/shifts/post"
-                  className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm"
-                >
-                  Post Shift
-                </Link>
-              </div>
+  <Link
+    href="/facility/shifts/post"
+    className="rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"
+  >
+    Post Shift
+  </Link>
+</div>	
+
             </div>
           </header>
 

@@ -1,5 +1,12 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { AppLogo } from '@/components/shared/app-logo';
+import { CurrentUserCard } from '@/components/shared/current-user-card';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+
+const PAYROLL_PORTAL_URL = 'https://payroll.wezenstaffing.com';
 
 const workerNav = [
   { href: '/worker/dashboard', label: 'Dashboard' },
@@ -8,11 +15,35 @@ const workerNav = [
   { href: '/worker/agreements', label: 'Agreements' },
   { href: '/worker/shifts', label: 'Find Shifts' },
   { href: '/worker/requests', label: 'My Requests' },
+  { href: '/worker/notifications', label: 'Notifications', badgeKey: 'notifications' },
   { href: '/worker/schedule', label: 'Schedule' },
   { href: '/worker/settings', label: 'Settings' },
 ];
 
 export function WorkerShell({ children }: { children: React.ReactNode }) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    async function loadUnreadCount() {
+      try {
+	const res = await fetch(
+  `${STAFFING_API_BASE_URL}/api/worker/notifications/unread-count`,
+  {
+    credentials: 'include',
+    cache: 'no-store',
+  }
+);
+	
+        const data = await res.json();
+        setUnreadCount(data?.data?.unreadCount ?? 0);
+      } catch {
+        setUnreadCount(0);
+      }
+    }
+
+    loadUnreadCount();
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
@@ -24,9 +55,15 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
+                className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
               >
-                {item.label}
+                <span>{item.label}</span>
+
+                {item.badgeKey === 'notifications' && unreadCount > 0 ? (
+                  <span className="inline-flex min-w-[24px] items-center justify-center rounded-full bg-rose-600 px-2 py-1 text-xs font-bold text-white">
+                    {unreadCount}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>
@@ -42,12 +79,14 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
               View payroll-related activity in your dedicated payroll environment.
             </p>
             <a
-              href="https://payroll.wezenstaffing.com"
-              className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900"
-            >
-              Go to Payroll
-            </a>
-          </div>
+  href={PAYROLL_PORTAL_URL}
+  target="_blank"
+  rel="noreferrer"
+  className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"
+>
+  <span className="whitespace-nowrap">Go to Payroll ↗</span>
+</a>  
+	</div>
         </aside>
 
         <div className="min-w-0">
@@ -61,9 +100,17 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="flex items-center gap-3">
-                <button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
-                  Profile Status
-                </button>
+                <CurrentUserCard />
+
+                <a
+                  href={PAYROLL_PORTAL_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                 className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-50"
+		>
+                  Payroll ↗
+                </a>
+
                 <Link
                   href="/worker/shifts"
                   className="rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm"

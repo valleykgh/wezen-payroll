@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { getToken } from "../lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001";
 type BreakRow = { startTime: string; endTime: string; minutes: number };
@@ -109,31 +108,27 @@ type PaystubData = {
   }>;
 };
 
-async function apiFetch(path: string, token: string, init?: RequestInit) {
-    
-  const safeToken = cleanJwt(token);
-const res = await fetch(`${API}${path}`, {
-  ...init,
-  headers: {
-    ...(init?.headers || {}),
-    Authorization: `Bearer ${safeToken}`,
-    "Content-Type": "application/json",
-  },
-
-  cache: "no-store",
+async function apiFetch(path: string, init?: RequestInit) {
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...(init?.headers || {}),
+      "Content-Type": "application/json",
+    },
   });
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    // ignore
-  }
+
   if (!res.ok) {
-    const msg = json?.error || text || `HTTP ${res.status}`;
-    throw new Error(msg);
+    const text = await res.text().catch(() => "");
+    throw new Error(text || "Request failed");
   }
-  return json;
+
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return res.json();
+  }
+
+  return res;
 }
 
 function fmtCents(cents: number) {
@@ -186,8 +181,7 @@ function cleanJwt(raw: string) {
 }
 
 export default function EmployeePage() {
-  const [empToken, setEmpToken] = useState("");
-
+const [sessionReady, setSessionReady] = useState(false);
   const [from, setFrom] = useState<string>(() => getPreviousPayrollWeek().from);
 const [to, setTo] = useState<string>(() => getPreviousPayrollWeek().to);
 
@@ -205,36 +199,38 @@ const [zip, setZip] = useState("");
 const [ssnLast4, setSsnLast4] = useState("");
 
 
-  useEffect(() => {
-  const saved = getToken() || "";
-  if (saved) {
-    setEmpToken(saved);
+useEffect(() => {
+  async function checkSession() {
+    try {
+      await apiFetch("/api/auth/me", { method: "GET" });
+      setSessionReady(true);
+    } catch {
+      setSessionReady(false);
+      setErr("You are not logged in.");
+    }
   }
+
+  checkSession();
 }, []);
 
-  const canCallApi = useMemo(() => empToken.trim().length > 0, [empToken]);
-
+const canCallApi = useMemo(() => sessionReady, [sessionReady]);
 
   async function savePaystubInfo() {
-  if (!empToken) return;
+    if (!sessionReady) return;
   setErr("");
   setLoading(true);
   try {
-    await apiFetch(
-      "/api/employee/profile",
-      empToken,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          addressLine1,
-          addressLine2,
-          city,
-          state,
-          zip,
-          ssnLast4,
-        }),
-      }
-    );
+        await apiFetch("/api/employee/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        addressLine1,
+        addressLine2,
+        city,
+        state,
+        zip,
+        ssnLast4,
+      }),
+    });
   } catch (e: any) {
     setErr(e?.message || "Failed to save paystub info");
   } finally {
@@ -243,10 +239,9 @@ const [ssnLast4, setSsnLast4] = useState("");
 }
 
 async function loadProfile() {
-  if (!empToken) return;
-
+  if (!sessionReady) return;
   try {
-    const profile = await apiFetch("/api/employee/profile", empToken, {
+    const profile = await apiFetch("/api/employee/profile", {
       method: "GET",
     });
 
@@ -275,23 +270,17 @@ async function downloadPaystubPdf() {
       setErr("Please select a pay period first.");
       return;
     }
-
-    const token = getToken();
-    if (!token) {
+    if (!sessionReady) {
       setErr("You are not logged in.");
       return;
     }
-
-    const safeToken = cleanJwt(token);
     const qs = new URLSearchParams({ from, to });
     const url = `${API}/api/employee/paystub/pdf?${qs.toString()}`;
 
     const res = await fetch(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${safeToken}`,
-      },
-    });
+      credentials: "include",    
+});
 
     if (!res.ok) {
       const text = await res.text();
@@ -317,7 +306,7 @@ async function downloadPaystubPdf() {
 
 
    async function loadAll() {
-    if (!empToken) return;
+        if (!sessionReady) return;
     setErr("");
     setLoading(true);
     try {
@@ -325,10 +314,10 @@ async function downloadPaystubPdf() {
       if (from) qs.set("from", from);
       if (to) qs.set("to", to);
 
-      const te = await apiFetch(`/api/employee/time-entries?${qs.toString()}`, empToken);
+      const te = await apiFetch(`/api/employee/time-entries?${qs.toString()}`, { method: "GET" });
       setEntries(te?.entries || []);
 
-      const ps = await apiFetch(`/api/employee/pay-summary?${qs.toString()}`, empToken);
+      const ps = await apiFetch(`/api/employee/pay-summary?${qs.toString()}`,{ method: "GET" });
       setSummary(ps || null);
     } catch (e: any) {
       setErr(e?.message || "Failed to load");
@@ -338,13 +327,12 @@ async function downloadPaystubPdf() {
   }
 
   useEffect(() => {
-  if (!empToken) return;
-
+if (!sessionReady) return;
   loadAll();
   loadProfile();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [empToken]);
+}, [sessionReady, from, to]);
 
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>

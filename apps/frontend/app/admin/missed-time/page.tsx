@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../lib/api";
-import { getToken } from "../../lib/auth";
 
 type Employee = {
   id: string;
@@ -128,55 +127,126 @@ function normalizeOnBlur(value: string): string {
   }[tone];
 
   return (
-    <div style={{ marginTop: 18 }}>
+    <div style={{ marginTop: 20 }}>
       <div
-        style={{
-          padding: "10px 12px",
-          borderRadius: 10,
-          border: `1px solid ${tones.headerBorder}`,
-          background: tones.headerBg,
-          color: tones.headerText,
-          fontWeight: 800,
-          marginBottom: 10,
-        }}
+       style={{
+  padding: "12px 14px",
+  borderRadius: 16,
+  border: `1px solid ${tones.headerBorder}`,
+  background: tones.headerBg,
+  color: tones.headerText,
+  fontWeight: 800,
+  marginBottom: 12,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
       >
         {title} ({rows.length})
       </div>
 
       <div style={{ overflowX: "auto" }}>
         <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-            overflow: "hidden",
-          }}
-        >
+        style={{
+  width: "100%",
+  borderCollapse: "collapse",
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  overflow: "hidden",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	>
           <thead>
-            <tr style={{ background: "#f9fafb", textAlign: "left" }}>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>✔</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Date</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Employee</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Facility</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Type</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Billed</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Invoice</th>
-              <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Action</th>
+             <tr style={{ background: "#f8fafc", textAlign: "left" }}> 
+	      <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>✔</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Date</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Employee</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Facility</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Type</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Billed</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Invoice</th>
+              <th style={{
+  padding: "12px 10px",
+  borderBottom: "1px solid #e2e8f0",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}}>Action</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 12, color: "#6b7280" }}>
+                <td colSpan={8} style={{ padding: 16, color: "#64748b", fontSize: 14 }}>
                   No items in this section.
                 </td>
               </tr>
             ) : (
               rows.map((row: any, idx: number) => (
                 <tr key={`${title}-${row.sourceType || "ROW"}-${row.sourceId || idx}`}>
-                 <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                 <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
      		 <input
        		 type="checkbox"
        		checked={selectedRows.some(
@@ -200,39 +270,74 @@ function normalizeOnBlur(value: string): string {
        		 }}
      		 />
     		</td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {row.workDate ? new Date(row.workDate).toISOString().slice(0, 10) : "-"}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {row.employee?.legalName || row.employeeName || row.employeeId || "-"}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
-                    {row.facility?.name || row.facilityName || row.facilityId || "-"}
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
+                   {row.facility?.name || row.facilityName || row.facilityId || "-"}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {row.sourceType || (row.payrollRunId ? "TIME_ENTRY" : "ENTRY")}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {row.billedAt ? "Yes" : "No"}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {row.invoiceType || "-"}
                   </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{
+  padding: "10px 10px",
+  borderBottom: "1px solid #f1f5f9",
+  color: "#334155",
+  fontSize: 14,
+}}>
                     {!row.billedAt ? (
                       <button
                         type="button"
                         onClick={() => onAddToSupplemental(row)}
                         style={{
-                          padding: "8px 10px",
-                          borderRadius: 8,
-                          border: "1px solid #2563eb",
-                          background: "#eff6ff",
-                          color: "#1d4ed8",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+  cursor: "pointer",
+}}
+		      >
                         Add to Supplemental
                       </button>
                     ) : (
@@ -406,6 +511,49 @@ if (facilityId) qs.set("facilityId", facilityId);
   }
 }
 
+async function handleResetEnvironment() {
+  try {
+    setErr("");
+    setOk("");
+
+    const pin = window.prompt("Enter admin PIN to reset test environment");
+    if (!pin) return;
+
+    const confirmation = window.prompt('Type RESET to permanently delete test employees and payroll data');
+    if (confirmation !== "RESET") {
+      setErr('Reset cancelled. You must type "RESET".');
+      return;
+    }
+
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:4000";
+
+    const resp = await fetch(`${apiBase}/api/admin/system/reset-live-test`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-pin": pin,
+      },
+      body: JSON.stringify({
+        confirmation,
+      }),
+    });
+
+    const body = await resp.json().catch(() => null);
+
+    if (!resp.ok) {
+      setErr(body?.error || "Reset failed");
+      return;
+    }
+
+    setSelectedRows([]);
+    setExceptions(null);
+    setOk(body?.message || "Environment reset completed.");
+  } catch (e: any) {
+    setErr(e?.message || "Reset failed");
+  }
+}
 async function handleAddToSupplemental(row: any) {
   try {
     setErr("");
@@ -433,9 +581,7 @@ if (!effectiveFacilityId) {
     });
 
     const resp = await fetch(`/api/admin/billing-export?${qs.toString()}`, {
-      headers: {
-      Authorization: `Bearer ${getToken() || ""}`,
-      },
+      credentials: "include",
     });
 
     if (!resp.ok) {
@@ -499,9 +645,7 @@ async function handleBulkSupplemental() {
     });
 
     const resp = await fetch(`/api/admin/billing-export?${qs.toString()}`, {
-      headers: {
-        Authorization: `Bearer ${getToken() || ""}`,
-      },
+      credentials: "include",
     });
 
     if (!resp.ok) {
@@ -556,12 +700,6 @@ async function handleFixAllExceptions() {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      setErr("Missing token. Please log in again.");
-      return;
-    }
-
     let exportCount = 0;
 
     for (let i = 0; i < grouped.length; i++) {
@@ -584,10 +722,8 @@ async function handleFixAllExceptions() {
         employeeIds: employeeIds.join(","),
       });
 
-      const resp = await fetch(`/api/admin/billing-export?${qs.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        const resp = await fetch(`/api/admin/billing-export?${qs.toString()}`, {
+        credentials: "include",
       });
 
       if (!resp.ok) {
@@ -739,47 +875,84 @@ async function handleFixAllExceptions() {
   const disabled = loading || calculating || saving;
 
   return (
-    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, margin: 0 }}>Exceptions Dashboard</h1>
-      <div style={{ color: "#666", marginTop: 6 }}>
-      Review missing time, post-payroll entries, supplemental billing candidates, and payroll adjustments.
+      <div style={{ padding: 0, maxWidth: 1100, margin: "0 auto" }}>
+      <h1
+  style={{
+    fontSize: 30,
+    fontWeight: 800,
+    margin: 0,
+    color: "#0f172a",
+    letterSpacing: "-0.02em",
+  }}
+>
+  Exceptions Dashboard
+</h1>
+      <div style={{ color: "#64748b", marginTop: 8, fontSize: 15 }}>
+	Review missing time, post-payroll entries, supplemental billing candidates, and payroll adjustments.
       </div>
 
       <div
-  style={{
-    marginTop: 16,
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-    alignItems: "end",
-  }}
->
-  <div>
-    <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>From</div>
+        style={{
+          marginTop: 18,
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "end",
+          padding: 20,
+          border: "1px solid #e2e8f0",
+          borderRadius: 24,
+          background: "#ffffff",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        }}
+      >
+	  <div>
+    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>From</div>
     <input
       type="date"
       value={from}
       onChange={(e) => setFrom(e.target.value)}
-      style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-    />
+     style={{
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}    
+/>
   </div>
 
   <div>
-    <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>To</div>
+    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>To</div>
     <input
       type="date"
       value={to}
       onChange={(e) => setTo(e.target.value)}
-      style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-    />
+      style={{
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+   />
   </div>
 
   <div>
-    <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Facility Filter</div>
+    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Facility Filter</div>
     <select
       value={facilityId}
       onChange={(e) => setFacilityId(e.target.value)}
-      style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8, minWidth: 220 }}
+      style={{
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  minWidth: 220,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
     >
       <option value="">All Facilities</option>
       {facilities.map((f) => (
@@ -793,14 +966,14 @@ async function handleFixAllExceptions() {
   <button
     onClick={loadExceptions}
     style={{
-      padding: "10px 14px",
-      borderRadius: 10,
-      border: "1px solid #dc2626",
-      background: "#fef2f2",
-      color: "#dc2626",
-      fontWeight: 700,
-      height: 44,
-    }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontWeight: 700,
+  height: 44,
+}}
   >
     Load Exceptions
   </button>
@@ -809,15 +982,16 @@ async function handleFixAllExceptions() {
 {selectedRows.length > 0 && (
   <div
     style={{
-      marginTop: 12,
-      padding: "10px 14px",
-      borderRadius: 10,
-      background: "#ecfdf5",
-      border: "1px solid #86efac",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-    }}
+  marginTop: 14,
+  padding: "12px 14px",
+  borderRadius: 16,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
   >
     <div style={{ fontWeight: 700 }}>
       {selectedRows.length} selected
@@ -827,25 +1001,27 @@ async function handleFixAllExceptions() {
       <button
         onClick={handleBulkSupplemental}
         style={{
-          padding: "8px 12px",
-          borderRadius: 8,
-          border: "1px solid #1d4ed8",
-          background: "#eff6ff",
-          color: "#1d4ed8",
-          fontWeight: 700,
-        }}
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+}}
       >
         Add Selected to Supplemental
       </button>
 
       <button
         onClick={() => setSelectedRows([])}
-        style={{
-          padding: "8px 12px",
-          borderRadius: 8,
-          border: "1px solid #d1d5db",
-          background: "#fff",
-        }}
+      style={{
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 700,
+}}
       >
         Clear
       </button>
@@ -853,31 +1029,40 @@ async function handleFixAllExceptions() {
   </div>
 )}
 
-      <div
-        style={{
-          marginTop: 16,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          background: "#fff",
-        }}
-      >
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.2fr 1fr 180px 160px",
-            gap: 12,
-            alignItems: "end",
-          }}
-        >
+  style={{
+    marginTop: 18,
+    border: "1px solid #e2e8f0",
+    borderRadius: 24,
+    padding: 20,
+    background: "#fff",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  }}
+>
+	<div
+        style={{
+  display: "grid",
+  gridTemplateColumns: "1.2fr 1fr 180px 160px",
+  gap: 14,
+  alignItems: "end",
+}}
+	>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Employee</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Employee</div>
             <select
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
               disabled={disabled}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    >
               <option value="">Select employee</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -888,13 +1073,21 @@ async function handleFixAllExceptions() {
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Facility</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Facility</div>
             <select
               value={facilityId}
               onChange={(e) => setFacilityId(e.target.value)}
               disabled={disabled}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    >
               <option value="">Select facility</option>
               {facilities.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -905,24 +1098,40 @@ async function handleFixAllExceptions() {
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Work Date</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Work Date</div>
             <input
               type="date"
               value={workDate}
               onChange={(e) => setWorkDate(e.target.value)}
               disabled={disabled}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift Type</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift Type</div>
             <select
               value={shiftType}
               onChange={(e) => setShiftType(e.target.value)}
               disabled={disabled}
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            >
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}    
+	>
               <option value="AM">AM</option>
               <option value="PM">PM</option>
               <option value="NOC">NOC</option>
@@ -933,8 +1142,9 @@ async function handleFixAllExceptions() {
           </div>
         </div>
 
-        <div style={{ marginTop: 18, fontWeight: 700 }}>Punches</div>
-
+<div style={{ marginTop: 20, fontWeight: 800, color: "#0f172a", fontSize: 18 }}>
+  Punches
+</div>
         <div
           style={{
             marginTop: 10,
@@ -944,7 +1154,7 @@ async function handleFixAllExceptions() {
           }}
         >
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 1 — Clock In</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 1 — Clock In</div>
             <input
               value={p1.clockIn}
               onChange={(e) => setP1((prev) => ({ ...prev, clockIn: e.target.value }))}
@@ -956,12 +1166,20 @@ async function handleFixAllExceptions() {
 }
 disabled={disabled}
               placeholder="e.g. 07:00 or 7:00 AM"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+           />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 1 — Meal Out</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 1 — Meal Out</div>
             <input
               value={b1.startTime}
               onChange={(e) => setB1((prev) => ({ ...prev, startTime: e.target.value }))}
@@ -973,12 +1191,20 @@ disabled={disabled}
 }
 	      disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+             style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}    
+	/>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 1 — Meal In</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 1 — Meal In</div>
             <input
               value={b1.endTime}
               onChange={(e) => setB1((prev) => ({ ...prev, endTime: e.target.value }))}
@@ -990,12 +1216,20 @@ disabled={disabled}
 }
               disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 1 — Clock Out</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 1 — Clock Out</div>
             <input
               value={p1.clockOut}
               onChange={(e) => setP1((prev) => ({ ...prev, clockOut: e.target.value }))}
@@ -1007,12 +1241,20 @@ disabled={disabled}
 }
 	      disabled={disabled}
               placeholder="e.g. 15:30 or 3:30 PM"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	   />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 2 — Clock In</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 2 — Clock In</div>
             <input
               value={p2.clockIn}
               onChange={(e) => setP2((prev) => ({ ...prev, clockIn: e.target.value }))}
@@ -1024,12 +1266,20 @@ disabled={disabled}
 }
               disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
             />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 2 — Meal Out</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 2 — Meal Out</div>
             <input
               value={b2.startTime}
               onChange={(e) => setB2((prev) => ({ ...prev, startTime: e.target.value }))}
@@ -1041,12 +1291,20 @@ disabled={disabled}
 }
 	      disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+	   />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 2 — Meal In</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 2 — Meal In</div>
             <input
               value={b2.endTime}
               onChange={(e) => setB2((prev) => ({ ...prev, endTime: e.target.value }))}
@@ -1058,12 +1316,20 @@ disabled={disabled}
 }
 	      disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	    />
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Shift 2 — Clock Out</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Shift 2 — Clock Out</div>
             <input
               value={p2.clockOut}
               onChange={(e) => setP2((prev) => ({ ...prev, clockOut: e.target.value }))}
@@ -1075,20 +1341,36 @@ disabled={disabled}
 }
 	      disabled={disabled}
               placeholder="optional"
-              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-            />
+              style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}} 
+           />
           </div>
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Optional Note</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 700 }}>Optional Note</div>
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={disabled}
             placeholder="e.g. entered after payroll lock"
-            style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+            style={{
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+}}
+	  />
         </div>
 
         <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1097,14 +1379,14 @@ disabled={disabled}
             onClick={calculate}
             disabled={disabled}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 700,
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#fff",
+  fontWeight: 700,
+}}
+	  >
             {calculating ? "Calculating..." : "Calculate"}
           </button>
 
@@ -1113,14 +1395,14 @@ disabled={disabled}
             onClick={createAdjustment}
             disabled={disabled || !calc}
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #1d4ed8",
-              background: "#eff6ff",
-              color: "#1d4ed8",
-              fontWeight: 700,
-            }}
-          >
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontWeight: 700,
+}}
+	  >
             {saving ? "Creating..." : "Create Payroll Adjustment"}
           </button>
 
@@ -1129,16 +1411,25 @@ disabled={disabled}
         {calc ? (
           <div
             style={{
-              marginTop: 16,
-              border: "1px solid #ddd",
-              borderRadius: 10,
-              padding: 14,
-              background: "#fafafa",
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Calculated Result</div>
-
-            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13 }}>
+  marginTop: 18,
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  padding: 16,
+  background: "#f8fafc",
+}}
+           >
+            <div style={{ fontWeight: 800, marginBottom: 10, color: "#0f172a" }}>
+  Calculated Result
+</div>
+            <div style={{
+  marginTop: 10,
+  color: "#b91c1c",
+  fontSize: 13,
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  borderRadius: 12,
+  padding: "10px 12px",
+}}>
               <div>
               <b>Payable:</b> {calc.display.calculatedHours_decimal.toFixed(2)}
               </div>
@@ -1157,14 +1448,22 @@ disabled={disabled}
             </div>
     
             {Array.isArray(calc.warnings) && calc.warnings.length > 0 ? (
-              <div style={{ marginTop: 10, color: "#b00020", fontSize: 13 }}>
+              <div style={{
+  marginTop: 10,
+  color: "#b91c1c",
+  fontSize: 13,
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  borderRadius: 12,
+  padding: "10px 12px",
+}}>
                 {calc.warnings.map((w, i) => (
                   <div key={i}>⚠ {w}</div>
                 ))}
               </div>
             ) : null}
 
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>
               Reason to be saved: <b>{buildReason()}</b>
             </div>
           </div>
@@ -1172,7 +1471,7 @@ disabled={disabled}
 
 
 {exceptions ? (
-  <div style={{ marginTop: 20 }}>
+  <div style={{ marginTop: 24 }}>
 
      <div
   style={{
@@ -1184,21 +1483,22 @@ disabled={disabled}
     marginBottom: 12,
   }}
 >
-  <h2 style={{ margin: 0 }}>🚨 Exceptions Dashboard</h2>
-
+<h2 style={{ margin: 0, color: "#0f172a", fontSize: 26, fontWeight: 800 }}>
+  Exceptions Dashboard
+</h2>
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
     <button
       type="button"
       onClick={loadExceptions}
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid #111827",
-        background: "#111827",
-        color: "#ffffff",
-        fontWeight: 700,
-        cursor: "pointer",
-      }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontWeight: 700,
+  cursor: "pointer",
+}}
     >
       Refresh Exceptions
     </button>
@@ -1208,15 +1508,15 @@ disabled={disabled}
     onClick={handleFixAllExceptions}
     disabled={!exceptions?.needsSupplemental?.length}
     style={{
-      padding: "10px 14px",
-      borderRadius: 10,
-      border: "1px solid #065f46",
-      background: "#ecfdf5",
-      color: "#065f46",
-      fontWeight: 700,
-      cursor: !exceptions?.needsSupplemental?.length ? "not-allowed" : "pointer",
-      opacity: !exceptions?.needsSupplemental?.length ? 0.5 : 1,
-    }}
+  padding: "10px 16px",
+  borderRadius: 999,
+  border: "1px solid #86efac",
+  background: "#ecfdf5",
+  color: "#065f46",
+  fontWeight: 700,
+  cursor: !exceptions?.needsSupplemental?.length ? "not-allowed" : "pointer",
+  opacity: !exceptions?.needsSupplemental?.length ? 0.5 : 1,
+}}
   >
     Fix All Exceptions
   </button>
@@ -1227,8 +1527,8 @@ disabled={disabled}
         onClick={handleBulkSupplemental}
         style={{
           padding: "10px 14px",
-          borderRadius: 10,
-          border: "1px solid #2563eb",
+          borderRadius: 999,
+          border: "1px solid #bfdbfe",
           background: "#eff6ff",
           color: "#1d4ed8",
           fontWeight: 700,
@@ -1238,7 +1538,23 @@ disabled={disabled}
         Export Selected ({selectedRows.length})
       </button>
     ) : null} 
-  </div>
+  
+<button
+  type="button"
+  onClick={handleResetEnvironment}
+  style={{
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: "1px solid #b91c1c",
+    background: "#fecaca",
+    color: "#b91c1c",
+    fontWeight: 700,
+    cursor: "pointer",
+  }}
+>
+  Reset Test Environment
+</button>
+</div>
 </div>
 
 <div
@@ -1254,8 +1570,8 @@ disabled={disabled}
     onClick={() => setActiveExceptionTab("afterFinalized")}
     style={{
       textAlign: "left",
-      padding: "14px 16px",
-      borderRadius: 12,
+      padding: "16px 18px",
+      borderRadius: 20,
       border:
         activeExceptionTab === "afterFinalized"
           ? "2px solid #f97316"
@@ -1264,7 +1580,7 @@ disabled={disabled}
       color: "#9a3412",
       fontWeight: 700,
       cursor: "pointer",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
     }}
   >
     <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
@@ -1280,8 +1596,8 @@ disabled={disabled}
     onClick={() => setActiveExceptionTab("needsSupplemental")}
     style={{
       textAlign: "left",
-      padding: "14px 16px",
-      borderRadius: 12,
+      padding: "16px 18px",
+      borderRadius: 20,
       border:
         activeExceptionTab === "needsSupplemental"
           ? "2px solid #2563eb"
@@ -1290,7 +1606,7 @@ disabled={disabled}
       color: "#1d4ed8",
       fontWeight: 700,
       cursor: "pointer",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
     }}
   >
     <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
@@ -1306,8 +1622,8 @@ disabled={disabled}
     onClick={() => setActiveExceptionTab("unpaid")}
     style={{
       textAlign: "left",
-      padding: "14px 16px",
-      borderRadius: 12,
+      padding: "16px 18px",
+      borderRadius: 20,
       border:
         activeExceptionTab === "unpaid"
           ? "2px solid #dc2626"
@@ -1316,7 +1632,7 @@ disabled={disabled}
       color: "#b91c1c",
       fontWeight: 700,
       cursor: "pointer",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
     }}
   >
     <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
@@ -1332,8 +1648,8 @@ disabled={disabled}
     onClick={() => setActiveExceptionTab("adjustments")}
     style={{
       textAlign: "left",
-      padding: "14px 16px",
-      borderRadius: 12,
+      padding: "16px 18px",
+      borderRadius: 20,
       border:
         activeExceptionTab === "adjustments"
           ? "2px solid #7c3aed"
@@ -1342,7 +1658,7 @@ disabled={disabled}
       color: "#6d28d9",
       fontWeight: 700,
       cursor: "pointer",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
     }}
   >
     <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
@@ -1400,9 +1716,39 @@ disabled={disabled}
 ) : null}
   </div>
 ) : null}
-        {ok ? <div style={{ marginTop: 12, color: "#0a7a2f", fontSize: 13 }}>{ok}</div> : null}
-        {err ? <div style={{ marginTop: 12, color: "#b00020", fontSize: 13 }}>{err}</div> : null}
-      </div>
+        {ok ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#065f46",
+      fontSize: 13,
+      background: "#ecfdf5",
+      border: "1px solid #86efac",
+      borderRadius: 12,
+      padding: "10px 12px",
+      display: "inline-block",
+    }}
+  >
+    {ok}
+  </div>
+) : null}
+  {err ? (
+  <div
+    style={{
+      marginTop: 12,
+      color: "#b91c1c",
+      fontSize: 13,
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      borderRadius: 12,
+      padding: "10px 12px",
+      display: "inline-block",
+    }}
+  >
+    {err}
+  </div>
+) : null}    
+  </div>
     </div>
   );
 }
