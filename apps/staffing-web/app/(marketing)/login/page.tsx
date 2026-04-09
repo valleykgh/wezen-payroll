@@ -1,12 +1,13 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/shared/navbar';
 import { Footer } from '@/components/shared/footer';
 import { LoginForm } from '@/components/shared/login-form';
 
-export default function LoginPage() {
+function LoginPageInner() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '';
 
@@ -122,12 +123,20 @@ export default function LoginPage() {
           </div>
 
           <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-            <LoginForm />
+            <LoginForm next={next} />
           </div>
         </div>
       </div>
 
       <Footer />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

@@ -75,7 +75,7 @@ export default function FacilityShiftsPage() {
       setBusyId(id);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/shifts/${id}/duplicate`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts/${id}/duplicate`, {
         method: 'POST',
 	credentials: 'include',
       });
@@ -100,7 +100,7 @@ export default function FacilityShiftsPage() {
       setBusyId(id);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/shifts/${id}/${action}`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts/${id}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

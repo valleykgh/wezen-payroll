@@ -6,7 +6,11 @@ import { loginRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
 
-export function LoginForm() {
+type LoginFormProps = {
+  next?: string;
+};
+
+export function LoginForm({ next = '' }: LoginFormProps) {  
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,9 +25,6 @@ export function LoginForm() {
   try {
     const result = await loginRequest(email, password);
 const role = result?.data?.role;
-
-const params = new URLSearchParams(window.location.search);
-const next = params.get('next');
 
 if (role === 'INTERNAL_ADMIN') {
   if (next && next.startsWith('/admin/')) {

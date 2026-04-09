@@ -44,7 +44,7 @@ export function ApplicantsClient({ requests }: Props) {
       setBusyId(id);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/shift-requests/${id}/${action}`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shift-requests/${id}/${action}`, {
         method: 'POST',
 	credentials: 'include',
       });

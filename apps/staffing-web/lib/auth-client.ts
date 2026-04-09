@@ -22,7 +22,23 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return text ? JSON.parse(text) : ({} as T);
 }
 
-export async function loginRequest(email: string, password: string) {
+export type LoginResponse = {
+  data: {
+    userId: string;
+    email: string;
+    role: 'FACILITY_ADMIN' | 'PROFESSIONAL' | 'INTERNAL_ADMIN';
+    firstName?: string | null;
+    lastName?: string | null;
+    professionalId?: string | null;
+    facilityId?: string | null;
+    facilityName?: string | null;
+  };
+};
+
+export async function loginRequest(
+  email: string,
+  password: string
+): Promise<LoginResponse> {
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: {
@@ -32,7 +48,7 @@ export async function loginRequest(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
 
-  return parseResponse(res);
+  return parseResponse<LoginResponse>(res);
 }
 
 export async function logoutRequest() {
@@ -85,7 +101,7 @@ export async function registerFacilityRequest(payload: {
   lastName: string;
   inviteCode: string;
 }) {
-  const res = await fetch(`${STAFFING_API_BASE_URL}}/api/auth/register-facility`, {
+  const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/register-facility`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

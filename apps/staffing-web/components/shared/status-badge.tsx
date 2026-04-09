@@ -13,8 +13,9 @@ const toneClasses = {
   info: 'bg-cyan-100 text-cyan-700',
 };
 
-export function StatusBadge({ label, tone = 'default' }: any) {
-  return (
+
+export function StatusBadge({ label, tone = 'default' }: StatusBadgeProps) {  
+return (
     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${toneClasses[tone]}`}>
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
       {label}

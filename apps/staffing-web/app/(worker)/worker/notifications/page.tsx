@@ -42,7 +42,7 @@ export default function WorkerNotificationsPage() {
     try {
       setBusy(true);
 
-      const res = await fetch(`${API_BASE_URL}/api/worker/notifications/${id}/read`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/worker/notifications/${id}/read`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -64,7 +64,7 @@ export default function WorkerNotificationsPage() {
     try {
       setBusy(true);
 
-      const res = await fetch(`${API_BASE_URL}/api/worker/notifications/mark-all-read`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/worker/notifications/mark-all-read`, {
         method: 'POST',
         credentials: 'include',
       });

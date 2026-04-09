@@ -89,7 +89,7 @@ export default function AdminWorkerDetailPage({
   async function approveDocument(documentId: string) {
     try {
       setBusy(true);
-      const res = await fetch(`${API_BASE_URL}/api/admin/documents/${documentId}/approve`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/documents/${documentId}/approve`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -110,7 +110,7 @@ export default function AdminWorkerDetailPage({
       const notes = rejectNotes[documentId]?.trim();
       if (!notes) throw new Error('Please enter rejection notes.');
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/documents/${documentId}/reject`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/documents/${documentId}/reject`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +133,7 @@ export default function AdminWorkerDetailPage({
     try {
       setBusy(true);
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/workers/${professionalId}/${action}`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

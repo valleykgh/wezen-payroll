@@ -80,7 +80,7 @@ export default function FacilityShiftDetailPage({
       setBusyId(requestId);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/shift-requests/${requestId}/${action}`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -113,7 +113,7 @@ export default function FacilityShiftDetailPage({
       setActionBusy(true);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/shifts/${shiftId}/${action}`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts/${shiftId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

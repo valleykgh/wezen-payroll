@@ -97,7 +97,7 @@ export default function ApplicantDetailPage({
       setMessage('');
 
       const res = await fetch(
-        `${API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
+        `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
         {
           method: 'POST',
           credentials: 'include',
@@ -134,7 +134,7 @@ export default function ApplicantDetailPage({
       setBusy(true);
       setMessage('');
 
-      const res = await fetch(`${API_BASE_URL}/api/facility/dnr`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/facility/dnr`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -172,7 +172,7 @@ export default function ApplicantDetailPage({
       setMessage('');
 
       const res = await fetch(
-        `${API_BASE_URL}/api/facility/dnr?facilityId=${facilityId}&professionalId=${detail.professional.id}`,
+        `${STAFFING_API_BASE_URL}/api/facility/dnr?facilityId=${facilityId}&professionalId=${detail.professional.id}`,
         {
           method: 'DELETE',
 	  credentials: 'include',
