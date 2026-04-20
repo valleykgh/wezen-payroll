@@ -127,25 +127,55 @@ export default function FacilityDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboard.recentShifts.map((shift) => (
-                      <tr
-                        key={shift.id}
-                        className="border-b border-slate-100 transition hover:bg-slate-50 last:border-0"
-                      >
-                        <td className="py-4 pr-4 font-medium text-slate-950">{shift.role}</td>
-                        <td className="py-4 pr-4 text-slate-600">{shift.shiftType}</td>
-                        <td className="py-4 pr-4 text-slate-600">
-                          {new Date(shift.date).toLocaleDateString()}
-                        </td>
-                        <td className="py-4 pr-4 text-slate-600">{shift.applicants}</td>
-                        <td className="py-4 pr-4 text-slate-600">{shift.approvedCount}</td>
-                        <td className="py-4">
-                          <StatusBadge label={shift.status} tone="info" />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+  {dashboard.recentShifts.map((shift) => {
+    const needsReview = shift.applicants > 0 && shift.approvedCount === 0;
+
+    return (
+      <tr
+        key={shift.id}
+        className={`border-b border-slate-100 transition last:border-0 ${
+          needsReview ? 'bg-amber-50 hover:bg-amber-100/60' : 'hover:bg-slate-50'
+        }`}
+      >
+        <td className="py-4 pr-4 font-medium text-slate-950">{shift.role}</td>
+        <td className="py-4 pr-4 text-slate-600">{shift.shiftType}</td>
+        <td className="py-4 pr-4 text-slate-600">
+          {new Date(shift.date).toLocaleDateString()}
+        </td>
+
+        <td className="py-4 pr-4">
+          {needsReview ? (
+            <Link
+              href="/facility/applicants"
+              className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800 animate-pulse"
+            >
+              {shift.applicants} applicant{shift.applicants > 1 ? 's' : ''} to review
+            </Link>
+          ) : (
+            <span className="text-slate-600">{shift.applicants}</span>
+          )}
+        </td>
+
+        <td className="py-4 pr-4 text-slate-600">{shift.approvedCount}</td>
+
+        <td className="py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label={shift.status} tone="info" />
+            {needsReview ? (
+              <Link
+                href="/facility/applicants"
+                className="inline-flex items-center rounded-full bg-cyan-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-cyan-700"
+              >
+                Review Applicants
+              </Link>
+            ) : null}
+          </div>
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
+	        </table>
               </div>
             </section>
 

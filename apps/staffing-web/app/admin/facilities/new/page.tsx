@@ -11,6 +11,10 @@ type CreatedFacility = {
   city: string;
   state: string;
   zipCode: string;
+  defaultCnaRateCents?: number | null;
+  defaultLvnRateCents?: number | null;
+  defaultRnRateCents?: number | null;
+  allowRateOverride?: boolean;
 };
 
 export default function AdminCreateFacilityPage() {
@@ -21,6 +25,10 @@ export default function AdminCreateFacilityPage() {
     state: '',
     zipCode: '',
   });
+  const [defaultCnaRateDollars, setDefaultCnaRateDollars] = useState('');
+  const [defaultLvnRateDollars, setDefaultLvnRateDollars] = useState('');
+  const [defaultRnRateDollars, setDefaultRnRateDollars] = useState('');
+  const [allowRateOverride, setAllowRateOverride] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [createdFacility, setCreatedFacility] = useState<CreatedFacility | null>(null);
@@ -42,8 +50,20 @@ export default function AdminCreateFacilityPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(form),
-      });
+         body: JSON.stringify({
+  ...form,
+  defaultCnaRateCents: defaultCnaRateDollars
+    ? Math.round(Number(defaultCnaRateDollars) * 100)
+    : undefined,
+  defaultLvnRateCents: defaultLvnRateDollars
+    ? Math.round(Number(defaultLvnRateDollars) * 100)
+    : undefined,
+  defaultRnRateCents: defaultRnRateDollars
+    ? Math.round(Number(defaultRnRateDollars) * 100)
+    : undefined,
+  allowRateOverride,
+}),
+	});
 
       const text = await res.text();
 
@@ -61,6 +81,10 @@ export default function AdminCreateFacilityPage() {
         state: '',
         zipCode: '',
       });
+      setDefaultCnaRateDollars('');
+      setDefaultLvnRateDollars('');
+      setDefaultRnRateDollars('');
+      setAllowRateOverride(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to create facility');
     } finally {
@@ -164,6 +188,63 @@ export default function AdminCreateFacilityPage() {
               />
             </div>
 
+		<div>
+  <label className="mb-2 block text-sm font-medium text-slate-700">
+    CNA default rate ($/hr)
+  </label>
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={defaultCnaRateDollars}
+    onChange={(e) => setDefaultCnaRateDollars(e.target.value)}
+    placeholder="Optional"
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+  />
+</div>
+
+<div>
+  <label className="mb-2 block text-sm font-medium text-slate-700">
+    LVN default rate ($/hr)
+  </label>
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={defaultLvnRateDollars}
+    onChange={(e) => setDefaultLvnRateDollars(e.target.value)}
+    placeholder="Optional"
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+  />
+</div>
+
+<div>
+  <label className="mb-2 block text-sm font-medium text-slate-700">
+    RN default rate ($/hr)
+  </label>
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={defaultRnRateDollars}
+    onChange={(e) => setDefaultRnRateDollars(e.target.value)}
+    placeholder="Optional"
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+  />
+</div>
+
+<div className="md:col-span-2">
+  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+    <input
+      type="checkbox"
+      checked={allowRateOverride}
+      onChange={(e) => setAllowRateOverride(e.target.checked)}
+      className="h-4 w-4"
+    />
+    Allow facility to override pay rate when posting shifts
+  </label>
+</div>
+
             <div className="md:col-span-2">
               <button
                 type="submit"
@@ -209,26 +290,67 @@ export default function AdminCreateFacilityPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Type
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-900">
-                      {createdFacility.facilityType}
-                    </div>
-                  </div>
+<div className="grid gap-3 sm:grid-cols-2">
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Type
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.facilityType}
+    </div>
+  </div>
 
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Location
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-900">
-                      {createdFacility.city}, {createdFacility.state} {createdFacility.zipCode}
-                    </div>
-                  </div>
-                </div>
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Location
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.city}, {createdFacility.state} {createdFacility.zipCode}
+    </div>
+  </div>
 
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      CNA Rate
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.defaultCnaRateCents != null
+        ? `$${(createdFacility.defaultCnaRateCents / 100).toFixed(2)}/hr`
+        : 'Not set'}
+    </div>
+  </div>
+
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      LVN Rate
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.defaultLvnRateCents != null
+        ? `$${(createdFacility.defaultLvnRateCents / 100).toFixed(2)}/hr`
+        : 'Not set'}
+    </div>
+  </div>
+
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      RN Rate
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.defaultRnRateCents != null
+        ? `$${(createdFacility.defaultRnRateCents / 100).toFixed(2)}/hr`
+        : 'Not set'}
+    </div>
+  </div>
+
+  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      Rate Override
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-900">
+      {createdFacility.allowRateOverride ? 'Allowed' : 'Locked to default rates'}
+    </div>
+  </div>
+</div>
                 <Link
                   href="/admin/facility-invites"
                   className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"

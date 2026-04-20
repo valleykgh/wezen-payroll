@@ -30,7 +30,7 @@ export default function WorkerProfilePage() {
     async function load() {
       try {
         const me = await meRequest();
-        const professionalId = me.data.professionalId;
+        const professionalId = me.data.professionalId ?? null;
 
         if (!professionalId) {
           setMessage('You must be signed in as a professional.');

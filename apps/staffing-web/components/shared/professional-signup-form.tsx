@@ -43,7 +43,7 @@ export function ProfessionalSignupForm() {
         zipCode: form.zipCode || undefined,
       });
 
-      router.push('/worker/dashboard');
+      router.push('/worker/documents');
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signup failed');

@@ -1,18 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/api-client';
 import { FormField } from '@/components/ui/form-field';
 import { SelectInput } from '@/components/ui/select-input';
 import { TextArea } from '@/components/ui/text-area';
 import { TextInput } from '@/components/ui/text-input';
-import { meRequest } from '@/lib/auth-client';
-
-const API_BASE_URL = 'http://127.0.0.1:4001';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type ShiftType = 'AM' | 'PM' | 'NOC';
 
+type FacilitySettings = {
+  id?: string;
+  name?: string;
+  defaultCnaRateCents?: number | null;
+  defaultLvnRateCents?: number | null;
+  defaultRnRateCents?: number | null;
+  allowRateOverride?: boolean;
+};
+
 export function PostShiftForm() {
   const [facilityId, setFacilityId] = useState<string | null>(null);
+  const [facilitySettings, setFacilitySettings] = useState<FacilitySettings | null>(null);
+
   const [shiftType, setShiftType] = useState<ShiftType>('AM');
   const [role, setRole] = useState('CNA');
   const [date, setDate] = useState('');
@@ -25,14 +35,54 @@ export function PostShiftForm() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    meRequest()
-      .then((res) => {
-        setFacilityId(res.data.facilityId ?? null);
-      })
-      .catch(() => {
+    async function loadFacilityContext() {
+      try {
+        const me = await apiFetch<{ data: { facilityId?: string | null } }>('/api/auth/me');
+        const currentFacilityId = me.data.facilityId ?? null;
+        setFacilityId(currentFacilityId);
+
+        const dashboard = await apiFetch<{
+          data: {
+            facility?: FacilitySettings;
+          };
+        }>('/api/facility/dashboard');
+
+        setFacilitySettings(dashboard.data.facility ?? null);
+      } catch {
         setFacilityId(null);
-      });
+        setFacilitySettings(null);
+      }
+    }
+
+    loadFacilityContext();
   }, []);
+
+  const selectedDefaultRateCents = useMemo(() => {
+    if (!facilitySettings) return null;
+
+    if (role === 'CNA') return facilitySettings.defaultCnaRateCents ?? null;
+    if (role === 'LVN') return facilitySettings.defaultLvnRateCents ?? null;
+    if (role === 'RN') return facilitySettings.defaultRnRateCents ?? null;
+
+    return null;
+  }, [facilitySettings, role]);
+
+  const currentDefaultRateLabel =
+    selectedDefaultRateCents != null
+      ? `$${(selectedDefaultRateCents / 100).toFixed(2)}/hr`
+      : 'Not configured';
+
+  useEffect(() => {
+    if (!facilitySettings) return;
+
+    if (facilitySettings.allowRateOverride) {
+      setPayRateDollars('');
+    } else if (selectedDefaultRateCents != null) {
+      setPayRateDollars((selectedDefaultRateCents / 100).toFixed(2));
+    } else {
+      setPayRateDollars('');
+    }
+  }, [selectedDefaultRateCents, facilitySettings]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,8 +94,9 @@ export function PostShiftForm() {
         throw new Error('You must be signed in as a facility admin.');
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/shifts`, {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -58,9 +109,9 @@ export function PostShiftForm() {
           endTimeLabel: formatTimeLabel(endTime),
           workersNeeded: Number(workersNeeded),
           specialInstructions: instructions || undefined,
-          payRateCents: payRateDollars
+          payRateCents: facilitySettings?.allowRateOverride
             ? Math.round(Number(payRateDollars) * 100)
-            : undefined,
+            : selectedDefaultRateCents ?? undefined,
         }),
       });
 
@@ -71,7 +122,6 @@ export function PostShiftForm() {
       }
 
       setMessage('Shift published successfully.');
-
       setRole('CNA');
       setShiftType('AM');
       setDate('');
@@ -79,7 +129,14 @@ export function PostShiftForm() {
       setStartTime('');
       setEndTime('');
       setInstructions('');
-      setPayRateDollars('');
+
+      if (facilitySettings?.allowRateOverride) {
+        setPayRateDollars('');
+      } else if (selectedDefaultRateCents != null) {
+        setPayRateDollars((selectedDefaultRateCents / 100).toFixed(2));
+      } else {
+        setPayRateDollars('');
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to create shift');
     } finally {
@@ -110,11 +167,7 @@ export function PostShiftForm() {
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <FormField label="Role" htmlFor="role">
-            <SelectInput
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
+            <SelectInput id="role" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="CNA">CNA</option>
               <option value="LVN">LVN</option>
               <option value="RN">RN</option>
@@ -184,17 +237,32 @@ export function PostShiftForm() {
             />
           </FormField>
 
-          <FormField label="Pay rate ($/hr)" htmlFor="payRateDollars">
-            <TextInput
-              id="payRateDollars"
-              type="number"
-              min={0}
-              step="0.01"
-              value={payRateDollars}
-              onChange={(e) => setPayRateDollars(e.target.value)}
-              placeholder="Optional"
-            />
-          </FormField>
+          {facilitySettings?.allowRateOverride ? (
+            <FormField label="Pay rate ($/hr)" htmlFor="payRateDollars">
+              <TextInput
+                id="payRateDollars"
+                type="number"
+                min={0}
+                step="0.01"
+                value={payRateDollars}
+                onChange={(e) => setPayRateDollars(e.target.value)}
+                placeholder="Enter shift pay rate"
+                required
+              />
+            </FormField>
+          ) : (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Pay rate
+              </label>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900">
+                {currentDefaultRateLabel}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                This rate is managed by Wezen Staffing. Facility users cannot change it.
+              </div>
+            </div>
+          )}
 
           <div className="md:col-span-2">
             <FormField label="Special instructions" htmlFor="instructions">
@@ -235,7 +303,9 @@ export function PostShiftForm() {
           <div className="mt-3 text-2xl font-bold tracking-tight">
             {role} • {shiftType} Shift
           </div>
-          <div className="mt-2 text-cyan-50">Your facility</div>
+          <div className="mt-2 text-cyan-50">
+            {facilitySettings?.name || 'Your facility'}
+          </div>
           <div className="mt-5 grid gap-3">
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
               Date: {date || 'Select a date'}
@@ -250,7 +320,12 @@ export function PostShiftForm() {
               Workers Needed: {workersNeeded}
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
-              Pay Rate: {payRateDollars ? `$${payRateDollars}/hr` : 'Not listed'}
+              Pay Rate:{' '}
+              {facilitySettings?.allowRateOverride
+                ? payRateDollars
+                  ? `$${payRateDollars}/hr`
+                  : 'Not listed'
+                : currentDefaultRateLabel}
             </div>
           </div>
         </div>

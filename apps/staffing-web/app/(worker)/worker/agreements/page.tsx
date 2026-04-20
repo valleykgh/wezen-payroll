@@ -1,58 +1,62 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { meRequest } from '@/lib/auth-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { apiFetch } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
-import { TextInput } from '@/components/ui/text-input';
-import { FormField } from '@/components/ui/form-field';
-
-const API_BASE_URL = 'http://localhost:4001';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+import { AGREEMENT_URLS, type AgreementRole } from '@/lib/agreements';
 
 type Agreement = {
   id: string;
   agreementType: string;
   status: string;
   signedAt?: string | null;
-  signerName?: string | null;
-  signerEmail?: string | null;
   createdAt: string;
 };
 
-type MeData = {
-  userId: string;
-  email: string;
-  role: 'FACILITY_ADMIN' | 'PROFESSIONAL' | 'INTERNAL_ADMIN';
-  firstName?: string | null;
-  lastName?: string | null;
-  professionalId?: string | null;
-};
+type MeData = AuthMeResponse['data'];
 
 export default function WorkerAgreementsPage() {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
-  const [me, setMe] = useState<MeData | null>(null);
-  const [signerName, setSignerName] = useState('');
-  const [signerEmail, setSignerEmail] = useState('');
+  const [me, setMe] = useState<AuthMeResponse['data'] | null>(null);
+  const [workerRole, setWorkerRole] = useState<AgreementRole | null>(null);
   const [message, setMessage] = useState('Loading agreement...');
-  const [submitting, setSubmitting] = useState(false);
+  const [regularRateCents, setRegularRateCents] = useState<number | null>(null);
+  const [overtimeRateCents, setOvertimeRateCents] = useState<number | null>(null);
+  const [doubleRateCents, setDoubleRateCents] = useState<number | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const meRes = await meRequest();
-        const currentUser = meRes.data;
-        setMe(currentUser);
+          const meRes = await meRequest();
+const currentUser = meRes.data;
+setMe(currentUser);
 
-        if (!currentUser.professionalId) {
-          setMessage('You must be signed in as a professional.');
+if (!currentUser.professionalId) {
+	  setMessage('You must be signed in as a professional.');
           return;
         }
 
-        setSignerName(
-          `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim()
-        );
-        setSignerEmail(currentUser.email || '');
+	const dashboardRes = await apiFetch<{ data: { profile: { role: AgreementRole } } }>(
+  '/api/worker/dashboard'
+);
+setWorkerRole(dashboardRes.data.profile.role);
 
+const profileRes = await apiFetch<{
+  data: {
+    hourlyRateCents?: number | null;
+    regularPayRateCents?: number | null;
+    overtimePayRateCents?: number | null;
+    doublePayRateCents?: number | null;
+  };
+}>(`/api/worker/profile?professionalId=${currentUser.professionalId}`);
+
+
+setRegularRateCents(profileRes.data.regularPayRateCents ?? null);
+setOvertimeRateCents(profileRes.data.overtimePayRateCents ?? null);
+setDoubleRateCents(profileRes.data.doublePayRateCents ?? null)
+;
         const res = await apiFetch<{ data: Agreement[] }>(
           `/api/worker/agreements`
         );
@@ -67,48 +71,10 @@ export default function WorkerAgreementsPage() {
     load();
   }, []);
 
-  async function signAgreement() {
-    try {
-      if (!me?.professionalId) {
-        throw new Error('You must be signed in as a professional.');
-      }
-
-      setSubmitting(true);
-      setMessage('');
-
-      const res = await fetch(`${API_BASE_URL}/api/worker/agreements/sign`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          agreementType: 'ICA',
-          signerName,
-          signerEmail,
-        }),
-      });
-
-      const text = await res.text();
-
-      if (!res.ok) {
-        throw new Error(text || 'Failed to sign agreement');
-      }
-
-      const refreshed = await apiFetch<{ data: Agreement[] }>(
-        `/api/worker/agreements`
-      );
-
-      setAgreements(refreshed.data);
-      setMessage('Independent Contractor Agreement signed successfully.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to sign agreement');
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   const agreement = agreements[0] || null;
+
+  const agreementPdfUrl = workerRole ? AGREEMENT_URLS[workerRole] : null;
 
   return (
     <div className="space-y-8">
@@ -120,8 +86,8 @@ export default function WorkerAgreementsPage() {
           Independent Contractor Agreement
         </h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Review and acknowledge your agreement as part of the onboarding process.
-        </p>
+        Review your agreement status and compensation summary as part of the onboarding process.
+	</p>
       </div>
 
       <div className="flex justify-end">
@@ -155,53 +121,86 @@ export default function WorkerAgreementsPage() {
             </div>
 
             <p className="mt-4 text-sm leading-7 text-slate-600">
-              This agreement confirms your status as an independent contractor,
-              your responsibility for maintaining valid credentials and compliance
-              documents, and your acknowledgment of the terms required to accept
-              shifts through Wezen Staffing.
-            </p>
+            This agreement confirms your status as an independent contractor,
+your responsibility for maintaining valid credentials and compliance
+documents, and the terms required to accept shifts through Wezen Staffing.
+	    </p>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <FormField label="Signer name" htmlFor="signerName">
-                <TextInput
-                  id="signerName"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  disabled={agreement.status === 'SIGNED'}
-                />
-              </FormField>
+<div className="mt-6 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+  <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
+    Compensation Summary
+  </div>
 
-              <FormField label="Signer email" htmlFor="signerEmail">
-                <TextInput
-                  id="signerEmail"
-                  type="email"
-                  value={signerEmail}
-                  onChange={(e) => setSignerEmail(e.target.value)}
-                  disabled={agreement.status === 'SIGNED'}
-                />
-              </FormField>
-            </div>
+  <div className="mt-4 grid gap-3 md:grid-cols-3">
+    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Regular Pay Rate
+      </div>
+      <div className="mt-1 text-sm font-medium text-slate-900">
+        {regularRateCents != null
+          ? `$${(regularRateCents / 100).toFixed(2)}/hr`
+          : 'Not set yet'}
+      </div>
+    </div>
+
+    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Overtime Pay Rate
+      </div>
+      <div className="mt-1 text-sm font-medium text-slate-900">
+        {overtimeRateCents != null
+          ? `$${(overtimeRateCents / 100).toFixed(2)}/hr`
+          : 'Not set yet'}
+      </div>
+    </div>
+
+    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Double-Time Pay Rate
+      </div>
+      <div className="mt-1 text-sm font-medium text-slate-900">
+        {doubleRateCents != null
+          ? `$${(doubleRateCents / 100).toFixed(2)}/hr`
+          : 'Not set yet'}
+      </div>
+    </div>
+  </div>
+
+  <div className="mt-3 text-xs text-slate-500">
+    These compensation details apply to your Independent Contractor Agreement and assignment approvals.
+  </div>
+</div>
+
+	    {agreementPdfUrl ? (
+  <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+    <iframe
+      src={agreementPdfUrl}
+      title="Independent Contractor Agreement"
+      className="h-[700px] w-full bg-white"
+    />
+  </div>
+) : (
+  <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    Agreement PDF is not available for your role yet.
+  </div>
+)}
+
 
             {message ? (
               <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
                 {message}
               </div>
             ) : null}
-
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={signAgreement}
-                disabled={submitting || agreement.status === 'SIGNED'}
-                className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {agreement.status === 'SIGNED'
-                  ? 'Agreement Signed'
-                  : submitting
-                    ? 'Signing...'
-                    : 'Sign Agreement'}
-              </button>
-            </div>
+	
+		<div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+  <div className="font-semibold">
+    Independent Contractor Agreement must be completed before shift access is enabled.
+  </div>
+  <div className="mt-2">
+    Wezen Staffing will send your ICA by Adobe eSign. Once it has been signed and confirmed by our team,
+    your account will be cleared to request shifts.
+  </div>
+</div>
           </div>
 
           <div className="space-y-6">
@@ -213,11 +212,11 @@ export default function WorkerAgreementsPage() {
                 {agreement.status}
               </div>
               <div className="mt-2 text-cyan-50">
-                {agreement.signedAt
-                  ? `Signed on ${new Date(agreement.signedAt).toLocaleString()}`
-                  : 'Signature pending'}
-              </div>
-            </div>
+  {agreement.status === 'SIGNED'
+    ? `Signed on ${new Date(agreement.signedAt || '').toLocaleString()}`
+    : 'Pending Adobe eSign completion'}
+</div> 
+	   </div>
 
             <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
               <h3 className="text-lg font-bold tracking-tight text-slate-950">

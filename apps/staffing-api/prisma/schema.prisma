@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -65,6 +64,7 @@ enum AgreementType {
 
 enum AgreementStatus {
   NOT_STARTED
+  SENT
   SIGNED
 }
 
@@ -85,6 +85,12 @@ model User {
   lastName      String?
   phone         String?
   isActive      Boolean             @default(true)
+  isSystemUser  Boolean 	    @default(false)
+  notificationEmail         String?
+  notifyNewWorkerSignup     Boolean @default(true)
+  notifyDocumentUploads     Boolean @default(true)
+  notifyAgreementSigned     Boolean @default(true)
+  notifyWorkerReadyForReview Boolean @default(true)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
@@ -104,6 +110,10 @@ model Facility {
   zipCode         String?
   latitude        Float?
   longitude       Float?
+  defaultCnaRateCents   Int?
+  defaultLvnRateCents   Int?
+  defaultRnRateCents    Int?
+  allowRateOverride     Boolean @default(false)
   isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -135,6 +145,9 @@ model ProfessionalProfile {
   zipCode            String?
   maxDistanceMiles   Int?                   @default(25)
   hourlyRateCents    Int?
+  regularPayRateCents Int?
+  overtimePayRateCents Int?
+  doublePayRateCents   Int?
   bio                String?
   onboardingStatus   String?                @default("PENDING")
   approvedByWezen    Boolean                @default(false)

@@ -59,8 +59,8 @@ export default function FacilityShiftsPage() {
     async function init() {
       try {
         const me = await meRequest();
-        const id = me.data.facilityId ?? null;
-        setFacilityId(id);
+	const id = me.data.facilityId ?? null;
+	setFacilityId(id);
         await loadShifts(id);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Failed to load shifts');

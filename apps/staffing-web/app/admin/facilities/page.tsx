@@ -98,6 +98,7 @@ export default function AdminFacilitiesPage() {
         >
           Facility Invites
         </Link>
+
       </div>
 
       {message ? (
@@ -159,6 +160,13 @@ export default function AdminFacilitiesPage() {
                     {busyId === facility.id ? 'Working...' : 'Reactivate Facility'}
                   </button>
                 )}
+
+		  <Link
+    href={`/admin/facilities/${facility.id}`}
+    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+  >
+    Edit Facility
+  </Link>		
 
                 <Link
                   href="/admin/facility-invites"

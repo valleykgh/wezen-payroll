@@ -10,62 +10,54 @@ type LoginFormProps = {
   next?: string;
 };
 
-export function LoginForm({ next = '' }: LoginFormProps) {  
+export function LoginForm({ next = '' }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-   async function handleSubmit(e: React.FormEvent) {
+async function handleSubmit(e: React.FormEvent) {
   e.preventDefault();
   setSubmitting(true);
   setMessage('');
 
   try {
     const result = await loginRequest(email, password);
-const role = result?.data?.role;
+    const role = result?.data?.role;
 
-if (role === 'INTERNAL_ADMIN') {
-  if (next && next.startsWith('/admin/')) {
-    router.push(next);
-  } else {
-    router.push('/admin/workers');
-  }
-  router.refresh();
-  return;
-}
+    const params = new URLSearchParams(window.location.search);
+    const requestedNextRaw = params.get('next') || '';
+    const requestedNext = requestedNextRaw.trim();
+    const requestedNextLower = requestedNext.toLowerCase();
 
-if (role === 'FACILITY_ADMIN') {
-  if (next && next.startsWith('/facility/')) {
-    router.push(next);
-  } else {
-    router.push('/facility/dashboard');
-  }
-  router.refresh();
-  return;
-}
+    let target = '/';
 
-if (role === 'PROFESSIONAL') {
-  if (next && next.startsWith('/worker/')) {
-    router.push(next);
-  } else {
-    router.push('/worker/dashboard');
-  }
-  router.refresh();
-  return;
-}
+    if (role === 'INTERNAL_ADMIN') {
+      target =
+        requestedNext && requestedNextLower.startsWith('/admin/')
+          ? requestedNext
+          : '/admin/workers';
+    } else if (role === 'FACILITY_ADMIN') {
+      target =
+        requestedNext && requestedNextLower.startsWith('/facility/')
+          ? requestedNext
+          : '/facility/dashboard';
+    } else if (role === 'PROFESSIONAL') {
+      target =
+        requestedNext && requestedNextLower.startsWith('/worker/')
+          ? requestedNext
+          : '/worker/dashboard';
+    }
 
-router.push('/');
-router.refresh();  
-
+    window.location.assign(target);
+    return;
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Login failed');
   } finally {
     setSubmitting(false);
   }
 }
-
   return (
     <form
       onSubmit={handleSubmit}
@@ -75,7 +67,7 @@ router.refresh();
         Login
       </div>
       <p className="mt-3 text-slate-600">
-        Sign in as a facility admin or healthcare professional.
+        Sign in as a facility admin, internal admin, or healthcare professional.
       </p>
 
       {message ? (
@@ -119,7 +111,7 @@ router.refresh();
       </div>
 
       <div className="mt-6 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
-        Demo accounts you created locally can be used here.
+        Use your Wezen Staffing account to access staffing workflows. Payroll access is managed separately through the payroll portal.
       </div>
     </form>
   );

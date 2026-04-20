@@ -10,7 +10,7 @@ type Shift = {
   facilityName: string;
   city: string;
   state: string;
-  distanceMiles: number;
+  distanceMiles: number | null;
   shiftType: string;
   date: string;
   time: string;
@@ -245,10 +245,13 @@ export function ShiftResultsClient({ shifts }: Props) {
                     <div className="mt-3 text-lg font-semibold text-slate-800">
                       {shift.facilityName}
                     </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {shift.city}, {shift.state} • {shift.distanceMiles} miles away
-                    </div>
 
+		    <div className="mt-1 text-sm text-slate-500">
+  {shift.city}, {shift.state}
+  {typeof shift.distanceMiles === 'number'
+    ? ` • ${shift.distanceMiles} miles away`
+    : ''}
+</div>
                     <div className="mt-5 grid gap-3 sm:grid-cols-4">
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">

@@ -1,0 +1,16 @@
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "api.wezenstaffing.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "Z368ELLRRE2KJ0",
+          "DNSName": "dualstack.alb-wezen-payroll-api-1071116616.us-west-1.elb.amazonaws.com",
+          "EvaluateTargetHealth": false
+        }
+      }
+    }
+  ]
+}

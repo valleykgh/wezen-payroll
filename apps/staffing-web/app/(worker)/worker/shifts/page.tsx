@@ -12,7 +12,7 @@ type Shift = {
   facilityName: string;
   city: string;
   state: string;
-  distanceMiles: number;
+  distanceMiles: number | null;
   shiftType: string;
   date: string;
   time: string;

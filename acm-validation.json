@@ -1,0 +1,17 @@
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "_de2632b2b1ac6c66661c429d14e50f6d.api.wezenstaffing.com",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_53ca5a55fb676b416bbaecc563e79fab.jkddzztszm.acm-validations.aws"
+          }
+        ]
+      }
+    }
+  ]
+}

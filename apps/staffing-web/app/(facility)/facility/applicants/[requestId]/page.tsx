@@ -74,8 +74,8 @@ export default function ApplicantDetailPage({
         const resolved = await params;
         setRequestId(resolved.requestId);
 
-        const me = await meRequest();
-        setFacilityId(me.data.facilityId ?? null);
+	const me = await meRequest();
+	setFacilityId(me.data.facilityId ?? null);
 
         await load(resolved.requestId);
         setMessage('');

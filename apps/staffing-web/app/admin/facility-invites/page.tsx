@@ -38,9 +38,6 @@ export default function AdminFacilityInvitesPage() {
       try {
         const res = await apiFetch<{ data: Facility[] }>('/api/admin/facilities');
         setFacilities(res.data);
-        if (res.data.length > 0) {
-          setFacilityId(res.data[0].id);
-        }
         setMessage('');
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Failed to load facilities');
@@ -78,6 +75,8 @@ export default function AdminFacilityInvitesPage() {
 
       const parsed = text ? JSON.parse(text) : null;
       setCreatedInvite(parsed?.data ?? null);
+      setEmail('');
+      setExpiresAt('');
       setMessage('Facility invite created successfully.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to create invite');
@@ -130,21 +129,22 @@ export default function AdminFacilityInvitesPage() {
                 Facility
               </label>
               <select
-                value={facilityId}
-                onChange={(e) => setFacilityId(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
-                required
-              >
-                {facilities.map((facility) => (
-                  <option key={facility.id} value={facility.id}>
-                    {facility.name}
-                    {facility.city || facility.state
-                      ? ` — ${facility.city || ''}${facility.city && facility.state ? ', ' : ''}${facility.state || ''}`
-                      : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+  value={facilityId}
+  onChange={(e) => setFacilityId(e.target.value)}
+  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+  required
+>
+  <option value="">Select a facility</option>
+  {facilities.map((facility) => (
+    <option key={facility.id} value={facility.id}>
+      {facility.name}
+      {facility.city || facility.state
+        ? ` — ${facility.city || ''}${facility.city && facility.state ? ', ' : ''}${facility.state || ''}`
+        : ''}
+    </option>
+  ))}
+</select>
+	    </div>
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">

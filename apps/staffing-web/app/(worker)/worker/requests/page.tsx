@@ -22,6 +22,11 @@ type WorkerRequest = {
     facilityName: string;
     city?: string | null;
     state?: string | null;
+    startTimeLabel?: string;
+    endTimeLabel?: string;
+    address?: string;
+    specialInstructions?: string | null;
+
   };
 };
 
@@ -33,7 +38,7 @@ export default function WorkerRequestsPage() {
     async function load() {
       try {
         const me = await meRequest();
-        const professionalId = me.data.professionalId;
+        const professionalId = me.data.professionalId ?? null;
 
         if (!professionalId) {
           setMessage('You must be signed in as a professional.');
@@ -152,9 +157,34 @@ export default function WorkerRequestsPage() {
                   <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
                     <div className="font-semibold text-slate-900">Current status</div>
                     <div className="mt-2">
-                      {request.status === 'APPROVED' &&
-                        'This facility approved your request.'}
-                      {request.status === 'REJECTED' &&
+                      {request.status === 'APPROVED' ? (
+  <div className="mt-4 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+    <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+      Approved Shift
+    </div>
+
+    <div className="mt-2 text-lg font-bold">
+      {request.shift.facilityName}
+    </div>
+
+    <div className="mt-2 text-sm text-emerald-900">
+      {new Date(request.shift.date).toLocaleDateString()} • {request.shift.time}
+    </div>
+
+    {request.shift.address ? (
+      <div className="mt-2 text-sm text-emerald-800">
+        Address: {request.shift.address}
+      </div>
+    ) : null}
+
+    {request.shift.specialInstructions ? (
+      <div className="mt-2 text-sm text-emerald-800">
+        Notes: {request.shift.specialInstructions}
+      </div>
+    ) : null}
+  </div>
+) : null}
+		      {request.status === 'REJECTED' &&
                         'This facility rejected your request.'}
                       {(request.status === 'REQUESTED' ||
                         request.status === 'UNDER_REVIEW') &&

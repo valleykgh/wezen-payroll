@@ -1,23 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { SelectInput } from '@/components/ui/select-input';
 import { TextInput } from '@/components/ui/text-input';
 import { FormField } from '@/components/ui/form-field';
-
-const API_BASE_URL = 'http://localhost:4001';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type Props = {
   professionalId: string;
   onUploaded: () => Promise<void> | void;
 };
 
+const EXPIRING_CATEGORIES = new Set([
+  'LICENSE',
+  'CPR',
+  'PHYSICAL',
+  'TB_TEST',
+  'ID',
+]);
+
 export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
   const [category, setCategory] = useState('LICENSE');
   const [name, setName] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const requiresExpiryDate = useMemo(
+    () => EXPIRING_CATEGORIES.has(category),
+    [category]
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,14 +42,23 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
         throw new Error('Please choose a file to upload.');
       }
 
+      if (requiresExpiryDate && !expiresAt) {
+        throw new Error('Please select an expiry date for this document.');
+      }
+
       const formData = new FormData();
       formData.append('professionalId', professionalId);
       formData.append('category', category);
       formData.append('name', name || file.name);
       formData.append('file', file);
 
-      const res = await fetch(`${API_BASE_URL}/api/worker/documents/upload`, {
+      if (requiresExpiryDate && expiresAt) {
+        formData.append('expiresAt', expiresAt);
+      }
+
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/worker/documents/upload`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 
@@ -48,6 +70,7 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
 
       setMessage('Document uploaded successfully.');
       setName('');
+      setExpiresAt('');
       setFile(null);
 
       const fileInput = document.getElementById('documentFile') as HTMLInputElement | null;
@@ -86,14 +109,21 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
           <SelectInput
             id="category"
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => {
+              const nextCategory = e.target.value;
+              setCategory(nextCategory);
+
+              if (!EXPIRING_CATEGORIES.has(nextCategory)) {
+                setExpiresAt('');
+              }
+            }}
           >
             <option value="LICENSE">License</option>
-            <option value="ID">ID</option>
-            <option value="CPR">CPR</option>
-            <option value="TB_TEST">TB Test</option>
-            <option value="PHYSICAL">Physical</option>
-            <option value="VACCINATION">Vaccination</option>
+            <option value="CPR">CPR / BLS</option>
+            <option value="PHYSICAL">Physical Report</option>
+            <option value="TB_TEST">TB Report</option>
+            <option value="ID">State ID</option>
+            <option value="VACCINATION">Vaccination Record</option>
             <option value="OTHER">Other</option>
           </SelectInput>
         </FormField>
@@ -106,6 +136,21 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
             placeholder="Optional custom document name"
           />
         </FormField>
+
+        {requiresExpiryDate ? (
+          <FormField label="Expiry date" htmlFor="expiresAt">
+            <TextInput
+              id="expiresAt"
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </FormField>
+        ) : (
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            This document type does not require an expiry date.
+          </div>
+        )}
 
         <div className="md:col-span-2">
           <FormField label="Choose file" htmlFor="documentFile">

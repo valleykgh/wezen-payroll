@@ -1,15 +1,38 @@
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+
+export type StaffingUserRole =
+  | 'PROFESSIONAL'
+  | 'FACILITY_ADMIN'
+  | 'INTERNAL_ADMIN';
+
+export type StaffingUser = {
+  id: string;
+  email: string;
+  role: StaffingUserRole;
+  professionalId?: string | null;
+  facilityId?: string | null;
+  facilityName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
 export type AuthMeResponse = {
   data: {
     userId: string;
     email: string;
-    role: 'FACILITY_ADMIN' | 'PROFESSIONAL' | 'INTERNAL_ADMIN';
+    role: 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN';
+    employeeId?: string | null;
+    facilityId?: string | null;
+    facilityName?: string | null;
     firstName?: string | null;
     lastName?: string | null;
     professionalId?: string | null;
-    facilityId?: string | null;
-    facilityName?: string | null;
   };
+  mustChangePassword?: boolean;
+};
+
+export type LoginResponse = {
+  data: StaffingUser;
 };
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -22,23 +45,7 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return text ? JSON.parse(text) : ({} as T);
 }
 
-export type LoginResponse = {
-  data: {
-    userId: string;
-    email: string;
-    role: 'FACILITY_ADMIN' | 'PROFESSIONAL' | 'INTERNAL_ADMIN';
-    firstName?: string | null;
-    lastName?: string | null;
-    professionalId?: string | null;
-    facilityId?: string | null;
-    facilityName?: string | null;
-  };
-};
-
-export async function loginRequest(
-  email: string,
-  password: string
-): Promise<LoginResponse> {
+export async function loginRequest(email: string, password: string) {
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: {
@@ -48,7 +55,7 @@ export async function loginRequest(
     body: JSON.stringify({ email, password }),
   });
 
-  return parseResponse<LoginResponse>(res);
+return parseResponse<LoginResponse>(res);
 }
 
 export async function logoutRequest() {
@@ -71,7 +78,6 @@ export async function meRequest(): Promise<AuthMeResponse> {
 
   return parseResponse<AuthMeResponse>(res);
 }
-
 export async function registerProfessionalRequest(payload: {
   email: string;
   password: string;
@@ -91,7 +97,7 @@ export async function registerProfessionalRequest(payload: {
     body: JSON.stringify(payload),
   });
 
-  return parseResponse(res);
+return parseResponse<any>(res);
 }
 
 export async function registerFacilityRequest(payload: {
@@ -110,5 +116,5 @@ export async function registerFacilityRequest(payload: {
     body: JSON.stringify(payload),
   });
 
-  return parseResponse(res);
+return parseResponse<any>(res);
 }

@@ -29,12 +29,14 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
         setUser(currentUser);
 
         const isWorkerAllowed =
-          mode === 'worker' && currentUser.role === 'PROFESSIONAL';
-        const isFacilityAllowed =
-          mode === 'facility' && currentUser.role === 'FACILITY_ADMIN';
-        const isAdminAllowed =
-          mode === 'admin' && currentUser.role === 'INTERNAL_ADMIN';
+  mode === 'worker' && currentUser.role === 'PROFESSIONAL';
 
+const isFacilityAllowed =
+  mode === 'facility' && currentUser.role === 'FACILITY_ADMIN';
+
+const isAdminAllowed =
+  mode === 'admin' && currentUser.role === 'INTERNAL_ADMIN';	
+	
         if (isWorkerAllowed || isFacilityAllowed || isAdminAllowed) {
           setStatus('allowed');
           return;
@@ -43,19 +45,19 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
         setStatus('blocked');
 
         if (currentUser.role === 'PROFESSIONAL') {
-          router.replace('/worker/dashboard');
-          return;
-        }
+  router.replace('/worker/dashboard');
+  return;
+}
 
-        if (currentUser.role === 'FACILITY_ADMIN') {
-          router.replace('/facility/dashboard');
-          return;
-        }
+if (currentUser.role === 'FACILITY_ADMIN') {
+  router.replace('/facility/dashboard');
+  return;
+}
 
-        if (currentUser.role === 'INTERNAL_ADMIN') {
-          router.replace('/admin/workers');
-          return;
-        }
+if (currentUser.role === 'INTERNAL_ADMIN') {
+  router.replace('/admin/workers');
+  return;
+} 
 
         router.replace('/login');
       } catch {

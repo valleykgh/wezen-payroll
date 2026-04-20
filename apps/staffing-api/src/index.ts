@@ -9,24 +9,24 @@ import {
   ShiftType,
   ShiftStatus,
   UserRole,
+  NotificationType,
 } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
 import {
   hashPassword,
   verifyPassword,
   signAuthToken,
   setAuthCookie,
   clearAuthCookie,
-  requireAuth,
-  type AuthedRequest,
 } from './auth.js';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-import cookieParser from 'cookie-parser';
-import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth';
+
+import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4001);
@@ -83,7 +83,7 @@ async function getWorkerEligibility(professionalId: string) {
 
   const ica = profile.agreements.find((agreement) => agreement.agreementType === 'ICA');
   if (!ica || ica.status !== 'SIGNED') {
-    reasons.push('Independent Contractor Agreement has not been signed');
+    reasons.push('Independent Contractor Agreement must be signed before requesting shifts');
   }
 
   const requiredCategories = ['LICENSE', 'CPR', 'TB_TEST'];
@@ -112,7 +112,7 @@ async function getWorkerEligibility(professionalId: string) {
 }
 async function createWorkerNotification(params: {
   professionalId: string;
-  type: 'SHIFT_APPROVED' | 'SHIFT_REJECTED' | 'DOCUMENT_REJECTED' | 'DNR_BLOCK' | 'GENERAL';
+  type: NotificationType;
   title: string;
   message: string;
 }) {
@@ -124,6 +124,110 @@ async function createWorkerNotification(params: {
       message: params.message,
     },
   });
+}
+
+async function getWorkerDashboardData(userId: string) {
+  const professional = await prisma.professionalProfile.findUnique({
+    where: { userId },
+    include: {
+      user: true,
+      documents: true,
+      agreements: true,
+      requests: {
+        include: {
+          shift: {
+            include: {
+              facility: true,
+            },
+          },
+        },
+        orderBy: [{ requestedAt: 'desc' }],
+      },
+    },
+  });
+
+  if (!professional) {
+    return null;
+  }
+
+  const approvedDocs = professional.documents.filter((doc) => doc.status === 'APPROVED').length;
+  const pendingDocs = professional.documents.filter((doc) => doc.status === 'PENDING').length;
+  const rejectedDocs = professional.documents.filter((doc) => doc.status === 'REJECTED').length;
+  const expiredDocs = professional.documents.filter((doc) => doc.status === 'EXPIRED').length;
+
+  const ica = professional.agreements.find((agreement) => agreement.agreementType === 'ICA');
+  const eligibility = await getWorkerEligibility(professional.id);
+
+  const requestedCount = professional.requests.length;
+  const approvedRequestCount = professional.requests.filter(
+    (request) => request.status === 'APPROVED'
+  ).length;
+  const pendingRequestCount = professional.requests.filter(
+    (request) => request.status === 'REQUESTED' || request.status === 'UNDER_REVIEW'
+  ).length;
+  const rejectedRequestCount = professional.requests.filter(
+    (request) => request.status === 'REJECTED'
+  ).length;
+
+  const upcomingShifts = professional.requests
+  .filter((request) => request.status === 'APPROVED')
+  .filter((request) => new Date(request.shift.date) >= new Date(new Date().toDateString()))
+  .sort((a, b) => +new Date(a.shift.date) - +new Date(b.shift.date))
+  .slice(0, 5)
+  .map((request) => ({
+    id: request.shift.id,
+    facilityName: request.shift.facility.name,
+    role: request.shift.role,
+    shiftType: request.shift.shiftType,
+    date: request.shift.date,
+    time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+    startTimeLabel: request.shift.startTimeLabel,
+    endTimeLabel: request.shift.endTimeLabel,
+    city: request.shift.facility.city,
+    state: request.shift.facility.state,
+    address: [
+      request.shift.facility.city,
+      request.shift.facility.state,
+      request.shift.facility.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', '),
+    specialInstructions: request.shift.specialInstructions ?? null,
+    status: request.status,
+  }));
+
+  return {
+    profile: {
+      professionalId: professional.id,
+      firstName: professional.user.firstName,
+      lastName: professional.user.lastName,
+      email: professional.user.email,
+      role: professional.role,
+      onboardingStatus: professional.onboardingStatus,
+      approvedByWezen: professional.approvedByWezen,
+    },
+    stats: {
+      profileStatus: professional.approvedByWezen ? 'APPROVED' : 'UNDER_REVIEW',
+      documents: {
+        approved: approvedDocs,
+        pending: pendingDocs,
+        rejected: rejectedDocs,
+        expired: expiredDocs,
+        total: professional.documents.length,
+      },
+      agreementStatus: ica?.status ?? 'NOT_STARTED',
+      requests: {
+        total: requestedCount,
+        approved: approvedRequestCount,
+        pending: pendingRequestCount,
+        rejected: rejectedRequestCount,
+      },
+      upcomingShiftCount: upcomingShifts.length,
+      eligibleForShifts: eligibility.eligible,
+      eligibilityReasons: eligibility.reasons,
+    },
+    upcomingShifts,
+  };
 }
 
 async function getProfessionalProfileIdForUser(userId: string) {
@@ -175,6 +279,10 @@ async function ensureFacilityIsActive(facilityId: string) {
 
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3001',
+  process.env.FRONTEND_URL_WWW || '',
+  'http://localhost:3005',
+  'https://wezenstaffing.com',
+  'https://www.wezenstaffing.com',
 ].filter(Boolean);
 
 app.use(
@@ -220,10 +328,64 @@ const createFacilitySchema = z.object({
   city: z.string().min(1),
   state: z.string().min(1),
   zipCode: z.string().min(1),
+  defaultCnaRateCents: z.number().int().nonnegative().optional(),
+  defaultLvnRateCents: z.number().int().nonnegative().optional(),
+  defaultRnRateCents: z.number().int().nonnegative().optional(),
+  allowRateOverride: z.boolean().optional(),
+});
+
+const updateFacilitySchema = z.object({
+  name: z.string().min(1),
+  facilityType: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  zipCode: z.string().min(1),
+  defaultCnaRateCents: z.number().int().nonnegative().nullable().optional(),
+  defaultLvnRateCents: z.number().int().nonnegative().nullable().optional(),
+  defaultRnRateCents: z.number().int().nonnegative().nullable().optional(),
+  allowRateOverride: z.boolean().optional(),
+});
+
+const updateFacilitySettingsSchema = z.object({
+  name: z.string().min(1),
+  facilityType: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
+  defaultCnaRateCents: z.number().int().nonnegative().nullable().optional(),
+  defaultLvnRateCents: z.number().int().nonnegative().nullable().optional(),
+  defaultRnRateCents: z.number().int().nonnegative().nullable().optional(),
+  allowRateOverride: z.boolean().optional(),
 });
 
 const adminShiftOverrideSchema = z.object({
   reason: z.string().min(3),
+});
+
+const adminSettingsSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  notificationEmail: z.string().email().optional().or(z.literal('')),
+  notifyNewWorkerSignup: z.boolean(),
+  notifyDocumentUploads: z.boolean(),
+  notifyAgreementSigned: z.boolean(),
+  notifyWorkerReadyForReview: z.boolean(),
+});
+
+const adminChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+const updateWorkerPayRatesSchema = z.object({
+  regularPayRateCents: z.number().int().nonnegative().nullable().optional(),
+  overtimePayRateCents: z.number().int().nonnegative().nullable().optional(),
+  doublePayRateCents: z.number().int().nonnegative().nullable().optional(),
 });
 
 app.post('/api/auth/register-professional', async (req, res) => {
@@ -490,6 +652,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
         role: user.role,
         firstName: user.firstName,
         lastName: user.lastName,
+        notificationEmail: user.notificationEmail,
         professionalId: user.professional?.id ?? null,
         facilityId: user.facilityAdmin?.facilityId ?? null,
       },
@@ -497,6 +660,22 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
   } catch (error) {
     console.error('GET /api/auth/me error:', error);
     res.status(500).json({ error: 'Failed to fetch current user' });
+  }
+});
+
+app.get('/api/worker/dashboard', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const data = await getWorkerDashboardData(userId);
+
+    if (!data) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    res.json({ data });
+  } catch (error) {
+    console.error('GET /api/worker/dashboard error:', error);
+    res.status(500).json({ error: 'Failed to fetch worker dashboard' });
   }
 });
 
@@ -614,6 +793,35 @@ app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest
       return res.status(403).json({ error: facilityStatus.error });
     }
 
+    const facility = await prisma.facility.findUnique({
+  where: { id: facilityId },
+  select: {
+    id: true,
+    defaultCnaRateCents: true,
+    defaultLvnRateCents: true,
+    defaultRnRateCents: true,
+    allowRateOverride: true,
+  },
+});
+
+if (!facility) {
+  return res.status(404).json({ error: 'Facility not found' });
+}
+
+let resolvedPayRateCents: number | undefined = undefined;
+
+if (parsed.data.role === 'CNA') {
+  resolvedPayRateCents = facility.defaultCnaRateCents ?? undefined;
+} else if (parsed.data.role === 'LVN') {
+  resolvedPayRateCents = facility.defaultLvnRateCents ?? undefined;
+} else if (parsed.data.role === 'RN') {
+  resolvedPayRateCents = facility.defaultRnRateCents ?? undefined;
+}
+
+if (facility.allowRateOverride && parsed.data.payRateCents != null) {
+  resolvedPayRateCents = parsed.data.payRateCents;
+}
+
     const shift = await prisma.shift.create({
       data: {
         facilityId,
@@ -624,7 +832,7 @@ app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest
         endTimeLabel: parsed.data.endTimeLabel,
         workersNeeded: parsed.data.workersNeeded,
         specialInstructions: parsed.data.specialInstructions,
-        payRateCents: parsed.data.payRateCents,
+        payRateCents: resolvedPayRateCents,
       },
     });
 
@@ -651,6 +859,8 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedR
     if (!professionalId) {
       return res.status(404).json({ error: 'Professional profile not found' });
     }
+
+    
 
     const shift = await prisma.shift.findUnique({
   where: { id: parsed.data.shiftId },
@@ -721,18 +931,19 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedR
 
 app.get('/api/facility/requests', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   try {
-    const userId = req.authUser!.userId;
-    const facilityId = await getFacilityIdForUser(userId);
+	
+	const userId = req.authUser!.userId;
+const facilityId = await getFacilityIdForUser(userId);
 
-    const facilityStatus = await ensureFacilityIsActive(facilityId);
+if (!facilityId) {
+  return res.status(403).json({ error: 'Facility account not found' });
+}
+
+const facilityStatus = await ensureFacilityIsActive(facilityId);
 if (!facilityStatus.ok) {
   clearAuthCookie(res);
   return res.status(403).json({ error: facilityStatus.error });
 }
-
-    if (!facilityId) {
-      return res.status(404).json({ error: 'Facility not found for this user' });
-    }
 
     const requests = await prisma.shiftRequest.findMany({
       where: {
@@ -768,8 +979,23 @@ if (!facilityStatus.ok) {
           shiftType: request.shift.shiftType,
           date: request.shift.date,
           time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+	  startTimeLabel: request.shift.startTimeLabel,
+	  endTimeLabel: request.shift.endTimeLabel,
           facilityName: request.shift.facility.name,
-        },
+          city: request.shift.facility.city,
+	  state: request.shift.facility.state, 
+          address:
+    [
+      request.shift.facility.addressLine1,
+      request.shift.facility.addressLine2,
+      request.shift.facility.city,
+      request.shift.facility.state,
+      request.shift.facility.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', '),
+  	specialInstructions: request.shift.specialInstructions ?? null,
+ },
         professional: {
           id: request.professional.id,
           firstName: request.professional.user.firstName,
@@ -929,17 +1155,29 @@ app.get('/api/worker/requests', async (req, res) => {
       requestedAt: request.requestedAt,
       reviewedAt: request.reviewedAt,
       reviewNotes: request.reviewNotes,
-      shift: {
-        id: request.shift.id,
-        role: request.shift.role,
-        shiftType: request.shift.shiftType,
-        date: request.shift.date,
-        time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
-        facilityName: request.shift.facility.name,
-        city: request.shift.facility.city,
-        state: request.shift.facility.state,
-      },
-    }));
+     shift: {
+  id: request.shift.id,
+  role: request.shift.role,
+  shiftType: request.shift.shiftType,
+  date: request.shift.date,
+  time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+  startTimeLabel: request.shift.startTimeLabel,
+  endTimeLabel: request.shift.endTimeLabel,
+  facilityName: request.shift.facility.name,
+  city: request.shift.facility.city,
+  state: request.shift.facility.state,
+  address: [
+    request.shift.facility.addressLine1,
+    request.shift.facility.addressLine2,
+    request.shift.facility.city,
+    request.shift.facility.state,
+    request.shift.facility.zipCode,
+  ]
+    .filter(Boolean)
+    .join(', '),
+  specialInstructions: request.shift.specialInstructions ?? null,
+},    
+}));
 
     res.json({ data });
   } catch (error) {
@@ -976,6 +1214,9 @@ app.get('/api/worker/profile', async (req, res) => {
         zipCode: profile.zipCode,
         maxDistanceMiles: profile.maxDistanceMiles,
         hourlyRateCents: profile.hourlyRateCents,
+	regularPayRateCents: profile.regularPayRateCents,
+	overtimePayRateCents: profile.overtimePayRateCents,
+	doublePayRateCents: profile.doublePayRateCents,
         bio: profile.bio,
         onboardingStatus: profile.onboardingStatus,
         approvedByWezen: profile.approvedByWezen,
@@ -1163,6 +1404,24 @@ app.post('/api/worker/agreements/sign', requireRole('PROFESSIONAL'), async (req:
       return res.status(404).json({ error: 'Professional profile not found' });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const signerName =
+      `${user.firstName || ''} ${user.lastName || ''}`.trim() || parsed.data.signerName;
+
+    const signerEmail = user.email || parsed.data.signerEmail;
+
     const agreement = await prisma.professionalAgreement.upsert({
       where: {
         professionalId_agreementType: {
@@ -1173,16 +1432,16 @@ app.post('/api/worker/agreements/sign', requireRole('PROFESSIONAL'), async (req:
       update: {
         status: 'SIGNED',
         signedAt: new Date(),
-        signerName: parsed.data.signerName,
-        signerEmail: parsed.data.signerEmail,
+        signerName,
+        signerEmail,
       },
       create: {
         professionalId,
         agreementType: parsed.data.agreementType,
         status: 'SIGNED',
         signedAt: new Date(),
-        signerName: parsed.data.signerName,
-        signerEmail: parsed.data.signerEmail,
+        signerName,
+        signerEmail,
       },
     });
 
@@ -1192,6 +1451,33 @@ app.post('/api/worker/agreements/sign', requireRole('PROFESSIONAL'), async (req:
         onboardingStatus: 'AGREEMENT_SIGNED',
       },
     });
+await prisma.workerNotification.updateMany({
+  where: {
+    professionalId,
+    title: 'Agreement ready to sign',
+    isRead: false,
+  },
+  data: {
+    isRead: true,
+  },
+});
+    // Check if worker is ready for admin review
+const documents = await prisma.professionalDocument.findMany({
+  where: { professionalId },
+});
+
+const hasDocuments = documents.length > 0;
+
+if (hasDocuments) {
+  await prisma.professionalProfile.update({
+    where: { id: professionalId },
+    data: {
+      onboardingStatus: 'READY_FOR_REVIEW',
+    },
+  });
+
+  console.log(`Worker ${professionalId} is READY_FOR_REVIEW`);
+}
 
     res.json({
       data: {
@@ -1214,6 +1500,7 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
     const professionalId = String(req.body.professionalId || '');
     const category = String(req.body.category || '');
     const name = String(req.body.name || '');
+    const expiresAtRaw = String(req.body.expiresAt || '').trim();
 
     if (!professionalId) {
       return res.status(400).json({ error: 'professionalId is required' });
@@ -1227,13 +1514,26 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
       return res.status(400).json({ error: 'file is required' });
     }
 
+    let expiresAt: Date | null = null;
+
+    if (expiresAtRaw) {
+      const parsedDate = new Date(expiresAtRaw);
+
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ error: 'expiresAt must be a valid date' });
+      }
+
+      expiresAt = parsedDate;
+    }
+
     const document = await prisma.professionalDocument.create({
       data: {
         professionalId,
         category: category as any,
         name: name || req.file.originalname,
-        fileUrl: `http://localhost:4001/uploads/${req.file.filename}`,
+        fileUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`,
         status: 'PENDING',
+        expiresAt,
       },
     });
 
@@ -1243,6 +1543,7 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
         name: document.name,
         category: document.category,
         status: document.status,
+        expiresAt: document.expiresAt,
         fileUrl: document.fileUrl,
         createdAt: document.createdAt,
       },
@@ -1250,6 +1551,55 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
   } catch (error) {
     console.error('POST /api/worker/documents/upload error:', error);
     res.status(500).json({ error: 'Failed to upload document' });
+  }
+});
+
+app.post('/api/worker/change-password', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        passwordHash: true,
+        role: true,
+      },
+    });
+
+    if (!user || user.role !== 'PROFESSIONAL') {
+      return res.status(404).json({ error: 'Worker user not found' });
+    }
+
+    if (!user.passwordHash) {
+      return res.status(400).json({ error: 'Password is not set for this account' });
+    }
+
+    const matches = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+
+    if (!matches) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const newPasswordHash = await hashPassword(parsed.data.newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newPasswordHash,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/worker/change-password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 
@@ -1383,7 +1733,10 @@ app.get('/api/admin/workers', requireRole('INTERNAL_ADMIN'), async (_req, res) =
           email: worker.user.email,
           city: worker.city,
           state: worker.state,
-          onboardingStatus: worker.onboardingStatus,
+          regularPayRateCents: worker.regularPayRateCents,
+	  overtimePayRateCents: worker.overtimePayRateCents,
+ 	  doublePayRateCents: worker.doublePayRateCents,
+	  onboardingStatus: worker.onboardingStatus,
           approvedByWezen: worker.approvedByWezen,
           icaStatus: ica?.status || 'NOT_STARTED',
           counts: {
@@ -1432,6 +1785,12 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
     if (!worker) {
       return res.status(404).json({ error: 'Worker not found' });
     }
+    
+    if (worker.user.isSystemUser) {
+  return res.status(403).json({
+    error: 'System users cannot be deleted.',
+  });
+}
 
     res.json({
       data: {
@@ -1445,6 +1804,7 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
         bio: worker.bio,
         onboardingStatus: worker.onboardingStatus,
         approvedByWezen: worker.approvedByWezen,
+        isSystemUser: worker.user.isSystemUser,
         firstName: worker.user.firstName,
         lastName: worker.user.lastName,
         email: worker.user.email,
@@ -1492,6 +1852,135 @@ const adminRejectDocumentSchema = z.object({
   notes: z.string().min(1),
 });
 
+app.put('/api/admin/workers/:professionalId/pay-rates', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = updateWorkerPayRatesSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    const updated = await prisma.professionalProfile.update({
+      where: { id: professionalId },
+      data: {
+        regularPayRateCents: parsed.data.regularPayRateCents ?? null,
+        overtimePayRateCents: parsed.data.overtimePayRateCents ?? null,
+        doublePayRateCents: parsed.data.doublePayRateCents ?? null,
+      },
+      select: {
+        id: true,
+        regularPayRateCents: true,
+        overtimePayRateCents: true,
+        doublePayRateCents: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/admin/workers/:professionalId/pay-rates error:', error);
+    res.status(500).json({ error: 'Failed to update worker pay rates' });
+  }
+});
+
+app.post('/api/admin/workers/:professionalId/ica-signed', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    const agreement = await prisma.professionalAgreement.findFirst({
+      where: {
+        professionalId,
+        agreementType: 'ICA',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!agreement) {
+      return res.status(404).json({ error: 'ICA agreement not found' });
+    }
+
+    const updated = await prisma.professionalAgreement.update({
+      where: { id: agreement.id },
+      data: {
+        status: 'SIGNED',
+        signedAt: new Date(),
+      },
+    });
+
+    await createWorkerNotification({
+      professionalId,
+      type: 'GENERAL',
+      title: 'ICA signed and approved',
+      message: 'Your Independent Contractor Agreement has been completed. You can now begin requesting shifts.',
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/admin/workers/:professionalId/ica-signed error:', error);
+    res.status(500).json({ error: 'Failed to mark ICA as signed' });
+  }
+});
+
+app.post('/api/admin/workers/:professionalId/ica-sent', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    let agreement = await prisma.professionalAgreement.findFirst({
+      where: {
+        professionalId,
+        agreementType: 'ICA',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!agreement) {
+      agreement = await prisma.professionalAgreement.create({
+        data: {
+          professionalId,
+          agreementType: 'ICA',
+          status: 'SENT',
+        },
+      });
+	} else if (agreement.status === 'NOT_STARTED') {
+      agreement = await prisma.professionalAgreement.update({
+        where: { id: agreement.id },
+        data: {
+          status: 'SENT',
+        },
+      });
+    }
+
+    await createWorkerNotification({
+      professionalId,
+      type: 'GENERAL',
+      title: 'ICA sent for signature',
+      message: 'Your Independent Contractor Agreement has been sent by Wezen Staffing via Adobe eSign. Please complete it from your email before requesting shifts.',
+    });
+
+    res.json({ data: agreement });
+  } catch (error) {
+    console.error('POST /api/admin/workers/:professionalId/ica-sent error:', error);
+    res.status(500).json({ error: 'Failed to mark ICA as sent' });
+  }
+});
+
 app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN'), async (req, res) => {
   try {
     const documentId = String(req.params.documentId || '');
@@ -1507,6 +1996,45 @@ app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN
         notes: null,
       },
     });
+
+    const profile = await prisma.professionalProfile.findUnique({
+      where: { id: updated.professionalId },
+      include: {
+        documents: true,
+        agreements: true,
+      },
+    });
+
+    if (profile) {
+      const ica = profile.agreements.find((agreement) => agreement.agreementType === 'ICA');
+
+      const requiredCategories = ['LICENSE', 'CPR', 'TB_TEST'];
+      const hasAllRequiredDocs = requiredCategories.every((category) => {
+        const doc = profile.documents.find((item) => item.category === category);
+        return !!doc && doc.status === 'APPROVED';
+      });
+
+      if (hasAllRequiredDocs && (!ica || ica.status !== 'SIGNED')) {
+        const existingAgreementReadyNotification = await prisma.workerNotification.findFirst({ 
+         where: { 
+	  professionalId: updated.professionalId,
+          title: 'Agreement ready to sign',
+          isRead: false,
+	},
+    orderBy: {
+      createdAt: 'desc',
+    },
+        });
+	if (!existingAgreementReadyNotification) {
+    await createWorkerNotification({
+      professionalId: updated.professionalId,
+      type: 'GENERAL',
+      title: 'Agreement ready to sign',
+      message: 'Your required documents are approved. Please review and sign your Independent Contractor Agreement.',
+    });
+  }
+      }
+    }
 
     res.json({ data: updated });
   } catch (error) {
@@ -1559,6 +2087,23 @@ app.post('/api/admin/workers/:professionalId/approve', requireRole('INTERNAL_ADM
       return res.status(400).json({ error: 'professionalId is required' });
     }
 
+     const worker = await prisma.professionalProfile.findUnique({
+  where: { id: professionalId },
+  include: {
+    user: true,
+  },
+});
+
+if (!worker) {
+  return res.status(404).json({ error: 'Worker not found' });
+}
+
+if (worker.user.isSystemUser) {
+  return res.status(403).json({
+    error: 'System users cannot be modified through worker approval actions.',
+  });
+}
+
     const updated = await prisma.professionalProfile.update({
       where: { id: professionalId },
       data: {
@@ -1566,6 +2111,13 @@ app.post('/api/admin/workers/:professionalId/approve', requireRole('INTERNAL_ADM
         onboardingStatus: 'APPROVED',
       },
     });
+
+    await createWorkerNotification({
+  professionalId,
+  type: 'SHIFT_APPROVED',
+  title: 'Profile approved by Wezen',
+  message: 'Your profile has been approved by Wezen. You can now request available shifts.',
+});
 
     res.json({ data: updated });
   } catch (error) {
@@ -1582,6 +2134,23 @@ app.post('/api/admin/workers/:professionalId/unapprove', requireRole('INTERNAL_A
       return res.status(400).json({ error: 'professionalId is required' });
     }
 
+    const worker = await prisma.professionalProfile.findUnique({
+  where: { id: professionalId },
+  include: {
+    user: true,
+  },
+});
+
+if (!worker) {
+  return res.status(404).json({ error: 'Worker not found' });
+}
+
+if (worker.user.isSystemUser) {
+  return res.status(403).json({
+    error: 'System users cannot be moved under review.',
+  });
+}
+
     const updated = await prisma.professionalProfile.update({
       where: { id: professionalId },
       data: {
@@ -1594,6 +2163,140 @@ app.post('/api/admin/workers/:professionalId/unapprove', requireRole('INTERNAL_A
   } catch (error) {
     console.error('POST /api/admin/workers/:professionalId/unapprove error:', error);
     res.status(500).json({ error: 'Failed to unapprove worker' });
+  }
+});
+
+const adminRejectWorkerSchema = z.object({
+  reason: z.string().min(1),
+});
+
+app.post('/api/admin/workers/:professionalId/reject', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+  const parsed = adminRejectWorkerSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    if (worker.user.isSystemUser) {
+  return res.status(403).json({
+    error: 'System users cannot be rejected.',
+  });
+}
+
+    const updated = await prisma.professionalProfile.update({
+      where: { id: professionalId },
+      data: {
+        approvedByWezen: false,
+        onboardingStatus: 'REJECTED',
+      },
+    });
+
+    await createWorkerNotification({
+      professionalId,
+      type: 'GENERAL',
+      title: 'Profile rejected',
+      message: `Your profile was rejected by Wezen Staffing. Reason: ${parsed.data.reason}`,
+    });
+
+    res.json({
+      data: {
+        id: updated.id,
+        approvedByWezen: updated.approvedByWezen,
+        onboardingStatus: updated.onboardingStatus,
+      },
+    });
+  } catch (error) {
+    console.error('POST /api/admin/workers/:professionalId/reject error:', error);
+    res.status(500).json({ error: 'Failed to reject worker' });
+  }
+});
+
+app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: true,
+        documents: true,
+        agreements: true,
+        requests: true,
+        notifications: true,
+        facilityDnrs: true,
+      },
+    });
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+    if (worker.user.role === 'INTERNAL_ADMIN' && worker.user.isSystemUser) {
+  return res.status(403).json({
+    error: 'Core internal admin account cannot be deleted',
+  });
+}
+    if (worker.requests.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete a worker that has shift request history. Remove only test/empty accounts.',
+      });
+    }
+
+    await prisma.professionalDocument.deleteMany({
+      where: { professionalId },
+    });
+
+    await prisma.professionalAgreement.deleteMany({
+      where: { professionalId },
+    });
+
+    await prisma.workerNotification.deleteMany({
+      where: { professionalId },
+    });
+
+    await prisma.facilityDnr.deleteMany({
+      where: { professionalId },
+    });
+
+    await prisma.professionalProfile.delete({
+      where: { id: professionalId },
+    });
+
+    await prisma.user.delete({
+      where: { id: worker.userId },
+    });
+
+    res.json({
+      data: {
+        deletedProfessionalId: professionalId,
+        deletedUserId: worker.userId,
+        email: worker.user.email,
+      },
+    });
+  } catch (error) {
+    console.error('DELETE /api/admin/workers/:professionalId error:', error);
+    res.status(500).json({ error: 'Failed to delete worker' });
   }
 });
 
@@ -1810,6 +2513,55 @@ app.post('/api/facility/dnr', requireRole('FACILITY_ADMIN'), async (req: AuthedR
   }
 });
 
+app.post('/api/facility/change-password', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        passwordHash: true,
+        role: true,
+      },
+    });
+    
+    if (!user || user.role !== 'FACILITY_ADMIN') {
+  return res.status(404).json({ error: 'Facility user not found' });
+}
+
+if (!user.passwordHash) {
+  return res.status(400).json({ error: 'Password is not set for this account' });
+}
+
+const matches = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+
+    if (!matches) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const newPasswordHash = await hashPassword(parsed.data.newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newPasswordHash,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/facility/change-password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 app.delete('/api/facility/dnr', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   const professionalId = String(req.query.professionalId || '');
 
@@ -1864,6 +2616,8 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
         facility: { isActive: true, },
         ...(role ? { role } : {}),
         ...(shiftType ? { shiftType } : {}),
+	date: {
+    gte: new Date(new Date().toDateString()),},
       },
       include: {
         facility: true,
@@ -1920,7 +2674,7 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
         facilityName: shift.facility.name,
         city: shift.facility.city,
         state: shift.facility.state,
-        distanceMiles: 0,
+        distanceMiles: null,
         shiftType: shift.shiftType,
         date: shift.date,
         time: `${shift.startTimeLabel} - ${shift.endTimeLabel}`,
@@ -2279,7 +3033,11 @@ app.post('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (req: Aut
         city: parsed.data.city,
         state: parsed.data.state,
         zipCode: parsed.data.zipCode,
-      },
+        defaultCnaRateCents: parsed.data.defaultCnaRateCents,
+        defaultLvnRateCents: parsed.data.defaultLvnRateCents,
+        defaultRnRateCents: parsed.data.defaultRnRateCents,
+        allowRateOverride: parsed.data.allowRateOverride ?? false,    
+     },
       select: {
         id: true,
         name: true,
@@ -2287,6 +3045,10 @@ app.post('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (req: Aut
         city: true,
         state: true,
         zipCode: true,
+        defaultCnaRateCents: true,
+	defaultLvnRateCents: true,
+	defaultRnRateCents: true,
+	allowRateOverride: true,
       },
     });
 
@@ -2361,6 +3123,105 @@ app.post('/api/admin/facilities/:facilityId/reactivate', requireRole('INTERNAL_A
   } catch (error) {
     console.error('POST /api/admin/facilities/:facilityId/reactivate error:', error);
     res.status(500).json({ error: 'Failed to reactivate facility' });
+  }
+});
+
+app.get('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = String(req.params.facilityId || '');
+
+    if (!facilityId) {
+      return res.status(400).json({ error: 'facilityId is required' });
+    }
+
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: {
+        id: true,
+        name: true,
+        facilityType: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        isActive: true,
+        defaultCnaRateCents: true,
+        defaultLvnRateCents: true,
+        defaultRnRateCents: true,
+        allowRateOverride: true,
+      },
+    });
+
+    if (!facility) {
+      return res.status(404).json({ error: 'Facility not found' });
+    }
+
+    res.json({ data: facility });
+  } catch (error) {
+    console.error('GET /api/admin/facilities/:facilityId error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility detail' });
+  }
+});
+
+app.put('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = String(req.params.facilityId || '');
+    const {
+      name,
+      facilityType,
+      city,
+      state,
+      zipCode,
+      defaultCnaRateCents,
+      defaultLvnRateCents,
+      defaultRnRateCents,
+      allowRateOverride,
+    } = req.body || {};
+
+    if (!facilityId) {
+      return res.status(400).json({ error: 'facilityId is required' });
+    }
+
+    const updated = await prisma.facility.update({
+      where: { id: facilityId },
+      data: {
+        name: String(name || '').trim(),
+        facilityType: String(facilityType || '').trim(),
+        city: String(city || '').trim(),
+        state: String(state || '').trim(),
+        zipCode: String(zipCode || '').trim(),
+        defaultCnaRateCents:
+          defaultCnaRateCents === null || defaultCnaRateCents === undefined
+            ? null
+            : Number(defaultCnaRateCents),
+        defaultLvnRateCents:
+          defaultLvnRateCents === null || defaultLvnRateCents === undefined
+            ? null
+            : Number(defaultLvnRateCents),
+        defaultRnRateCents:
+          defaultRnRateCents === null || defaultRnRateCents === undefined
+            ? null
+            : Number(defaultRnRateCents),
+        allowRateOverride: Boolean(allowRateOverride),
+      },
+      select: {
+        id: true,
+        name: true,
+        facilityType: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        isActive: true,
+        defaultCnaRateCents: true,
+        defaultLvnRateCents: true,
+        defaultRnRateCents: true,
+        allowRateOverride: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/admin/facilities/:facilityId error:', error);
+    res.status(500).json({ error: 'Failed to update facility' });
   }
 });
 
@@ -2447,7 +3308,7 @@ app.post(
 
       await createWorkerNotification({
         professionalId: updated.professionalId,
-        type: 'SHIFT_CANCELLED',
+        type: 'GENERAL',
         title: 'Shift request cancelled',
         message:
           'Your shift request was cancelled by Wezen Staffing. Please contact support if needed.',
@@ -2612,10 +3473,22 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: Au
       return res.status(404).json({ error: 'Facility admin not found' });
     }
 
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: {
+        id: true,
+        name: true,
+        defaultCnaRateCents: true,
+        defaultLvnRateCents: true,
+        defaultRnRateCents: true,
+        allowRateOverride: true,
+      },
+    });
+
     const facilityStatus = await ensureFacilityIsActive(facilityId);
     if (!facilityStatus.ok) {
-        clearAuthCookie(res);
-       return res.status(403).json({ error: facilityStatus.error });
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
     }
 
     const [shifts, requests, workers, complianceDocs] = await Promise.all([
@@ -2679,7 +3552,7 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: Au
       }),
     ]);
 
-        const openShifts = shifts.filter((shift) => shift.status === 'OPEN').length;
+    const openShifts = shifts.filter((shift) => shift.status === 'OPEN').length;
 
     const pendingRequests = requests.filter(
       (request) =>
@@ -2728,6 +3601,14 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: Au
           approvedRequests,
           activeWorkers: workers.length,
           complianceAlerts,
+        },
+        facility: {
+          id: facility?.id,
+          name: facility?.name,
+          defaultCnaRateCents: facility?.defaultCnaRateCents ?? null,
+          defaultLvnRateCents: facility?.defaultLvnRateCents ?? null,
+          defaultRnRateCents: facility?.defaultRnRateCents ?? null,
+          allowRateOverride: facility?.allowRateOverride ?? false,
         },
         recentShifts,
       },
@@ -2916,6 +3797,103 @@ app.get('/api/facility/compliance', requireRole('FACILITY_ADMIN'), async (req: A
   }
 });
 
+app.get('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const facilityStatus = await ensureFacilityIsActive(facilityId);
+    if (!facilityStatus.ok) {
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
+    }
+
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: {
+        id: true,
+        name: true,
+        facilityType: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        defaultCnaRateCents: true,
+        defaultLvnRateCents: true,
+        defaultRnRateCents: true,
+        allowRateOverride: true,
+      },
+    });
+
+    if (!facility) {
+      return res.status(404).json({ error: 'Facility not found' });
+    }
+
+    res.json({ data: facility });
+  } catch (error) {
+    console.error('GET /api/facility/settings error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility settings' });
+  }
+});
+
+app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = updateFacilitySettingsSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const facilityStatus = await ensureFacilityIsActive(facilityId);
+    if (!facilityStatus.ok) {
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
+    }
+
+    const updated = await prisma.facility.update({
+      where: { id: facilityId },
+      data: {
+        name: parsed.data.name,
+        facilityType: parsed.data.facilityType,
+        city: parsed.data.city,
+        state: parsed.data.state,
+        zipCode: parsed.data.zipCode,
+        defaultCnaRateCents: parsed.data.defaultCnaRateCents ?? null,
+        defaultLvnRateCents: parsed.data.defaultLvnRateCents ?? null,
+        defaultRnRateCents: parsed.data.defaultRnRateCents ?? null,
+        allowRateOverride: parsed.data.allowRateOverride ?? false,
+      },
+      select: {
+        id: true,
+        name: true,
+        facilityType: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        defaultCnaRateCents: true,
+        defaultLvnRateCents: true,
+        defaultRnRateCents: true,
+        allowRateOverride: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/facility/settings error:', error);
+    res.status(500).json({ error: 'Failed to update facility settings' });
+  }
+});
+
 app.get('/api/facility/favorites', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
@@ -3067,6 +4045,137 @@ app.get('/api/worker/shifts/:shiftId', requireRole('PROFESSIONAL'), async (req: 
   } catch (error) {
     console.error('GET /api/worker/shifts/:shiftId error:', error);
     res.status(500).json({ error: 'Failed to fetch shift detail' });
+  }
+});
+
+app.get('/api/admin/settings', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        notificationEmail: true,
+        notifyNewWorkerSignup: true,
+        notifyDocumentUploads: true,
+        notifyAgreementSigned: true,
+        notifyWorkerReadyForReview: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    res.json({
+      data: {
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        notificationEmail: user.notificationEmail,
+        notifyNewWorkerSignup: user.notifyNewWorkerSignup,
+        notifyDocumentUploads: user.notifyDocumentUploads,
+        notifyAgreementSigned: user.notifyAgreementSigned,
+        notifyWorkerReadyForReview: user.notifyWorkerReadyForReview,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/admin/settings error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin settings' });
+  }
+});
+
+app.put('/api/admin/settings', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = adminSettingsSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: parsed.data.firstName || null,
+        lastName: parsed.data.lastName || null,
+        notificationEmail: parsed.data.notificationEmail || null,
+        notifyNewWorkerSignup: parsed.data.notifyNewWorkerSignup,
+        notifyDocumentUploads: parsed.data.notifyDocumentUploads,
+        notifyAgreementSigned: parsed.data.notifyAgreementSigned,
+        notifyWorkerReadyForReview: parsed.data.notifyWorkerReadyForReview,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        notificationEmail: true,
+        notifyNewWorkerSignup: true,
+        notifyDocumentUploads: true,
+        notifyAgreementSigned: true,
+        notifyWorkerReadyForReview: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/admin/settings error:', error);
+    res.status(500).json({ error: 'Failed to update admin settings' });
+  }
+});
+
+app.post('/api/admin/change-password', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = adminChangePasswordSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        passwordHash: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    if (!user.passwordHash) {
+      return res.status(400).json({ error: 'Password is not configured for this account' });
+    }
+
+    const valid = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+
+    if (!valid) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const newPasswordHash = await hashPassword(parsed.data.newPassword);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: newPasswordHash,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/admin/change-password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 

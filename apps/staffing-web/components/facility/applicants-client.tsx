@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { StatusBadge } from '@/components/shared/status-badge';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type FacilityRequest = {
@@ -35,33 +35,40 @@ type Props = {
 };
 
 export function ApplicantsClient({ requests }: Props) {
-  const [items, setItems] = useState(requests);
+  const [items, setItems] = useState<FacilityRequest[]>(requests);
   const [message, setMessage] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const router = useRouter();
 
-  async function updateRequest(id: string, action: 'approve' | 'reject') {
+  useEffect(() => {
+    setItems(requests);
+  }, [requests]);
+
+  async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
-      setBusyId(id);
+      setBusyId(requestId);
       setMessage('');
 
-      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shift-requests/${id}/${action}`, {
-        method: 'POST',
-	credentials: 'include',
-      });
+      const res = await fetch(
+        `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        }
+      );
 
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} request`);
+        throw new Error(text || `Failed to ${action} applicant`);
       }
 
       setItems((prev) =>
         prev.map((item) =>
-          item.id === id
+          item.id === requestId
             ? {
                 ...item,
                 status: action === 'approve' ? 'APPROVED' : 'REJECTED',
-                reviewedAt: new Date().toISOString(),
               }
             : item
         )
@@ -69,11 +76,15 @@ export function ApplicantsClient({ requests }: Props) {
 
       setMessage(
         action === 'approve'
-          ? 'Request approved successfully.'
-          : 'Request rejected successfully.'
+          ? 'Applicant approved successfully.'
+          : 'Applicant rejected successfully.'
       );
+
+      router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Request update failed');
+      setMessage(
+        error instanceof Error ? error.message : `Failed to ${action} applicant`
+      );
     } finally {
       setBusyId(null);
     }
@@ -102,31 +113,22 @@ export function ApplicantsClient({ requests }: Props) {
         return (
           <div
             key={request.id}
-            className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+            className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm"
           >
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-xl font-bold tracking-tight text-slate-950">
+                  <div className="text-xl font-bold tracking-tight text-slate-950">
                     {fullName}
-                  </h2>
-                  <StatusBadge
-                    label={request.status}
-                    tone={
-                      request.status === 'APPROVED'
-                        ? 'success'
-                        : request.status === 'REJECTED'
-                          ? 'danger'
-                          : 'warning'
-                    }
-                  />
+                  </div>
+
                   <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {request.professional.role}
+                    {request.status}
                   </div>
                 </div>
 
                 <div className="mt-2 text-sm text-slate-600">
-                  {request.professional.email}
+                  {request.professional.role} • {request.professional.email}
                 </div>
 
                 <div className="mt-1 text-sm text-slate-500">
@@ -134,7 +136,16 @@ export function ApplicantsClient({ requests }: Props) {
                   {request.professional.state ? `, ${request.professional.state}` : ''}
                 </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-4">
+                <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Facility
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-slate-900">
+                      {request.shift.facilityName}
+                    </div>
+                  </div>
+
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Shift
@@ -146,7 +157,7 @@ export function ApplicantsClient({ requests }: Props) {
 
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Shift Date
+                      Date
                     </div>
                     <div className="mt-1 text-sm font-medium text-slate-900">
                       {new Date(request.shift.date).toLocaleDateString()}
@@ -161,15 +172,6 @@ export function ApplicantsClient({ requests }: Props) {
                       {request.shift.time}
                     </div>
                   </div>
-
-                  <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Requested
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-900">
-                      {new Date(request.requestedAt).toLocaleString()}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -181,21 +183,25 @@ export function ApplicantsClient({ requests }: Props) {
                   Review Details
                 </Link>
 
-                <button
-                  onClick={() => updateRequest(request.id, 'approve')}
-                  disabled={busyId === request.id || request.status === 'APPROVED'}
-                  className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {busyId === request.id ? 'Working...' : 'Approve'}
-                </button>
+                {request.status !== 'APPROVED' ? (
+                  <button
+                    onClick={() => updateRequest(request.id, 'approve')}
+                    disabled={busyId === request.id}
+                    className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {busyId === request.id ? 'Working...' : 'Approve'}
+                  </button>
+                ) : null}
 
-                <button
-                  onClick={() => updateRequest(request.id, 'reject')}
-                  disabled={busyId === request.id || request.status === 'REJECTED'}
-                  className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {busyId === request.id ? 'Working...' : 'Reject'}
-                </button>
+                {request.status !== 'REJECTED' ? (
+                  <button
+                    onClick={() => updateRequest(request.id, 'reject')}
+                    disabled={busyId === request.id}
+                    className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {busyId === request.id ? 'Working...' : 'Reject'}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

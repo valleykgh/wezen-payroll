@@ -12,6 +12,7 @@ const adminNav = [
   { href: '/admin/facility-invites', label: 'Facility Invites' },
   { href: '/admin/shifts', label: 'Shifts' },
   { href: '/admin/shift-requests', label: 'Shift Requests' },
+  { href: '/admin/settings', label: 'Settings' },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
