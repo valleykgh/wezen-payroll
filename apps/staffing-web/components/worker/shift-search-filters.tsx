@@ -13,7 +13,7 @@ export function ShiftSearchFilters() {
 
   const [role, setRole] = useState(searchParams.get('role') || '');
   const [location, setLocation] = useState(searchParams.get('location') || '');
-  const [radius, setRadius] = useState(searchParams.get('radius') || '25 miles');
+  const [radius, setRadius] = useState(searchParams.get('radius') || '25');
   const [shiftType, setShiftType] = useState(searchParams.get('shiftType') || '');
 
   function applyFilters() {
@@ -30,7 +30,7 @@ export function ShiftSearchFilters() {
   function resetFilters() {
     setRole('');
     setLocation('');
-    setRadius('25 miles');
+    setRadius('25');
     setShiftType('');
     router.push('/worker/shifts');
   }
@@ -86,11 +86,10 @@ export function ShiftSearchFilters() {
             value={radius}
             onChange={(e) => setRadius(e.target.value)}
           >
-            {availableShiftFilters.radii.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
+            <option value="10">10 miles</option>
+	    <option value="25">25 miles</option>
+            <option value="50">50 miles</option>
+            <option value="100">100 miles</option>
           </SelectInput>
         </FormField>
 

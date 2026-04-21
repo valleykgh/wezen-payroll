@@ -151,6 +151,8 @@ model ProfessionalProfile {
   bio                String?
   onboardingStatus   String?                @default("PENDING")
   approvedByWezen    Boolean                @default(false)
+  latitude	     Float?
+  longitude  	     Float?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
 

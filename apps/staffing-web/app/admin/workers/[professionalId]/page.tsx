@@ -296,6 +296,43 @@ async function markIcaSigned() {
   }
 }
 
+async function downloadAllDocuments() {
+  try {
+    setBusy(true);
+
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/documents`,
+      {
+        credentials: 'include',
+      }
+    );
+
+    const text = await res.text();
+    if (!res.ok) throw new Error(text || 'Failed to fetch worker documents');
+
+    const parsed = text ? JSON.parse(text) : null;
+    const docs = parsed?.data ?? [];
+
+    if (!docs.length) {
+      setMessage('No documents available for download.');
+      return;
+    }
+
+    docs.forEach((doc: { id: string }) => {
+      window.open(
+        `${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`,
+        '_blank'
+      );
+    });
+
+    setMessage('Document downloads started.');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : 'Failed to download documents');
+  } finally {
+    setBusy(false);
+  }
+}
+
   async function deleteWorker() {
     try {
       const confirmed = window.confirm(
@@ -427,9 +464,20 @@ const icaSignedStepLabel = isIcaSigned
           </section>
 
           <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold tracking-tight text-slate-950">
-              Compliance documents
-            </h2>
+		<div className="flex flex-wrap items-center justify-between gap-3">
+  <h2 className="text-xl font-bold tracking-tight text-slate-950">
+    Compliance documents
+  </h2>
+
+  <button
+    type="button"
+    onClick={downloadAllDocuments}
+    disabled={busy || worker.documents.length === 0}
+    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    Download All Documents
+  </button>
+</div>
 
             <div className="mt-5 space-y-4">
               {worker.documents.length === 0 ? (
@@ -476,12 +524,12 @@ const icaSignedStepLabel = isIcaSigned
 
                     <div className="flex flex-wrap gap-3">
   <a
-    href={doc.fileUrl}
+    href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
     target="_blank"
     rel="noreferrer"
     className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
   >
-    View Document
+    Download Document
   </a>
 
   {doc.status === 'PENDING' ? (

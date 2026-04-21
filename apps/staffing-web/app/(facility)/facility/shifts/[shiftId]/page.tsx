@@ -158,6 +158,9 @@ export default function FacilityShiftDetailPage({
     );
   }
 
+const isShiftFull = detail.fillCount >= detail.workersNeeded;
+const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
+
   return (
     <div className="space-y-8">
       <div className="page-gradient rounded-[2rem] p-6">
@@ -201,8 +204,14 @@ export default function FacilityShiftDetailPage({
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Fill Status
           </div>
-          <div className="mt-2 text-2xl font-bold text-slate-950">{detail.fillStatus}</div>
-        </div>
+            <div className="mt-2 text-2xl font-bold text-slate-950">
+  {detail.fillStatus === 'FILLED'
+    ? 'Filled'
+    : detail.fillStatus === 'PARTIAL'
+      ? 'Partially Filled'
+      : 'Open'}
+</div>
+	</div>
 
         <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -218,6 +227,13 @@ export default function FacilityShiftDetailPage({
           <div className="mt-2 text-2xl font-bold text-slate-950">{detail.workersNeeded}</div>
         </div>
       </div>
+
+	<div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    Remaining Slots
+  </div>
+  <div className="mt-2 text-2xl font-bold text-slate-950">{remainingSlots}</div>
+</div>
 
       <div className="flex flex-wrap gap-3">
         {detail.status === 'OPEN' ? (
@@ -250,6 +266,13 @@ export default function FacilityShiftDetailPage({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+
+	{isShiftFull ? (
+  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    This shift is fully assigned. Additional applicants can be reviewed, but no further approvals are allowed unless an approved worker is changed.
+  </div>
+) : null}      
+
         <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold tracking-tight text-slate-950">
             Applicant queue
@@ -329,11 +352,24 @@ export default function FacilityShiftDetailPage({
 
                         <button
                           onClick={() => updateRequest(request.id, 'approve')}
-                          disabled={busyId === request.id || request.status === 'APPROVED' || detail.status !== 'OPEN'}
-                          className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                          disabled={
+  busyId === request.id ||
+  request.status === 'APPROVED' ||
+  detail.status !== 'OPEN' ||
+  isShiftFull
+}
+			  className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
                         >
-                          {busyId === request.id ? 'Working...' : 'Approve'}
-                        </button>
+                        
+			{busyId === request.id
+  ? 'Working...'
+  : request.status === 'APPROVED'
+    ? 'Approved'
+    : isShiftFull
+      ? 'Shift Full'
+      : 'Approve'}			
+
+			</button>
 
                         <button
                           onClick={() => updateRequest(request.id, 'reject')}

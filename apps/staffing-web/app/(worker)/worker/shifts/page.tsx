@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { ShiftResultsClient } from '@/components/worker/shift-results-client';
 import { ShiftSearchFilters } from '@/components/worker/shift-search-filters';
+import { useSearchParams } from 'next/navigation';
 
 type Shift = {
   id: string;
@@ -31,20 +32,25 @@ type Shift = {
 export default function WorkerShiftsPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [message, setMessage] = useState('Loading shifts...');
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiFetch<{ data: Shift[] }>('/api/worker/shifts');
-        setShifts(res.data);
-        setMessage('');
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Failed to load shifts');
-      }
-    }
+  async function load() {
+    try {
+      const query = searchParams.toString();
+      const url = query ? `/api/worker/shifts?${query}` : '/api/worker/shifts';
 
-    load();
-  }, []);
+      const res = await apiFetch<{ data: Shift[] }>(url);
+
+      setShifts(res.data);
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to load shifts');
+    }
+  }
+
+  load();
+}, [searchParams]);
 
   return (
     <div className="space-y-8">

@@ -152,6 +152,10 @@ export function ShiftResultsClient({ shifts }: Props) {
     if (text.includes('inactive')) {
       return 'This facility is no longer accepting shift requests.';
     }
+    
+    if (text.includes('fully assigned')) {
+      return 'This shift is already fully assigned.';
+    }
 
     return 'Failed to request shift.';
   }

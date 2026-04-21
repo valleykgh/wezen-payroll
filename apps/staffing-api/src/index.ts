@@ -27,6 +27,7 @@ import {
 } from './auth.js';
 
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
+import testEmailRoutes from "./routes/testEmail";
 
 const app = express();
 const port = Number(process.env.PORT || 4001);
@@ -110,6 +111,28 @@ async function getWorkerEligibility(professionalId: string) {
     reasons,
   };
 }
+
+function calculateDistanceMiles(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+
+  const R = 3958.8; // miles
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 async function createWorkerNotification(params: {
   professionalId: string;
   type: NotificationType;
@@ -306,6 +329,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use('/uploads', express.static(uploadsDir));
 app.use(cookieParser());
+app.use("/api", testEmailRoutes);
 
 app.get('/health', async (_req, res) => {
   res.json({ status: 'ok', service: 'staffing-api' });
@@ -869,6 +893,7 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedR
     facilityId: true,
     date: true,
     shiftType: true,
+    workersNeeded: true,
   },
 });
 
@@ -1025,8 +1050,8 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
 
     const facilityStatus = await ensureFacilityIsActive(facilityId);
     if (!facilityStatus.ok) {
-        clearAuthCookie(res);
-       return res.status(403).json({ error: facilityStatus.error });
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
     }
 
     const requestRecord = await prisma.shiftRequest.findUnique({
@@ -1036,6 +1061,8 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
           select: {
             id: true,
             facilityId: true,
+            workersNeeded: true,
+            status: true,
           },
         },
       },
@@ -1049,6 +1076,25 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
       return res.status(403).json({ error: 'Forbidden' });
     }
 
+    if (requestRecord.shift.status !== 'OPEN') {
+      return res.status(400).json({ error: 'This shift is not open for approvals' });
+    }
+
+    if (requestRecord.status === 'APPROVED') {
+      return res.json({ data: requestRecord });
+    }
+
+    const approvedCount = await prisma.shiftRequest.count({
+      where: {
+        shiftId: requestRecord.shift.id,
+        status: 'APPROVED',
+      },
+    });
+
+    if (approvedCount >= requestRecord.shift.workersNeeded) {
+      return res.status(400).json({ error: 'This shift is already fully assigned' });
+    }
+
     const updated = await prisma.shiftRequest.update({
       where: { id },
       data: {
@@ -1056,6 +1102,17 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         reviewedAt: new Date(),
       },
     });
+
+    const newApprovedCount = approvedCount + 1;
+
+    if (newApprovedCount >= requestRecord.shift.workersNeeded) {
+      await prisma.shift.update({
+        where: { id: requestRecord.shift.id },
+        data: {
+          status: 'OPEN',
+        },
+      });
+    }
 
     await createWorkerNotification({
       professionalId: updated.professionalId,
@@ -1132,8 +1189,9 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
 app.get('/api/worker/requests', async (req, res) => {
   try {
     const professionalId = String(req.query.professionalId || '');
-
+    
     if (!professionalId) {
+
       return res.status(400).json({ error: 'professionalId is required' });
     }
 
@@ -1686,6 +1744,61 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'),  a
   }
 });
 
+app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const requestId = String(req.params.requestId || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const requestRecord = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: {
+          select: {
+            facilityId: true,
+          },
+        },
+        professional: {
+          include: {
+            documents: {
+              orderBy: [{ createdAt: 'desc' }],
+            },
+          },
+        },
+      },
+    });
+
+    if (!requestRecord) {
+      return res.status(404).json({ error: 'Applicant request not found' });
+    }
+
+    if (requestRecord.shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    res.json({
+      data: requestRecord.professional.documents.map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        category: doc.category,
+        status: doc.status,
+        createdAt: doc.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('GET /api/facility/applicants/:requestId/documents error:', error);
+    res.status(500).json({ error: 'Failed to fetch applicant documents' });
+  }
+});
+
 app.get('/api/worker/eligibility', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
@@ -1978,6 +2091,34 @@ app.post('/api/admin/workers/:professionalId/ica-sent', requireRole('INTERNAL_AD
   } catch (error) {
     console.error('POST /api/admin/workers/:professionalId/ica-sent error:', error);
     res.status(500).json({ error: 'Failed to mark ICA as sent' });
+  }
+});
+
+app.get('/api/admin/workers/:professionalId/documents', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    const documents = await prisma.professionalDocument.findMany({
+      where: { professionalId },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        status: true,
+        fileUrl: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ data: documents });
+  } catch (error) {
+    console.error('GET /api/admin/workers/:professionalId/documents error:', error);
+    res.status(500).json({ error: 'Failed to fetch worker documents' });
   }
 });
 
@@ -2605,19 +2746,52 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
     const professionalId = await getProfessionalProfileIdForUser(userId);
     const role = req.query.role as ClinicianRole | undefined;
     const shiftType = req.query.shiftType as ShiftType | undefined;
+    const radiusParam = String(req.query.radius || '');
+    const location = String(req.query.location || '').trim();
+
+    let radiusMiles: number | null = null;
+    if (radiusParam) {
+      const parsedRadius = Number(radiusParam.replace(/[^\d]/g, ''));
+      radiusMiles = Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : null;
+    }
 
     if (!professionalId) {
       return res.status(404).json({ error: 'Professional profile not found' });
     }
 
+    const profile = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      select: {
+        city: true,
+        state: true,
+        zipCode: true,
+        latitude: true,
+        longitude: true,
+        maxDistanceMiles: true,
+      },
+    });
+
     const shifts = await prisma.shift.findMany({
       where: {
         status: ShiftStatus.OPEN,
-        facility: { isActive: true, },
+        facility: {
+          isActive: true,
+          ...(location
+            ? {
+                OR: [
+                  { city: { contains: location, mode: 'insensitive' } },
+                  { state: { contains: location, mode: 'insensitive' } },
+                  { zipCode: { contains: location, mode: 'insensitive' } },
+                  { name: { contains: location, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
         ...(role ? { role } : {}),
         ...(shiftType ? { shiftType } : {}),
-	date: {
-    gte: new Date(new Date().toDateString()),},
+        date: {
+          gte: new Date(new Date().toDateString()),
+        },
       },
       include: {
         facility: true,
@@ -2667,6 +2841,24 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
 
       const isBlockedByFacilityDnr = dnrMap.has(shift.facilityId);
 
+      let distanceMiles: number | null = null;
+
+      if (
+        profile?.latitude != null &&
+        profile?.longitude != null &&
+        shift.facility.latitude != null &&
+        shift.facility.longitude != null
+      ) {
+        distanceMiles = calculateDistanceMiles(
+          profile.latitude,
+          profile.longitude,
+          shift.facility.latitude,
+          shift.facility.longitude
+        );
+
+        distanceMiles = Math.round(distanceMiles * 10) / 10;
+      }
+
       return {
         id: shift.id,
         role: shift.role,
@@ -2674,7 +2866,7 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
         facilityName: shift.facility.name,
         city: shift.facility.city,
         state: shift.facility.state,
-        distanceMiles: null,
+        distanceMiles,
         shiftType: shift.shiftType,
         date: shift.date,
         time: `${shift.startTimeLabel} - ${shift.endTimeLabel}`,
@@ -2695,7 +2887,27 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
       };
     });
 
-    res.json({ data });
+    let filtered = data;
+
+    const effectiveRadius =
+      radiusMiles ?? (profile?.maxDistanceMiles != null ? profile.maxDistanceMiles : null);
+
+    if (effectiveRadius != null) {
+      filtered = filtered.filter(
+        (shift) => shift.distanceMiles == null || shift.distanceMiles <= effectiveRadius
+      );
+    }
+
+    filtered.sort((a, b) => {
+      if (a.distanceMiles == null && b.distanceMiles == null) {
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      }
+      if (a.distanceMiles == null) return 1;
+      if (b.distanceMiles == null) return -1;
+      return a.distanceMiles - b.distanceMiles;
+    });
+
+    res.json({ data: filtered });
   } catch (error) {
     console.error('GET /api/worker/shifts error:', error);
     res.status(500).json({ error: 'Failed to fetch worker shifts' });
@@ -3704,6 +3916,73 @@ app.get('/api/facility/workers', requireRole('FACILITY_ADMIN'), async (req: Auth
   }
 });
 
+app.get('/api/facility/workers/:professionalId', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: true,
+        documents: true,
+        requests: {
+          include: {
+            shift: true,
+          },
+          orderBy: [{ requestedAt: 'desc' }],
+        },
+      },
+    });
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    const hasFacilityRelationship = worker.requests.some(
+      (request) => request.shift.facilityId === facilityId
+    );
+
+    if (!hasFacilityRelationship) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    res.json({
+      data: {
+        id: worker.id,
+        firstName: worker.user.firstName,
+        lastName: worker.user.lastName,
+        email: worker.user.email,
+        phone: worker.user.phone,
+        role: worker.role,
+        city: worker.city,
+        state: worker.state,
+        documents: worker.documents.map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          category: doc.category,
+          status: doc.status,
+          expiresAt: doc.expiresAt,
+          notes: doc.notes,
+          createdAt: doc.createdAt,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/facility/workers/:professionalId error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility worker detail' });
+  }
+});
+
 app.get('/api/facility/compliance', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
@@ -4176,6 +4455,59 @@ app.post('/api/admin/change-password', requireRole('INTERNAL_ADMIN'), async (req
   } catch (error) {
     console.error('POST /api/admin/change-password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+app.get('/api/documents/:id/download', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const documentId = String(req.params.id);
+    const userId = req.authUser!.userId;
+    const role = req.authUser!.role;
+
+    const doc = await prisma.professionalDocument.findUnique({
+      where: { id: documentId },
+      include: {
+        professional: {
+          include: {
+            requests: {
+              include: {
+                shift: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // ✅ ADMIN can access everything
+    if (role === 'INTERNAL_ADMIN') {
+      return res.redirect(doc.fileUrl);
+    }
+
+    // ✅ FACILITY can access only if worker is tied to them
+    if (role === 'FACILITY_ADMIN') {
+      const facilityId = await getFacilityIdForUser(userId);
+
+      const hasAccess = doc.professional.requests.some(
+        (r) => r.shift.facilityId === facilityId
+      );
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      return res.redirect(doc.fileUrl);
+    }
+
+    return res.status(403).json({ error: 'Forbidden' });
+
+  } catch (err) {
+    console.error('Download doc error:', err);
+    res.status(500).json({ error: 'Failed to download document' });
   }
 });
 

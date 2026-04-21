@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import Link from 'next/link';
 
 type Worker = {
   id: string;
@@ -86,16 +87,22 @@ export default function FacilityWorkersPage() {
                   </div>
                   <div className="mt-2 text-sm text-slate-500">{worker.email}</div>
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <div className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
-                    {worker.totalRequests} request(s)
-                  </div>
-                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {worker.approvedCount} approved
-                  </div>
-                </div>
-              </div>
+			<div className="flex flex-wrap items-center gap-2">
+  <div className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+    {worker.totalRequests} request(s)
+  </div>
+  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+    {worker.approvedCount} approved
+  </div>
+  <Link
+    href={`/facility/workers/${worker.id}`}
+    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
+  >
+    View Worker
+  </Link>
+</div>
+              
+		</div>
             </div>
           ))}
 
