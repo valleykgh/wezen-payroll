@@ -36,17 +36,37 @@
           "value": "https://www.wezenstaffing.com"
         }
       ],
-	"secrets": [
-      {
-        "name": "DATABASE_URL",
-        "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/DATABASE_URL"
-      },
-      {
-        "name": "JWT_SECRET",
-        "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/JWT_SECRET"
-      }
-    ],
-        "logConfiguration": {
+        "secrets": [
+  {
+    "name": "DATABASE_URL",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/DATABASE_URL"
+  },
+  {
+    "name": "JWT_SECRET",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/JWT_SECRET"
+  },
+  {
+    "name": "MS_TENANT_ID",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_TENANT_ID"
+  },
+  {
+    "name": "MS_CLIENT_ID",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_CLIENT_ID"
+  },
+  {
+    "name": "MS_CLIENT_SECRET",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_CLIENT_SECRET"
+  },
+  {
+    "name": "MS_ONEDRIVE_USER",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_ONEDRIVE_USER"
+  },
+  {
+    "name": "REMINDER_JOB_TOKEN",
+    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/REMINDER_JOB_TOKEN"
+  }
+],
+	"logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/wezen-staffing-api",
