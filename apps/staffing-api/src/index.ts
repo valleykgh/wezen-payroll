@@ -933,6 +933,7 @@ function buildShiftStartDate(shiftDate: Date, startTimeLabel: string): Date {
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3001',
   process.env.FRONTEND_URL_WWW || '',
+  process.env.FRONTEND_URL_APP || '',
   'http://localhost:3005',
   'https://wezenstaffing.com',
   'https://www.wezenstaffing.com',
