@@ -41,14 +41,18 @@ enum RequestStatus {
   WITHDRAWN
   CANCELLATION_REQUESTED
   CANCELLED
+  NO_SHOW
 }
 
 enum DocumentCategory {
   LICENSE
-  ID
   CPR
-  TB_TEST
   PHYSICAL
+  TB_TEST
+  TB_REPORT
+  SSN
+  STATE_ID
+  ID
   VACCINATION
   OTHER
 }

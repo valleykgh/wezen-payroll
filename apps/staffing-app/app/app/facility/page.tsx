@@ -1,13 +1,18 @@
+import { AppShell } from '@/components/app/app-shell';
+
 export default function FacilityApp() {
   return (
-    <main className="min-h-screen bg-slate-100 p-5">
-      <h1 className="text-2xl font-bold">Facility App</h1>
-      <p className="mt-2 text-slate-600">
-        This is where facility admins will:
-        - Post shifts
-        - View applicants
-        - Approve/reject workers
-      </p>
-    </main>
+    <AppShell
+      role="facility"
+      title="Facility App"
+      subtitle="Post shifts, view applicants, and approve requests."
+    >
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-xl font-bold text-slate-950">Facility dashboard</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Facility shift management will appear here.
+        </p>
+      </div>
+    </AppShell>
   );
 }

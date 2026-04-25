@@ -599,7 +599,7 @@ async function getWorkerEligibility(professionalId: string) {
     reasons.push('Independent Contractor Agreement must be signed before requesting shifts');
   }
 
-  const requiredCategories = ['LICENSE', 'CPR', 'TB_TEST'];
+  const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
 
   for (const category of requiredCategories) {
     const doc = profile.documents.find((item) => item.category === category);
@@ -1868,6 +1868,68 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
   }
 });
 
+
+app.post('/api/shift-requests/:id/no-show', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!id) {
+      return res.status(400).json({ error: 'Request id is required' });
+    }
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const existing = await prisma.shiftRequest.findUnique({
+      where: { id },
+      include: {
+        shift: true,
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Shift request not found' });
+    }
+
+    if (existing.shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (existing.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Only approved workers can be marked as no-show.' });
+    }
+
+    const updated = await prisma.shiftRequest.update({
+      where: { id },
+      data: {
+        status: 'NO_SHOW',
+        reviewedAt: new Date(),
+        reviewNotes: 'Marked no-show by facility',
+      },
+    });
+
+    await createWorkerNotification({
+      professionalId: updated.professionalId,
+      type: 'GENERAL',
+      title: 'Shift marked no-show',
+      message: 'A facility marked you as no-show for an approved shift. Please contact Wezen Staffing if this is incorrect.',
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/shift-requests/:id/no-show error:', error);
+    res.status(500).json({ error: 'Failed to mark no-show' });
+  }
+});
+
 app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
@@ -2665,6 +2727,64 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
   console.error('Document upload email notification failed:', emailError);
 }
 
+
+    try {
+      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
+
+      const allDocs = await prisma.professionalDocument.findMany({
+        where: { professionalId },
+        select: {
+          category: true,
+          status: true,
+        },
+      });
+
+      const uploadedRequiredCategories = new Set(
+        allDocs
+          .filter((doc) => requiredCategories.includes(String(doc.category)))
+          .map((doc) => String(doc.category))
+      );
+
+      const hasAllRequiredDocsUploaded = requiredCategories.every((category) =>
+        uploadedRequiredCategories.has(category)
+      );
+
+      if (hasAllRequiredDocsUploaded && ADMIN_ALERT_EMAIL) {
+        await sendEmail({
+          to: ADMIN_ALERT_EMAIL,
+          subject: `Worker ready for document review: ${professionalName}`,
+          html: `
+            <h2>Worker uploaded all required documents</h2>
+            <p><strong>Professional:</strong> ${professionalName}</p>
+            <p><strong>Email:</strong> ${professionalEmail}</p>
+            <p>The worker has uploaded all required documents and is ready for admin review.</p>
+            <ul>
+              <li>License</li>
+              <li>CPR / BLS</li>
+              <li>Physical Report</li>
+              <li>TB Report</li>
+              <li>SSN</li>
+              <li>State ID</li>
+            </ul>
+          `,
+          text: [
+            'Worker uploaded all required documents',
+            `Professional: ${professionalName}`,
+            `Email: ${professionalEmail}`,
+            'Required documents uploaded:',
+            'License',
+            'CPR / BLS',
+            'Physical Report',
+            'TB Report',
+            'SSN',
+            'State ID',
+          ].join('\n'),
+        });
+      }
+    } catch (readyEmailError) {
+      console.error('All required documents uploaded email failed:', readyEmailError);
+    }
+
     return res.status(201).json({
       data: {
         id: document.id,
@@ -3210,6 +3330,13 @@ app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN
         status: 'APPROVED',
         notes: null,
       },
+      include: {
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
     });
 
     const profile = await prisma.professionalProfile.findUnique({
@@ -3220,10 +3347,42 @@ app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN
       },
     });
 
+    try {
+      const workerEmail = updated.professional.user.email;
+      const workerName =
+        `${updated.professional.user.firstName || ''} ${updated.professional.user.lastName || ''}`.trim() ||
+        workerEmail ||
+        'Professional';
+
+      if (workerEmail) {
+        await sendEmail({
+          to: workerEmail,
+          subject: `Document approved: ${updated.name}`,
+          html: `
+            <h2>Document approved</h2>
+            <p>Hello ${workerName},</p>
+            <p>Your document has been approved by Wezen Staffing.</p>
+            <p><strong>Document:</strong> ${updated.name}</p>
+            <p><strong>Category:</strong> ${updated.category}</p>
+            <p><strong>Status:</strong> ${updated.status}</p>
+          `,
+          text: [
+            `Hello ${workerName},`,
+            'Your document has been approved by Wezen Staffing.',
+            `Document: ${updated.name}`,
+            `Category: ${updated.category}`,
+            `Status: ${updated.status}`,
+          ].join('\n'),
+        });
+      }
+    } catch (workerEmailError) {
+      console.error('Worker document approved email failed:', workerEmailError);
+    }
+
     if (profile) {
       const ica = profile.agreements.find((agreement) => agreement.agreementType === 'ICA');
 
-      const requiredCategories = ['LICENSE', 'CPR', 'TB_TEST'];
+      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
       const hasAllRequiredDocs = requiredCategories.every((category) => {
         const doc = profile.documents.find((item) => item.category === category);
         return !!doc && doc.status === 'APPROVED';
@@ -3784,6 +3943,15 @@ app.post('/api/facility/dnr', requireRole('FACILITY_ADMIN'), async (req: AuthedR
       },
     });
 
+    await createWorkerNotification({
+      professionalId: parsed.data.professionalId,
+      type: 'DNR_BLOCK',
+      title: 'Facility restriction added',
+      message: parsed.data.reason
+        ? `A facility has restricted future shift requests. Reason: ${parsed.data.reason}`
+        : 'A facility has restricted future shift requests.',
+    });
+
     res.status(201).json({ data: created });
   } catch (error) {
     console.error('POST /api/facility/dnr error:', error);
@@ -4180,14 +4348,25 @@ app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN'), async (req: Au
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const updated = await prisma.shift.update({
-      where: { id },
-      data: {
-        status: 'OPEN',
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const deletedRequests = await tx.shiftRequest.deleteMany({
+        where: { shiftId: id },
+      });
+
+      const updated = await tx.shift.update({
+        where: { id },
+        data: {
+          status: 'OPEN',
+        },
+      });
+
+      return {
+        updated,
+        deletedRequestCount: deletedRequests.count,
+      };
     });
 
-    res.json({ data: updated });
+    res.json({ data: result.updated, deletedRequestCount: result.deletedRequestCount });
   } catch (error) {
     console.error('POST /api/shifts/:id/reopen error:', error);
     res.status(500).json({ error: 'Failed to reopen shift' });
@@ -6482,71 +6661,102 @@ setInterval(() => {
 
 async function sendDocumentExpirationAlerts() {
   const now = new Date();
+  const alertDays = [30, 14, 7];
 
-  const thirtyDaysFromNow = new Date(now);
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+  const windows = alertDays.map((days) => {
+    const start = new Date(now);
+    start.setDate(start.getDate() + days);
+    start.setHours(0, 0, 0, 0);
 
-  const expiringDocs = await prisma.professionalDocument.findMany({
-    where: {
-      expiresAt: {
-        gte: now,
-        lte: thirtyDaysFromNow,
-      },
-      status: {
-        in: ['PENDING', 'APPROVED'],
-      },
-    },
-    include: {
-      professional: {
-        include: {
-          user: true,
-        },
-      },
-    },
-    orderBy: [{ expiresAt: 'asc' }],
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    return { days, start, end };
   });
 
+  let checked = 0;
   let sent = 0;
 
-  for (const doc of expiringDocs) {
-    const email = doc.professional.user.email;
+  for (const window of windows) {
+    const expiringDocs = await prisma.professionalDocument.findMany({
+      where: {
+        expiresAt: {
+          gte: window.start,
+          lt: window.end,
+        },
+        status: {
+          in: ['PENDING', 'APPROVED'],
+        },
+      },
+      include: {
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+      orderBy: [{ expiresAt: 'asc' }],
+    });
 
-    if (!email || !doc.expiresAt) continue;
+    checked += expiringDocs.length;
 
-    try {
-      await sendEmail({
-        to: email,
-        subject: `Document expiring soon: ${doc.category}`,
-        html: `
-          <h2>Document expiring soon</h2>
-          <p>Your document is expiring soon and may need to be renewed.</p>
-          <p><strong>Document:</strong> ${doc.name}</p>
-          <p><strong>Category:</strong> ${doc.category}</p>
-          <p><strong>Expiration Date:</strong> ${doc.expiresAt.toLocaleDateString()}</p>
-          <p>Please log in to your Wezen Staffing account and upload an updated document.</p>
-        `,
-        text: [
-          'Document expiring soon',
-          `Document: ${doc.name}`,
-          `Category: ${doc.category}`,
-          `Expiration Date: ${doc.expiresAt.toLocaleDateString()}`,
-          'Please log in to your Wezen Staffing account and upload an updated document.',
-        ].join('\n'),
-      });
+    for (const doc of expiringDocs) {
+      if (!doc.expiresAt) continue;
 
-      sent += 1;
-    } catch (error) {
-      console.error('Document expiration email failed:', {
-        documentId: doc.id,
-        professionalId: doc.professionalId,
-        error,
-      });
+      const workerEmail = doc.professional.user.email;
+      const workerName =
+        `${doc.professional.user.firstName || ''} ${doc.professional.user.lastName || ''}`.trim() ||
+        workerEmail ||
+        'Professional';
+
+      const recipients = [workerEmail, ADMIN_ALERT_EMAIL].filter(Boolean).join(',');
+
+      if (!recipients) continue;
+
+      try {
+        await sendEmail({
+          to: recipients,
+          subject: `Document expires in ${window.days} days: ${doc.category}`,
+          html: `
+            <h2>Document expiration alert</h2>
+            <p><strong>Alert:</strong> ${window.days} days before expiration</p>
+            <p><strong>Professional:</strong> ${workerName}</p>
+            <p><strong>Email:</strong> ${workerEmail || 'Not available'}</p>
+            <p><strong>Document:</strong> ${doc.name}</p>
+            <p><strong>Category:</strong> ${doc.category}</p>
+            <p><strong>Status:</strong> ${doc.status}</p>
+            <p><strong>Expiration Date:</strong> ${doc.expiresAt.toLocaleDateString()}</p>
+            <p>Please upload and review an updated document before expiration.</p>
+          `,
+          text: [
+            'Document expiration alert',
+            `Alert: ${window.days} days before expiration`,
+            `Professional: ${workerName}`,
+            `Email: ${workerEmail || 'Not available'}`,
+            `Document: ${doc.name}`,
+            `Category: ${doc.category}`,
+            `Status: ${doc.status}`,
+            `Expiration Date: ${doc.expiresAt.toLocaleDateString()}`,
+            'Please upload and review an updated document before expiration.',
+          ].join('\n'),
+        });
+
+        sent += 1;
+      } catch (error) {
+        console.error('Document expiration email failed:', {
+          documentId: doc.id,
+          professionalId: doc.professionalId,
+          alertDays: window.days,
+          error,
+        });
+      }
     }
   }
 
   return {
-    checked: expiringDocs.length,
+    checked,
     sent,
+    alertDays,
   };
 }
 
