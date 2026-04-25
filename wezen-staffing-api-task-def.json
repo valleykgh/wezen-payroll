@@ -34,7 +34,15 @@
         {
           "name": "FRONTEND_URL_WWW",
           "value": "https://www.wezenstaffing.com"
-        }
+        },
+	{
+ 	  "name": "ADMIN_ALERT_EMAIL",
+	  "value": "noreply@wezenstaffing.com"
+	},
+	{
+	  "name": "SES_FROM_EMAIL",
+	  "value": "Wezen Staffing <noreply@wezenstaffing.com>"
+	}
       ],
         "secrets": [
   {

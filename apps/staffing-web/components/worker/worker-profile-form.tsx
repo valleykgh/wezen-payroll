@@ -5,8 +5,8 @@ import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
 import { TextArea } from '@/components/ui/text-area';
 import { SelectInput } from '@/components/ui/select-input';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
-const API_BASE_URL = 'http://localhost:4001';
 
 type WorkerProfile = {
   id: string;
@@ -57,8 +57,9 @@ export function WorkerProfileForm({ profile }: Props) {
     setMessage('');
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/worker/profile`, {
-        method: 'PUT',
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/worker/profile`, {  
+	method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },

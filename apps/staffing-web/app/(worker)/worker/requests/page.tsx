@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api-client';
 import { meRequest } from '@/lib/auth-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PAYROLL_PORTAL_URL } from '@/lib/payroll';
-
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type WorkerRequest = {
   id: string;
@@ -33,6 +33,7 @@ type WorkerRequest = {
 export default function WorkerRequestsPage() {
   const [items, setItems] = useState<WorkerRequest[]>([]);
   const [message, setMessage] = useState('Loading requests...');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -58,7 +59,44 @@ export default function WorkerRequestsPage() {
 
     load();
   }, []);
+async function requestCancellation(requestId: string) {
+  try {
+    setBusyId(requestId);
+    setMessage('');
 
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/request-cancellation`,
+      {
+        method: 'POST',
+        credentials: 'include',
+      }
+    );
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(text || 'Failed to request cancellation');
+    }
+
+    const me = await meRequest();
+    const professionalId = me.data.professionalId ?? null;
+
+    if (!professionalId) {
+      throw new Error('You must be signed in as a professional.');
+    }
+
+    const refreshed = await apiFetch<{ data: WorkerRequest[] }>(
+      `/api/worker/requests?professionalId=${professionalId}`
+    );
+
+    setItems(refreshed.data);
+    setMessage('Cancellation request sent to the facility for review.');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : 'Failed to request cancellation');
+  } finally {
+    setBusyId(null);
+  }
+}
   return (
     <div className="space-y-8">
       <div className="page-gradient rounded-[2rem] p-6">
@@ -108,7 +146,7 @@ export default function WorkerRequestsPage() {
                       tone={
                         request.status === 'APPROVED'
                           ? 'success'
-                          : request.status === 'REJECTED'
+                          : request.status === 'REJECTED' || request.status === 'CANCELLED'
                             ? 'danger'
                             : 'warning'
                       }
@@ -153,46 +191,88 @@ export default function WorkerRequestsPage() {
                   </div>
                 </div>
 
-                <div className="w-full lg:w-64">
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    <div className="font-semibold text-slate-900">Current status</div>
-                    <div className="mt-2">
-                      {request.status === 'APPROVED' ? (
-  <div className="mt-4 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
-    <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-      Approved Shift
+              <div className="w-full lg:w-64">
+  <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
+    <div className="font-semibold text-slate-900">Current status</div>
+
+    <div className="mt-2">
+      {request.status === 'APPROVED' ? (
+        <div className="mt-4 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Approved Shift
+          </div>
+
+          <div className="mt-2 text-lg font-bold">
+            {request.shift.facilityName}
+          </div>
+
+          <div className="mt-2 text-sm text-emerald-900">
+            {new Date(request.shift.date).toLocaleDateString()} • {request.shift.time}
+          </div>
+
+          {request.shift.address ? (
+            <div className="mt-2 text-sm text-emerald-800">
+              Address: {request.shift.address}
+            </div>
+          ) : null}
+
+          {request.shift.specialInstructions ? (
+            <div className="mt-2 text-sm text-emerald-800">
+              Notes: {request.shift.specialInstructions}
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => requestCancellation(request.id)}
+              disabled={busyId === request.id}
+              className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {request.status === 'CANCELLATION_REQUESTED' ? (
+        <div className="mt-4 rounded-[1.25rem] border border-amber-200 bg-amber-50 p-4 text-amber-900">
+          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+            Cancellation Requested
+          </div>
+          <div className="mt-2 text-sm">
+            Your cancellation request has been sent to the facility and is awaiting review.
+          </div>
+        </div>
+      ) : null}
+
+      {request.status === 'CANCELLED' ? (
+        <div className="mt-4 rounded-[1.25rem] border border-rose-200 bg-rose-50 p-4 text-rose-900">
+          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+            Shift Cancelled
+          </div>
+          <div className="mt-2 text-sm">
+            This shift has been cancelled.
+          </div>
+        </div>
+      ) : null}
+
+      {request.status === 'REJECTED' ? (
+        <div className="mt-2">
+          This facility rejected your request.
+        </div>
+      ) : null}
+
+      {(request.status === 'REQUESTED' || request.status === 'UNDER_REVIEW') ? (
+        <div className="mt-2">
+          This request is still under review.
+        </div>
+      ) : null}
     </div>
-
-    <div className="mt-2 text-lg font-bold">
-      {request.shift.facilityName}
-    </div>
-
-    <div className="mt-2 text-sm text-emerald-900">
-      {new Date(request.shift.date).toLocaleDateString()} • {request.shift.time}
-    </div>
-
-    {request.shift.address ? (
-      <div className="mt-2 text-sm text-emerald-800">
-        Address: {request.shift.address}
-      </div>
-    ) : null}
-
-    {request.shift.specialInstructions ? (
-      <div className="mt-2 text-sm text-emerald-800">
-        Notes: {request.shift.specialInstructions}
-      </div>
-    ) : null}
   </div>
-) : null}
-		      {request.status === 'REJECTED' &&
-                        'This facility rejected your request.'}
-                      {(request.status === 'REQUESTED' ||
-                        request.status === 'UNDER_REVIEW') &&
-                        'This request is still under review.'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+</div>
+
+		</div>
             </div>
           ))}
         </div>

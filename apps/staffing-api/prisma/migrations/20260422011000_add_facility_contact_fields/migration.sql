@@ -1,0 +1,3 @@
+ALTER TABLE "Facility"
+ADD COLUMN IF NOT EXISTS "contactEmail" TEXT,
+ADD COLUMN IF NOT EXISTS "contactPhone" TEXT;

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/api-client';
 import { StatCard } from '@/components/shared/stat-card';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 type DashboardData = {
   data: {
@@ -27,9 +29,44 @@ type DashboardData = {
   };
 };
 
+function formatShiftDate(dateValue: string) {
+  const dateOnly = dateValue.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 export default function FacilityDashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardData['data'] | null>(null);
   const [message, setMessage] = useState('Loading dashboard...');
+  const [report, setReport] = useState<any | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  const today = new Date();
+const thirtyDaysAgo = new Date();
+thirtyDaysAgo.setDate(today.getDate() - 30);
+
+const [startDate, setStartDate] = useState(
+  thirtyDaysAgo.toISOString().split('T')[0]
+);
+const [endDate, setEndDate] = useState(
+  today.toISOString().split('T')[0]
+);  
+ 
+async function loadReport() {
+  try {
+    setLoadingReport(true);
+
+    const res = await apiFetch<{ data: any }>(
+      `/api/facility/reports/shifts?startDate=${startDate}&endDate=${endDate}`
+    );
+
+    setReport(res.data);
+  } catch (err) {
+    console.error('Failed to load report', err);
+  } finally {
+    setLoadingReport(false);
+  }
+}
 
   useEffect(() => {
     async function load() {
@@ -53,7 +90,17 @@ export default function FacilityDashboardPage() {
       }
 }
     load();
+    loadReport();
   }, []);
+
+const chartData = report
+  ? [
+      { name: 'Total', value: report.summary.totalShifts },
+      { name: 'Completed', value: report.summary.completedShifts },
+      { name: 'Unfilled', value: report.summary.unfilledShifts },
+      { name: 'Cancelled', value: report.summary.cancelledShifts },
+    ]
+  : [];
 
   const stats = dashboard
     ? [
@@ -140,8 +187,8 @@ export default function FacilityDashboardPage() {
         <td className="py-4 pr-4 font-medium text-slate-950">{shift.role}</td>
         <td className="py-4 pr-4 text-slate-600">{shift.shiftType}</td>
         <td className="py-4 pr-4 text-slate-600">
-          {new Date(shift.date).toLocaleDateString()}
-        </td>
+        {formatShiftDate(shift.date)}
+	</td>
 
         <td className="py-4 pr-4">
           {needsReview ? (
@@ -222,7 +269,83 @@ export default function FacilityDashboardPage() {
                 </div>
               </div>
             </section>
-          </div>
+            </div>
+           <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    <h2 className="text-xl font-bold text-slate-950">
+      Shift Analytics
+    </h2>
+  <a
+    href={`${STAFFING_API_BASE_URL}/api/facility/reports/shifts/export?startDate=${startDate}&endDate=${endDate}`}
+    className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+  >
+    Export CSV
+  </a>  
+  </div>
+
+  {/* Date Filters */}
+  <div className="mt-4 flex flex-wrap gap-3">
+    <input
+      type="date"
+      value={startDate}
+      onChange={(e) => setStartDate(e.target.value)}
+      className="rounded-xl border px-3 py-2"
+    />
+    <input
+      type="date"
+      value={endDate}
+      onChange={(e) => setEndDate(e.target.value)}
+      className="rounded-xl border px-3 py-2"
+    />
+    <button
+      onClick={loadReport}
+      className="rounded-full bg-cyan-600 px-4 py-2 text-white text-sm font-semibold"
+    >
+      Refresh
+    </button>
+  </div>
+
+  {/* Summary Cards */}
+  {report ? (
+   <> 
+    <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="rounded-2xl bg-slate-50 p-4">
+        <div className="text-xs text-slate-500">Total Shifts</div>
+        <div className="text-xl font-bold">{report.summary.totalShifts}</div>
+      </div>
+
+      <div className="rounded-2xl bg-emerald-50 p-4">
+        <div className="text-xs text-emerald-700">Completed</div>
+        <div className="text-xl font-bold">{report.summary.completedShifts}</div>
+      </div>
+
+      <div className="rounded-2xl bg-amber-50 p-4">
+        <div className="text-xs text-amber-700">Unfilled</div>
+        <div className="text-xl font-bold">{report.summary.unfilledShifts}</div>
+      </div>
+
+      <div className="rounded-2xl bg-cyan-50 p-4">
+        <div className="text-xs text-cyan-700">Fill Rate</div>
+        <div className="text-xl font-bold">{report.summary.fillRate}%</div>
+      </div>
+    </div>
+    <div className="mt-6 h-72 rounded-2xl border border-slate-200 bg-white p-4">
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={chartData}>
+      <XAxis dataKey="name" />
+      <YAxis allowDecimals={false} />
+      <Tooltip />
+      <Bar dataKey="value" />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+  </>
+  ) : (
+    <div className="mt-6 text-sm text-slate-500">
+      {loadingReport ? 'Loading analytics...' : 'No data'}
+    </div>
+  )}
+</section>
         </>
       ) : null}
     </div>

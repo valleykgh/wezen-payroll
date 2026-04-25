@@ -83,6 +83,9 @@ export async function registerProfessionalRequest(payload: {
   password: string;
   firstName: string;
   lastName: string;
+  phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
   role: 'CNA' | 'LVN' | 'RN';
   city?: string;
   state?: string;

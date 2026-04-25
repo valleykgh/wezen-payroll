@@ -43,10 +43,17 @@ type ApplicantDetail = {
       notes?: string | null;
       fileUrl: string;
       createdAt: string;
+      storageProvider?: string | null;
     }>;
   };
 };
 
+function getDaysUntilExpiration(expiresAt?: string | null) {
+  if (!expiresAt) return null;
+  return Math.ceil(
+    (new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+}
 
 export default function ApplicantDetailPage({
   params,
@@ -125,6 +132,47 @@ export default function ApplicantDetailPage({
     }
   }
 
+  async function updateCancellation(action: 'approve-cancellation' | 'deny-cancellation') {
+  try {
+    if (!requestId) return;
+
+    setBusy(true);
+    setMessage('');
+
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
+      {
+        method: 'POST',
+        credentials: 'include',
+      }
+    );
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(
+        text ||
+          (action === 'approve-cancellation'
+            ? 'Failed to approve cancellation request'
+            : 'Failed to deny cancellation request')
+      );
+    }
+
+    await load(requestId);
+    setMessage(
+      action === 'approve-cancellation'
+        ? 'Cancellation request approved successfully.'
+        : 'Cancellation request denied successfully.'
+    );
+  } catch (error) {
+    setMessage(
+      error instanceof Error ? error.message : 'Failed to update cancellation request'
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
   async function addDnr() {
     try {
       if (!facilityId || !detail?.professional.id) {
@@ -202,32 +250,14 @@ async function downloadAllApplicantDocuments() {
     setBusy(true);
     setMessage('');
 
-    const res = await fetch(
-      `${STAFFING_API_BASE_URL}/api/facility/applicants/${requestId}/documents`,
-      {
-        credentials: 'include',
-      }
-    );
+    const link = document.createElement('a');
+    link.href = `${STAFFING_API_BASE_URL}/api/facility/applicants/${requestId}/documents/download-all`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
-    const text = await res.text();
-    if (!res.ok) throw new Error(text || 'Failed to fetch applicant documents');
-
-    const parsed = text ? JSON.parse(text) : null;
-    const docs = parsed?.data ?? [];
-
-    if (!docs.length) {
-      setMessage('No documents available for download.');
-      return;
-    }
-
-    docs.forEach((doc: { id: string }) => {
-      window.open(
-        `${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`,
-        '_blank'
-      );
-    });
-
-    setMessage('Document downloads started.');
+    setMessage('Document ZIP download started.');
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Failed to download applicant documents');
   } finally {
@@ -298,16 +328,16 @@ async function downloadAllApplicantDocuments() {
                 Request overview
               </h2>
               <StatusBadge
-                label={detail.status}
-                tone={
-                  detail.status === 'APPROVED'
-                    ? 'success'
-                    : detail.status === 'REJECTED'
-                      ? 'danger'
-                      : 'warning'
-                }
-              />
-            </div>
+  label={detail.status}
+  tone={
+    detail.status === 'APPROVED'
+      ? 'success'
+      : detail.status === 'REJECTED' || detail.status === 'CANCELLED'
+        ? 'danger'
+        : 'warning'
+  }
+/>
+	    </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -338,24 +368,61 @@ async function downloadAllApplicantDocuments() {
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                onClick={() => updateStatus('approve')}
-                disabled={busy || detail.status === 'APPROVED'}
-                className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {busy ? 'Working...' : 'Approve Applicant'}
-              </button>
+           <div className="mt-6 flex flex-wrap gap-3">
+  {detail.status === 'CANCELLATION_REQUESTED' ? (
+    <>
+      <button
+        onClick={() => updateCancellation('approve-cancellation')}
+        disabled={busy}
+        className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Working...' : 'Approve Cancellation'}
+      </button>
 
-              <button
-                onClick={() => updateStatus('reject')}
-                disabled={busy || detail.status === 'REJECTED'}
-                className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {busy ? 'Working...' : 'Reject Applicant'}
-              </button>
-            </div>
-          </section>
+      <button
+        onClick={() => updateCancellation('deny-cancellation')}
+        disabled={busy}
+        className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Working...' : 'Deny Cancellation'}
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        onClick={() => updateStatus('approve')}
+        disabled={
+          busy ||
+          detail.status === 'APPROVED' ||
+          detail.status === 'REJECTED' ||
+          detail.status === 'CANCELLED'
+        }
+        className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Working...' : 'Approve Applicant'}
+      </button>
+
+      <button
+        onClick={() => updateStatus('reject')}
+        disabled={
+          busy ||
+          detail.status === 'REJECTED' ||
+          detail.status === 'CANCELLED'
+        }
+        className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Working...' : 'Reject Applicant'}
+      </button>
+    </>
+  )}
+</div> 
+{detail.status === 'CANCELLATION_REQUESTED' ? (
+  <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    This worker requested cancellation of an approved shift. Please approve or deny the request.
+  </div>
+) : null}
+ 
+	</section>
 
           <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold tracking-tight text-slate-950">
@@ -431,58 +498,93 @@ async function downloadAllApplicantDocuments() {
                   No documents uploaded yet.
                 </div>
               ) : (
-                detail.professional.documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="rounded-2xl border border-slate-200 px-4 py-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="text-base font-semibold text-slate-950">
-                        {doc.name}
-                      </div>
-                      <StatusBadge
-                        label={doc.status}
-                        tone={
-                          doc.status === 'APPROVED'
-                            ? 'success'
-                            : doc.status === 'REJECTED'
-                              ? 'danger'
-                              : doc.status === 'EXPIRED'
-                                ? 'warning'
-                                : 'info'
-                        }
-                      />
-                    </div>
+            detail.professional.documents.map((doc) => {
+  const daysUntilExpiration = getDaysUntilExpiration(doc.expiresAt);
 
-                    <div className="mt-2 text-sm text-slate-600">{doc.category}</div>
+  return (
+    <div
+      key={doc.id}
+      className="rounded-2xl border border-slate-200 px-4 py-4"
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-base font-semibold text-slate-950">
+            {doc.name}
+          </div>
 
-                    {doc.expiresAt ? (
-                      <div className="mt-2 text-sm text-slate-500">
-                        Expires: {new Date(doc.expiresAt).toLocaleDateString()}
-                      </div>
-                    ) : null}
+          <StatusBadge
+            label={doc.status}
+            tone={
+              doc.status === 'APPROVED'
+                ? 'success'
+                : doc.status === 'REJECTED'
+                  ? 'danger'
+                  : doc.status === 'EXPIRED'
+                    ? 'warning'
+                    : 'info'
+            }
+          />
 
-                    {doc.notes ? (
-                      <div className="mt-3 rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                        {doc.notes}
-                      </div>
-                    ) : null}
+          {doc.storageProvider === 'ONEDRIVE' ? (
+            <span className="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+              Uploaded to OneDrive
+            </span>
+          ) : null}
+        </div>
 
-                    <div className="mt-4">
-                      <a
-                        href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                      >
-                        Download  Document
-                      </a>
-                    </div>
-                  </div>
-                ))
-              )}
+        <div className="text-sm text-slate-600">{doc.category}</div>
+
+        {doc.expiresAt ? (
+          <div className="text-sm text-slate-500">
+            Expires: {new Date(doc.expiresAt).toLocaleDateString()}
+          </div>
+        ) : null}
+
+        {/* EXPIRATION WARNING */}
+        {doc.expiresAt && daysUntilExpiration != null ? (
+          daysUntilExpiration < 0 ? (
+            <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              This document expired on{' '}
+              {new Date(doc.expiresAt).toLocaleDateString()}.
             </div>
-          </section>
+          ) : daysUntilExpiration < 30 ? (
+            <div className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Warning: expires in {daysUntilExpiration} day
+              {daysUntilExpiration === 1 ? '' : 's'}.
+            </div>
+          ) : null
+        ) : null}
+
+        {doc.notes ? (
+          <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {doc.notes}
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/view`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+          >
+            View Document
+          </a>
+
+          <a
+            href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
+            className="inline-flex rounded-full border border-cyan-300 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+          >
+            Download Document
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+})
+     )}
+            </div>
+	  </section>
         </div>
 
         <div className="space-y-6">

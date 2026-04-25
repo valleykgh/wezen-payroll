@@ -29,6 +29,7 @@ enum ShiftStatus {
   PENDING
   FILLED
   COMPLETED
+  UNFILLED
   CANCELLED
 }
 
@@ -38,6 +39,7 @@ enum RequestStatus {
   APPROVED
   REJECTED
   WITHDRAWN
+  CANCELLATION_REQUESTED
   CANCELLED
 }
 
@@ -76,6 +78,11 @@ enum NotificationType {
   GENERAL
 }
 
+enum StorageProvider {
+  LOCAL
+  ONEDRIVE
+}
+
 model User {
   id            String              @id @default(cuid())
   email         String              @unique
@@ -100,23 +107,25 @@ model User {
 }
 
 model Facility {
-  id              String         @id @default(cuid())
-  name            String
-  facilityType    String?
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  state           String?
-  zipCode         String?
-  latitude        Float?
-  longitude       Float?
+  id                    String         @id @default(cuid())
+  name                  String
+  facilityType          String?
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  contactEmail          String?
+  contactPhone          String?
+  latitude              Float?
+  longitude             Float?
   defaultCnaRateCents   Int?
   defaultLvnRateCents   Int?
   defaultRnRateCents    Int?
-  allowRateOverride     Boolean @default(false)
-  isActive        Boolean        @default(true)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  allowRateOverride     Boolean        @default(false)
+  isActive              Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   admins          FacilityAdmin[]
   shifts          Shift[]
@@ -140,6 +149,8 @@ model ProfessionalProfile {
   id                 String                 @id @default(cuid())
   userId             String                 @unique
   role               ClinicianRole
+  addressLine1       String?
+  addressLine2       String?
   city               String?
   state              String?
   zipCode            String?
@@ -165,17 +176,23 @@ model ProfessionalProfile {
 }
 
 model ProfessionalDocument {
-  id                String           @id @default(cuid())
+  id                String             @id @default(cuid())
   professionalId    String
   uploadedByUserId  String?
   category          DocumentCategory
   name              String
   fileUrl           String
-  status            DocumentStatus   @default(PENDING)
+  storageProvider   StorageProvider    @default(LOCAL)
+  oneDriveItemId    String?
+  oneDriveWebUrl    String?
+  oneDrivePath      String?
+  oneDriveFolder    String?
+  mimeType          String?
+  status            DocumentStatus     @default(PENDING)
   expiresAt         DateTime?
   notes             String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   professional      ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   uploadedBy        User?               @relation("UploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)

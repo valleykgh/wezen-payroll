@@ -70,6 +70,70 @@ export default function AdminFacilitiesPage() {
     }
   }
 
+async function sendInvite(facilityId: string, facilityName: string) {
+  try {
+    const email = window.prompt(`Enter facility admin email for ${facilityName}:`);
+
+    if (!email) return;
+
+    setBusyId(facilityId);
+    setMessage('');
+
+    const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/facility-invites`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        facilityId,
+        email,
+      }),
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(text || 'Failed to send invite');
+    }
+
+    setMessage(`Invite sent to ${email}.`);
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : 'Failed to send invite');
+  } finally {
+    setBusyId(null);
+  }
+}
+
+async function deleteFacility(facilityId: string, facilityName: string) {
+  try {
+    const confirmed = window.confirm(
+      `Delete ${facilityName}? This will permanently delete the facility, its admins, shifts, requests, invites, and related records.`
+    );
+
+    if (!confirmed) return;
+
+    setBusyId(facilityId);
+    setMessage('');
+
+    const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/facilities/${facilityId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(text || 'Failed to delete facility');
+    }
+
+    await load();
+    setMessage(`${facilityName} deleted successfully.`);
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : 'Failed to delete facility');
+  } finally {
+    setBusyId(null);
+  }
+}
+
   return (
     <div className="space-y-8">
       <div className="rounded-[2rem] bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-800 p-8 text-white shadow-sm">
@@ -174,6 +238,21 @@ export default function AdminFacilitiesPage() {
                 >
                   Manage Invites
                 </Link>
+		<button
+  onClick={() => sendInvite(facility.id, facility.name)}
+  disabled={busyId === facility.id}
+  className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:opacity-60"
+>
+  {busyId === facility.id ? 'Working...' : 'Send Invite'}
+</button>
+
+<button
+  onClick={() => deleteFacility(facility.id, facility.name)}
+  disabled={busyId === facility.id}
+  className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+>
+  {busyId === facility.id ? 'Working...' : 'Delete Facility'}
+</button>
               </div>
             </div>
           </div>

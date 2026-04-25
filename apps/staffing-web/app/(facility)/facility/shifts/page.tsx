@@ -29,6 +29,12 @@ type Shift = {
 
 type SortValue = 'date-asc' | 'date-desc' | 'most-requested';
 
+function formatShiftDate(dateValue: string) {
+  const dateOnly = dateValue.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 export default function FacilityShiftsPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [message, setMessage] = useState('Loading shifts...');
@@ -332,8 +338,8 @@ export default function FacilityShiftsPage() {
 
                 <div className="mt-2 text-sm text-slate-600">{shift.facilityName}</div>
                 <div className="mt-1 text-sm text-slate-500">
-                  {new Date(shift.date).toLocaleDateString()} • {shift.time}
-                </div>
+                {formatShiftDate(shift.date)}
+	        </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -372,6 +378,15 @@ export default function FacilityShiftsPage() {
                 >
                   View Shift
                 </Link>
+	    
+	        {shift.status === 'OPEN' && shift.fillCount === 0 ? (
+  <Link
+    href={`/facility/shifts/${shift.id}/edit`}
+    className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+  >
+    Edit Shift
+  </Link>
+) : null}
 
                 {shift.status === 'OPEN' ? (
                   <>

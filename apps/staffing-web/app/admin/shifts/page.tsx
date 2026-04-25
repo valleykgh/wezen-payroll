@@ -20,7 +20,11 @@ type AdminShift = {
   requestCount: number;
   payRateLabel: string;
 };
-
+function formatShiftDate(dateValue: string) {
+  const dateOnly = dateValue.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
 export default function AdminShiftsPage() {
   const [shifts, setShifts] = useState<AdminShift[]>([]);
   const [message, setMessage] = useState('Loading shifts...');
@@ -169,8 +173,8 @@ export default function AdminShiftsPage() {
                       Date
                     </div>
                     <div className="mt-1 text-sm font-medium text-slate-900">
-                      {new Date(shift.date).toLocaleDateString()}
-                    </div>
+                    {formatShiftDate(shift.date)}
+		    </div>
                   </div>
 
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">

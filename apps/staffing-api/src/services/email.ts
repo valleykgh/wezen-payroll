@@ -4,7 +4,7 @@ const ses = new SESClient({
   region: "us-west-1",
 });
 
-const FROM_EMAIL = "noreply@wezenstaffing.com";
+const FROM_EMAIL = process.env.SES_FROM_EMAIL || 'Wezen Staffing <noreply@wezenstaffing.com>';
 
 export async function sendEmail({
   to,

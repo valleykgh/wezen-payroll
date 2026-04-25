@@ -15,20 +15,20 @@ type FacilityNavItem = {
 
 const facilityNav: FacilityNavItem[] = [
   { href: '/facility/dashboard', label: 'Dashboard' },
+  { href: '/facility/settings', label: 'Profile & Settings' },
   { href: '/facility/shifts', label: 'Shifts' },
   { href: '/facility/shifts/post', label: 'Post Shift' },
   { href: '/facility/applicants', label: 'Applicants', badgeKey: 'pendingRequests' },
   { href: '/facility/workers', label: 'Workers' },
   { href: '/facility/compliance', label: 'Compliance' },
   { href: '/facility/favorites', label: 'Favorites' },
-  { href: '/facility/settings', label: 'Settings' },
   { href: '/facility/schedule', label: 'Schedule' },
 ];
 
 export function FacilityShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [pendingRequests, setPendingRequests] = useState(0);
-
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => {
     async function loadBadgeCounts() {
       try {
@@ -52,8 +52,8 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
-        <aside className="border-r border-slate-200 bg-white px-6 py-6">
-          <AppLogo />
+        <aside className="hidden border-r border-slate-200 bg-white px-6 py-6 lg:block">  
+	  <AppLogo />
 
           <nav className="mt-8 space-y-2">
             {facilityNav.map((item) => {
@@ -95,9 +95,21 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
                   Wezen Staffing
                 </div>
               </div>
-
+	      	
               <div className="flex items-center gap-3">
-                <CurrentUserCard />
+                <button
+  type="button"
+  onClick={() => setMobileMenuOpen((open) => !open)}
+  className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 lg:hidden"
+>
+<span className="flex flex-col gap-[3px]">
+  <span className="h-[2px] w-5 bg-slate-900"></span>
+  <span className="h-[2px] w-5 bg-slate-900"></span>
+  <span className="h-[2px] w-5 bg-slate-900"></span>
+</span>
+
+</button>
+		  <CurrentUserCard />
 
                 <Link
                   href="/facility/shifts/post"
@@ -109,8 +121,25 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="px-6 py-8">{children}</main>
-        </div>
+	   {mobileMenuOpen ? (
+  <div className="border-b border-slate-200 bg-white px-4 py-4 lg:hidden">
+    <nav className="grid gap-2">
+      {facilityNav.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={() => setMobileMenuOpen(false)}
+          className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  </div>
+) : null}
+
+        <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+	</div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { meRequest } from '@/lib/auth-client';
 import { apiFetch } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { DocumentUploadForm } from '@/components/worker/document-upload-form';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type WorkerDocument = {
   id: string;
@@ -15,6 +16,8 @@ type WorkerDocument = {
   notes?: string | null;
   fileUrl: string;
   createdAt: string;
+  storageProvider?: string | null;
+  oneDriveWebUrl?: string | null;
 };
 
 type WorkerRole = 'CNA' | 'LVN' | 'RN';
@@ -59,6 +62,22 @@ const REQUIRED_DOCUMENTS_BY_ROLE: Record<WorkerRole, RequiredDocumentItem[]> = {
     { key: 'inservice', label: 'In-Service Certifications', category: 'INSERVICE', uploadCategory: 'OTHER', manualOnly: true },
   ],
 };
+
+function getDaysUntilExpiration(expiresAt?: string | null) {
+  if (!expiresAt) return null;
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  const diffMs = expiry.getTime() - now.getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+}
+
+function getExpirationTone(expiresAt?: string | null) {
+  const days = getDaysUntilExpiration(expiresAt);
+  if (days == null) return null;
+  if (days < 0) return 'expired';
+  if (days < 30) return 'warning';
+  return 'ok';
+}
 
 export default function WorkerDocumentsPage() {
   const [documents, setDocuments] = useState<WorkerDocument[]>([]);
@@ -268,81 +287,119 @@ export default function WorkerDocumentsPage() {
         </div>
       ) : null}
 
-      {documents.length > 0 ? (
-        <div className="space-y-4">
-          {documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm"
-            >
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="text-xl font-bold tracking-tight text-slate-950">
-                      {doc.name}
-                    </div>
-                    <StatusBadge
-                      label={doc.status}
-                      tone={
-                        doc.status === 'APPROVED'
-                          ? 'success'
-                          : doc.status === 'REJECTED'
-                            ? 'danger'
-                            : doc.status === 'EXPIRED'
-                              ? 'warning'
-                              : 'info'
-                      }
-                    />
+
+	{documents.length > 0 ? (
+  <div className="space-y-4">
+    {documents.map((doc) => {
+      const daysUntilExpiration = doc.expiresAt
+        ? Math.ceil(
+            (new Date(doc.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          )
+        : null;
+
+      return (
+        <div
+          key={doc.id}
+          className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="text-xl font-bold tracking-tight text-slate-950">
+                  {doc.name}
+                </div>
+                <StatusBadge
+                  label={doc.status}
+                  tone={
+                    doc.status === 'APPROVED'
+                      ? 'success'
+                      : doc.status === 'REJECTED'
+                        ? 'danger'
+                        : doc.status === 'EXPIRED'
+                          ? 'warning'
+                          : 'info'
+                  }
+                />
+                {doc.storageProvider === 'ONEDRIVE' ? (
+                  <span className="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                    Uploaded to OneDrive
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-2 text-sm text-slate-600">
+                Category: {doc.category}
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Uploaded
                   </div>
-
-                  <div className="mt-2 text-sm text-slate-600">
-                    Category: {doc.category}
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {new Date(doc.createdAt).toLocaleDateString()}
                   </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Uploaded
-                      </div>
-                      <div className="mt-1 text-sm font-medium text-slate-900">
-                        {new Date(doc.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Expires
-                      </div>
-                      <div className="mt-1 text-sm font-medium text-slate-900">
-                        {doc.expiresAt
-                          ? new Date(doc.expiresAt).toLocaleDateString()
-                          : 'No expiration listed'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {doc.notes ? (
-                    <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                      {doc.notes}
-                    </div>
-                  ) : null}
                 </div>
 
-                <div className="w-full lg:w-56">
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex w-full justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                  >
-                    View Document
-                  </a>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Expires
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {doc.expiresAt
+                      ? new Date(doc.expiresAt).toLocaleDateString()
+                      : 'No expiration listed'}
+                  </div>
                 </div>
               </div>
+
+              {doc.expiresAt && daysUntilExpiration != null ? (
+                daysUntilExpiration < 0 ? (
+                  <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    This document expired on{' '}
+                    {new Date(doc.expiresAt).toLocaleDateString()}.
+                  </div>
+                ) : daysUntilExpiration < 30 ? (
+                  <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Warning: this document expires in {daysUntilExpiration} day
+                    {daysUntilExpiration === 1 ? '' : 's'} on{' '}
+                    {new Date(doc.expiresAt).toLocaleDateString()}.
+                  </div>
+                ) : null
+              ) : null}
+
+              {doc.notes ? (
+                <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {doc.notes}
+                </div>
+              ) : null}
             </div>
-          ))}
+
+            <div className="w-full lg:w-56">
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/view`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex w-full justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                >
+                  View Document
+                </a>
+
+                <a
+                  href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
+                  className="inline-flex w-full justify-center rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+                >
+                  Download Document
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : null}
+      );
+    })}
+  </div>
+) : null}
     </div>
   );
 }

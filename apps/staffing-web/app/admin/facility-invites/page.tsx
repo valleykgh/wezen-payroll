@@ -156,7 +156,10 @@ export default function AdminFacilityInvitesPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="facility.admin@example.com"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-              />
+               /> 
+	       <p className="mt-2 text-xs text-slate-500">
+ 		 If an email is entered, the invite link will be emailed automatically.
+		</p>
             </div>
 
             <div>
@@ -176,8 +179,8 @@ export default function AdminFacilityInvitesPage() {
               disabled={submitting || !facilityId}
               className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? 'Generating invite...' : 'Generate Invite'}
-            </button>
+             {submitting ? 'Generating & sending invite...' : 'Generate & Send Invite'}
+	    </button>
           </form>
         </section>
 

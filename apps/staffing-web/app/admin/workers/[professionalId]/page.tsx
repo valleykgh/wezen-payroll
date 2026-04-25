@@ -35,6 +35,7 @@ type WorkerDetail = {
     notes?: string | null;
     fileUrl: string;
     createdAt: string;
+    storageProvider?: string | null;
   }>;
   agreements: Array<{
     id: string;
@@ -298,41 +299,25 @@ async function markIcaSigned() {
 
 async function downloadAllDocuments() {
   try {
+    if (!worker || worker.documents.length === 0) return;
+
     setBusy(true);
+    setMessage('');
 
-    const res = await fetch(
-      `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/documents`,
-      {
-        credentials: 'include',
-      }
-    );
+    const link = document.createElement('a');
+    link.href = `${STAFFING_API_BASE_URL}/api/admin/workers/${worker.id}/documents/download-all`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
-    const text = await res.text();
-    if (!res.ok) throw new Error(text || 'Failed to fetch worker documents');
-
-    const parsed = text ? JSON.parse(text) : null;
-    const docs = parsed?.data ?? [];
-
-    if (!docs.length) {
-      setMessage('No documents available for download.');
-      return;
-    }
-
-    docs.forEach((doc: { id: string }) => {
-      window.open(
-        `${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`,
-        '_blank'
-      );
-    });
-
-    setMessage('Document downloads started.');
+    setMessage('Document ZIP download started.');
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Failed to download documents');
   } finally {
     setBusy(false);
   }
 }
-
   async function deleteWorker() {
     try {
       const confirmed = window.confirm(
@@ -485,105 +470,111 @@ const icaSignedStepLabel = isIcaSigned
                   No documents uploaded yet.
                 </div>
               ) : (
-                worker.documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="rounded-2xl border border-slate-200 p-5"
-                  >
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="text-base font-semibold text-slate-950">{doc.name}</div>
-                        <StatusBadge
-                          label={doc.status}
-                          tone={
-                            doc.status === 'APPROVED'
-                              ? 'success'
-                              : doc.status === 'REJECTED'
-                                ? 'danger'
-                                : doc.status === 'EXPIRED'
-                                  ? 'warning'
-                                  : 'info'
-                          }
-                        />
-                      </div>
+          
+	worker.documents.map((doc) => {
+  const daysUntilExpiration = doc.expiresAt
+    ? Math.ceil(
+        (new Date(doc.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+    : null;
 
-			<div className="text-sm text-slate-600">{doc.category}</div>
+  return (
+    <div
+      key={doc.id}
+      className="rounded-2xl border border-slate-200 p-5"
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-base font-semibold text-slate-950">{doc.name}</div>
+          <StatusBadge
+            label={doc.status}
+            tone={
+              doc.status === 'APPROVED'
+                ? 'success'
+                : doc.status === 'REJECTED'
+                  ? 'danger'
+                  : doc.status === 'EXPIRED'
+                    ? 'warning'
+                    : 'info'
+            }
+          />
+          {doc.storageProvider === 'ONEDRIVE' ? (
+            <span className="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+              Uploaded to OneDrive
+            </span>
+          ) : null}
+        </div>
 
-<div className="mt-1 text-sm text-slate-500">
-  {doc.expiresAt
-    ? `Expires on ${new Date(doc.expiresAt).toLocaleDateString()}`
-    : 'No expiry date provided'}
-</div>
+        <div className="text-sm text-slate-600">{doc.category}</div>
 
+        <div className="mt-1 text-sm text-slate-500">
+          {doc.expiresAt
+            ? `Expires on ${new Date(doc.expiresAt).toLocaleDateString()}`
+            : 'No expiry date provided'}
+        </div>
 
-                      {doc.notes ? (
-                        <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                          {doc.notes}
-                        </div>
-                      ) : null}
-
-                    <div className="flex flex-wrap gap-3">
-  <a
-    href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
-    target="_blank"
-    rel="noreferrer"
-    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-  >
-    Download Document
-  </a>
-
-  {doc.status === 'PENDING' ? (
-    <>
-      <button
-        onClick={() => approveDocument(doc.id)}
-        disabled={busy}
-        className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
-      >
-        Approve
-      </button>
-
-      <button
-        onClick={() => rejectDocument(doc.id)}
-        disabled={busy}
-        className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-      >
-        Reject
-      </button>
-    </>
-  ) : doc.status === 'APPROVED' ? (
-    <div className="inline-flex items-center justify-center rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-      Approved
-    </div>
-  ) : doc.status === 'REJECTED' ? (
-    <div className="inline-flex items-center justify-center rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">
-      Rejected
-    </div>
-  ) : doc.status === 'EXPIRED' ? (
-    <div className="inline-flex items-center justify-center rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700">
-      Expired
-    </div>
-  ) : null}
-</div>
-
-{doc.status === 'PENDING' ? (
-  <TextArea
-    rows={3}
-    value={rejectNotes[doc.id] || ''}
-    onChange={(e) =>
-      setRejectNotes((prev) => ({
-        ...prev,
-        [doc.id]: e.target.value,
-      }))
-    }
-    placeholder="Enter rejection reason if rejecting this document"
-  />
-) : null}
-		    </div>
-                  </div>
-                ))
-              )}
+        {doc.expiresAt && daysUntilExpiration != null ? (
+          daysUntilExpiration < 0 ? (
+            <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              This document expired on {new Date(doc.expiresAt).toLocaleDateString()}.
             </div>
-          </section>
+          ) : daysUntilExpiration < 30 ? (
+            <div className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Warning: expires in {daysUntilExpiration} day{daysUntilExpiration === 1 ? '' : 's'}.
+            </div>
+          ) : null
+        ) : null}
+
+        {doc.notes ? (
+          <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {doc.notes}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/view`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+          >
+            View Document
+          </a>
+
+          <a
+            href={`${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`}
+            className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+          >
+            Download Document
+          </a>
+
+          {doc.status === 'PENDING' ? (
+            <>
+              <button
+                onClick={() => approveDocument(doc.id)}
+                disabled={busy}
+                className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+              >
+                Approve
+              </button>
+
+              <button
+                onClick={() => rejectDocument(doc.id)}
+                disabled={busy}
+                className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+              >
+                Reject
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+})	
+	    )}
+            </div>
+	  </section>
         </div>
 
         <div className="space-y-6">

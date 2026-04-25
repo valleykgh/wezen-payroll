@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type WorkerRequest = {
   id: string;
@@ -32,6 +33,7 @@ export default function WorkerSchedulePage() {
   const [requests, setRequests] = useState<WorkerRequest[]>([]);
   const [message, setMessage] = useState('Loading schedule...');
   const [sortBy, setSortBy] = useState<SortValue>('soonest');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -75,6 +77,45 @@ export default function WorkerSchedulePage() {
 
     return items;
   }, [requests, sortBy]);
+
+async function requestCancellation(requestId: string) {
+  try {
+    setBusyId(requestId);
+    setMessage('');
+
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/request-cancellation`,
+      {
+        method: 'POST',
+        credentials: 'include',
+      }
+    );
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(text || 'Failed to request cancellation');
+    }
+
+    const me = await apiFetch<{ data: { professionalId?: string | null } }>('/api/auth/me');
+    const professionalId = me.data.professionalId;
+
+    if (!professionalId) {
+      throw new Error('Professional profile not found.');
+    }
+
+    const refreshed = await apiFetch<{ data: WorkerRequest[] }>(
+      `/api/worker/requests?professionalId=${professionalId}`
+    );
+
+    setRequests(refreshed.data);
+    setMessage('Cancellation request sent to the facility for review.');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : 'Failed to request cancellation');
+  } finally {
+    setBusyId(null);
+  }
+}
 
   return (
     <div className="space-y-8">
@@ -200,6 +241,17 @@ export default function WorkerSchedulePage() {
                     <div className="mt-1">{request.shift.specialInstructions}</div>
                   </div>
                 ) : null}
+  		
+		<div className="mt-5">
+  <button
+    type="button"
+    onClick={() => requestCancellation(request.id)}
+    disabled={busyId === request.id}
+    className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    {busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
+  </button>
+</div>
               </div>
             </div>
           </div>

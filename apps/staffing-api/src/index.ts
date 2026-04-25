@@ -27,7 +27,11 @@ import {
 } from './auth.js';
 
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
-import testEmailRoutes from "./routes/testEmail";
+import testEmailRoutes from "./routes/testEmail.js";
+import { sendEmail } from './services/email.js';
+import archiver from 'archiver';
+import { getOneDriveInfo, listOneDriveRootChildren,downloadOneDriveFileBuffer } from './services/onedrive.js';
+import { uploadFileToCandidateFolder } from './services/onedrive.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4001);
@@ -59,6 +63,514 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const ADMIN_ALERT_EMAIL = process.env.ADMIN_ALERT_EMAIL || '';
+
+async function getFacilityNotificationRecipients(facilityId: string): Promise<string[]> {
+  const admins = await prisma.facilityAdmin.findMany({
+    where: { facilityId },
+    include: {
+      user: {
+        select: {
+          email: true,
+          notificationEmail: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  const recipients = admins
+    .filter((admin) => admin.user?.isActive)
+    .map((admin) => admin.user.notificationEmail || admin.user.email)
+    .filter((email): email is string => Boolean(email));
+
+  return [...new Set(recipients)];
+}
+
+async function sendFacilityShiftRequestEmail(requestId: string) {
+  try {
+    const request = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      console.warn('sendFacilityShiftRequestEmail: request not found', requestId);
+      return;
+    }
+
+    const recipients = await getFacilityNotificationRecipients(request.shift.facilityId);
+
+    if (!recipients.length) {
+      console.warn(
+        'sendFacilityShiftRequestEmail: no facility notification recipients found',
+        request.shift.facilityId
+      );
+      return;
+    }
+
+    const workerName =
+      `${request.professional.user.firstName || ''} ${request.professional.user.lastName || ''}`.trim() ||
+      request.professional.user.email ||
+      'Unknown Worker';
+
+    const shiftDate = new Date(request.shift.date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    await sendEmail({
+      to: recipients.join(','),
+      subject: `New shift request from ${workerName}`,
+      html: `
+        <h2>New shift request</h2>
+        <p><strong>Facility:</strong> ${request.shift.facility.name}</p>
+        <p><strong>Worker:</strong> ${workerName}</p>
+        <p><strong>Worker Email:</strong> ${request.professional.user.email || 'Not available'}</p>
+        <p><strong>Role:</strong> ${request.shift.role}</p>
+        <p><strong>Shift Type:</strong> ${request.shift.shiftType}</p>
+        <p><strong>Date:</strong> ${shiftDate}</p>
+        <p><strong>Time:</strong> ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}</p>
+        <p><strong>Requested At:</strong> ${request.requestedAt.toISOString()}</p>
+        <p>Please log in to review this applicant.</p>
+      `,
+      text: [
+        'New shift request',
+        `Facility: ${request.shift.facility.name}`,
+        `Worker: ${workerName}`,
+        `Worker Email: ${request.professional.user.email || 'Not available'}`,
+        `Role: ${request.shift.role}`,
+        `Shift Type: ${request.shift.shiftType}`,
+        `Date: ${shiftDate}`,
+        `Time: ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+        `Requested At: ${request.requestedAt.toISOString()}`,
+        'Please log in to review this applicant.',
+      ].join('\n'),
+    });
+  } catch (error) {
+    console.error('sendFacilityShiftRequestEmail error:', error);
+  }
+}
+
+async function sendWorkerShiftApprovedEmail(requestId: string) {
+  try {
+    const request = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      console.warn('sendWorkerShiftApprovedEmail: request not found', requestId);
+      return;
+    }
+
+    const workerEmail = request.professional.user.email;
+    if (!workerEmail) {
+      console.warn('sendWorkerShiftApprovedEmail: worker email missing', request.professionalId);
+      return;
+    }
+
+    const workerName =
+      `${request.professional.user.firstName || ''} ${request.professional.user.lastName || ''}`.trim() ||
+      request.professional.user.email ||
+      'Professional';
+
+    const shiftDate = new Date(request.shift.date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    await sendEmail({
+      to: workerEmail,
+      subject: `Shift approved: ${request.shift.facility.name}`,
+      html: `
+        <h2>Your shift request was approved</h2>
+        <p>Hello ${workerName},</p>
+        <p>Your shift request has been approved and you are scheduled.</p>
+        <p><strong>Facility:</strong> ${request.shift.facility.name}</p>
+        <p><strong>Role:</strong> ${request.shift.role}</p>
+        <p><strong>Shift Type:</strong> ${request.shift.shiftType}</p>
+        <p><strong>Date:</strong> ${shiftDate}</p>
+        <p><strong>Time:</strong> ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}</p>
+        <p><strong>Status:</strong> ${request.status}</p>
+        <p>Please log in to review the details.</p>
+      `,
+      text: [
+        `Hello ${workerName},`,
+        'Your shift request has been approved and you are scheduled.',
+        `Facility: ${request.shift.facility.name}`,
+        `Role: ${request.shift.role}`,
+        `Shift Type: ${request.shift.shiftType}`,
+        `Date: ${shiftDate}`,
+        `Time: ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+        `Status: ${request.status}`,
+        'Please log in to review the details.',
+      ].join('\n'),
+    });
+  } catch (error) {
+    console.error('sendWorkerShiftApprovedEmail error:', error);
+  }
+}
+
+async function sendFacilityShiftCancelledEmail(shiftId: string) {
+  try {
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        facility: {
+          include: {
+            admins: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!shift) {
+      console.warn('sendFacilityShiftCancelledEmail: shift not found', shiftId);
+      return;
+    }
+
+    const recipients = await getFacilityNotificationRecipients(shift.facilityId);
+
+    if (!recipients.length) {
+      console.warn(
+        'sendFacilityShiftCancelledEmail: no facility notification recipients found',
+        shift.facilityId
+      );
+      return;
+    }
+
+    const address = [
+      shift.facility.addressLine1,
+      shift.facility.addressLine2,
+      shift.facility.city,
+      shift.facility.state,
+      shift.facility.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const dateLabel = new Date(shift.date).toLocaleDateString();
+
+    await sendEmail({
+      to: recipients.join(','),
+      subject: `Shift cancelled: ${shift.role} ${shift.shiftType} on ${dateLabel}`,
+      html: `
+        <h2>Shift cancelled</h2>
+        <p><strong>Facility:</strong> ${shift.facility.name}</p>
+        <p><strong>Role:</strong> ${shift.role}</p>
+        <p><strong>Shift type:</strong> ${shift.shiftType}</p>
+        <p><strong>Date:</strong> ${dateLabel}</p>
+        <p><strong>Time:</strong> ${shift.startTimeLabel} - ${shift.endTimeLabel}</p>
+        ${address ? `<p><strong>Location:</strong> ${address}</p>` : ''}
+        ${
+          shift.specialInstructions
+            ? `<p><strong>Special instructions:</strong> ${shift.specialInstructions}</p>`
+            : ''
+        }
+        <p>This shift has been cancelled in the Wezen Staffing portal.</p>
+      `,
+      text: [
+        'Shift cancelled',
+        `Facility: ${shift.facility.name}`,
+        `Role: ${shift.role}`,
+        `Shift type: ${shift.shiftType}`,
+        `Date: ${dateLabel}`,
+        `Time: ${shift.startTimeLabel} - ${shift.endTimeLabel}`,
+        address ? `Location: ${address}` : '',
+        shift.specialInstructions
+          ? `Special instructions: ${shift.specialInstructions}`
+          : '',
+        'This shift has been cancelled in the Wezen Staffing portal.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    });
+  } catch (error) {
+    console.error('sendFacilityShiftCancelledEmail error:', error);
+  }
+}
+
+async function sendWorkerShiftReminderEmail(requestId: string) {
+  try {
+    const request = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      console.warn('sendWorkerShiftReminderEmail: request not found', requestId);
+      return;
+    }
+
+    const workerEmail = request.professional.user.email;
+    if (!workerEmail) {
+      console.warn('sendWorkerShiftReminderEmail: worker email missing', request.professionalId);
+      return;
+    }
+
+    const workerName =
+      `${request.professional.user.firstName || ''} ${request.professional.user.lastName || ''}`.trim() ||
+      request.professional.user.email ||
+      'Professional';
+
+    const address = [
+      request.shift.facility.addressLine1,
+      request.shift.facility.addressLine2,
+      request.shift.facility.city,
+      request.shift.facility.state,
+      request.shift.facility.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const dateLabel = new Date(request.shift.date).toLocaleDateString();
+
+    await sendEmail({
+      to: workerEmail,
+      subject: `Reminder: upcoming shift at ${request.shift.facility.name}`,
+      html: `
+        <h2>Upcoming shift reminder</h2>
+        <p>Hello ${workerName},</p>
+        <p>This is a reminder for your upcoming approved shift.</p>
+        <p><strong>Facility:</strong> ${request.shift.facility.name}</p>
+        <p><strong>Role:</strong> ${request.shift.role}</p>
+        <p><strong>Shift type:</strong> ${request.shift.shiftType}</p>
+        <p><strong>Date:</strong> ${dateLabel}</p>
+        <p><strong>Time:</strong> ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}</p>
+        ${address ? `<p><strong>Location:</strong> ${address}</p>` : ''}
+        ${
+          request.shift.specialInstructions
+            ? `<p><strong>Special instructions:</strong> ${request.shift.specialInstructions}</p>`
+            : ''
+        }
+        <p>Please arrive on time and contact Wezen Staffing if you have any issue.</p>
+      `,
+      text: [
+        `Hello ${workerName},`,
+        'This is a reminder for your upcoming approved shift.',
+        `Facility: ${request.shift.facility.name}`,
+        `Role: ${request.shift.role}`,
+        `Shift type: ${request.shift.shiftType}`,
+        `Date: ${dateLabel}`,
+        `Time: ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+        address ? `Location: ${address}` : '',
+        request.shift.specialInstructions
+          ? `Special instructions: ${request.shift.specialInstructions}`
+          : '',
+        'Please arrive on time and contact Wezen Staffing if you have any issue.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    });
+  } catch (error) {
+    console.error('sendWorkerShiftReminderEmail error:', error);
+  }
+}
+
+async function sendWorkersShiftCancelledEmail(shiftId: string) {
+  try {
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        facility: true,
+        requests: {
+          where: {
+            status: 'APPROVED',
+          },
+          include: {
+            professional: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!shift) {
+      console.warn('sendWorkersShiftCancelledEmail: shift not found', shiftId);
+      return;
+    }
+
+    if (!shift.requests.length) {
+      console.warn('sendWorkersShiftCancelledEmail: no approved workers for shift', shiftId);
+      return;
+    }
+
+    const facilityAddress = [
+      shift.facility.addressLine1,
+      shift.facility.addressLine2,
+      shift.facility.city,
+      shift.facility.state,
+      shift.facility.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const dateLabel = new Date(shift.date).toLocaleDateString();
+
+    for (const request of shift.requests) {
+      const email = request.professional.user.email;
+      if (!email) continue;
+
+      const workerName =
+        `${request.professional.user.firstName || ''} ${request.professional.user.lastName || ''}`.trim() ||
+        request.professional.user.email ||
+        'Professional';
+
+      await sendEmail({
+        to: email,
+        subject: `Shift cancelled: ${shift.facility.name}`,
+        html: `
+          <h2>Shift cancelled</h2>
+          <p>Hello ${workerName},</p>
+          <p>Your approved shift has been cancelled.</p>
+          <p><strong>Facility:</strong> ${shift.facility.name}</p>
+          <p><strong>Role:</strong> ${shift.role}</p>
+          <p><strong>Shift Type:</strong> ${shift.shiftType}</p>
+          <p><strong>Date:</strong> ${dateLabel}</p>
+          <p><strong>Time:</strong> ${shift.startTimeLabel} - ${shift.endTimeLabel}</p>
+          ${facilityAddress ? `<p><strong>Location:</strong> ${facilityAddress}</p>` : ''}
+          ${
+            shift.specialInstructions
+              ? `<p><strong>Special Instructions:</strong> ${shift.specialInstructions}</p>`
+              : ''
+          }
+          <p>Please contact Wezen Staffing if you need assistance.</p>
+        `,
+        text: [
+          `Hello ${workerName},`,
+          'Your approved shift has been cancelled.',
+          `Facility: ${shift.facility.name}`,
+          `Role: ${shift.role}`,
+          `Shift Type: ${shift.shiftType}`,
+          `Date: ${dateLabel}`,
+          `Time: ${shift.startTimeLabel} - ${shift.endTimeLabel}`,
+          facilityAddress ? `Location: ${facilityAddress}` : '',
+          shift.specialInstructions ? `Special Instructions: ${shift.specialInstructions}` : '',
+          'Please contact Wezen Staffing if you need assistance.',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      });
+    }
+  } catch (error) {
+    console.error('sendWorkersShiftCancelledEmail error:', error);
+  }
+}
+
+async function sendFacilityShiftCancellationRequestEmail(requestId: string) {
+  try {
+    const request = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      console.warn('sendFacilityShiftCancellationRequestEmail: request not found', requestId);
+      return;
+    }
+
+    const recipients = await getFacilityNotificationRecipients(request.shift.facilityId);
+
+    if (!recipients.length) {
+      console.warn(
+        'sendFacilityShiftCancellationRequestEmail: no facility recipients found',
+        request.shift.facilityId
+      );
+      return;
+    }
+
+    const workerName =
+      `${request.professional.user.firstName || ''} ${request.professional.user.lastName || ''}`.trim() ||
+      request.professional.user.email ||
+      'Unknown Worker';
+
+    const dateLabel = new Date(request.shift.date).toLocaleDateString();
+
+    await sendEmail({
+      to: recipients.join(','),
+      subject: `Cancellation request: ${workerName} for ${request.shift.facility.name}`,
+      html: `
+        <h2>Worker requested cancellation</h2>
+        <p><strong>Worker:</strong> ${workerName}</p>
+        <p><strong>Email:</strong> ${request.professional.user.email || 'Not available'}</p>
+        <p><strong>Facility:</strong> ${request.shift.facility.name}</p>
+        <p><strong>Role:</strong> ${request.shift.role}</p>
+        <p><strong>Shift Type:</strong> ${request.shift.shiftType}</p>
+        <p><strong>Date:</strong> ${dateLabel}</p>
+        <p><strong>Time:</strong> ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}</p>
+        <p>The worker has requested cancellation of this approved shift.</p>
+      `,
+      text: [
+        'Worker requested cancellation',
+        `Worker: ${workerName}`,
+        `Email: ${request.professional.user.email || 'Not available'}`,
+        `Facility: ${request.shift.facility.name}`,
+        `Role: ${request.shift.role}`,
+        `Shift Type: ${request.shift.shiftType}`,
+        `Date: ${dateLabel}`,
+        `Time: ${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+        'The worker has requested cancellation of this approved shift.',
+      ].join('\n'),
+    });
+  } catch (error) {
+    console.error('sendFacilityShiftCancellationRequestEmail error:', error);
+  }
+}
 
 async function getWorkerEligibility(professionalId: string) {
   const profile = await prisma.professionalProfile.findUnique({
@@ -300,6 +812,124 @@ async function ensureFacilityIsActive(facilityId: string) {
   return { ok: true as const, facility };
 }
 
+function getUploadsFilePathFromUrl(fileUrl: string) {
+  try {
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+      const url = new URL(fileUrl);
+      const pathname = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+      return path.join(process.cwd(), pathname);
+    }
+
+    const cleaned = decodeURIComponent(fileUrl.replace(/^\/+/, ''));
+    return path.join(process.cwd(), cleaned);
+  } catch {
+    const cleaned = decodeURIComponent(fileUrl.replace(/^\/+/, ''));
+    return path.join(process.cwd(), cleaned);
+  }
+}
+
+function getExtensionFromMimeType(mimeType?: string | null) {
+  if (!mimeType) return '';
+
+  if (mimeType === 'application/pdf') return '.pdf';
+  if (mimeType === 'image/jpeg') return '.jpg';
+  if (mimeType === 'image/png') return '.png';
+  if (mimeType === 'image/gif') return '.gif';
+  if (mimeType === 'image/webp') return '.webp';
+  if (mimeType === 'application/msword') return '.doc';
+  if (
+    mimeType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) return '.docx';
+  return '';
+}
+
+function safeDownloadName(doc: {
+  category: string;
+  id: string;
+  name: string;
+  mimeType?: string | null;
+}) {
+  const cleaned = doc.name.replace(/[\/\\:*?"<>|]/g, '_').trim();
+
+  const hasExtension = /\.[A-Za-z0-9]+$/.test(cleaned);
+  const extension = hasExtension ? '' : getExtensionFromMimeType(doc.mimeType);
+
+  return `${doc.category}-${doc.id}-${cleaned}${extension}`;
+}
+
+async function canUserAccessDocument(userId: string, role: string, documentId: string) {
+  const document = await prisma.professionalDocument.findUnique({
+    where: { id: documentId },
+    include: {
+      professional: {
+        include: {
+          requests: {
+            include: {
+              shift: {
+                select: {
+                  facilityId: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!document) {
+    return { ok: false as const, error: 'Document not found', document: null };
+  }
+
+  if (role === 'INTERNAL_ADMIN') {
+    return { ok: true as const, document };
+  }
+
+  if (role === 'FACILITY_ADMIN') {
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return { ok: false as const, error: 'Facility admin not found', document: null };
+    }
+
+    const belongsToFacility = document.professional.requests.some(
+      (request) => request.shift.facilityId === facilityId
+    );
+
+    if (!belongsToFacility) {
+      return { ok: false as const, error: 'Forbidden', document: null };
+    }
+
+    return { ok: true as const, document };
+  }
+
+  return { ok: false as const, error: 'Forbidden', document: null };
+}
+
+function buildShiftStartDate(shiftDate: Date, startTimeLabel: string): Date {
+  const base = new Date(shiftDate);
+  const match = startTimeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
+  if (!match) {
+    return base;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3].toUpperCase();
+
+  if (meridiem === 'AM' && hours === 12) {
+    hours = 0;
+  } else if (meridiem === 'PM' && hours !== 12) {
+    hours += 12;
+  }
+
+  const start = new Date(base);
+  start.setHours(hours, minutes, 0, 0);
+  return start;
+}
+
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3001',
   process.env.FRONTEND_URL_WWW || '',
@@ -340,6 +970,9 @@ const registerProfessionalSchema = z.object({
   password: z.string().min(6),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
+  phone: z.string().trim().optional(),
+  addressLine1: z.string().trim().optional(),
+  addressLine2: z.string().trim().optional(),
   role: z.nativeEnum(ClinicianRole),
   city: z.string().optional(),
   state: z.string().optional(),
@@ -376,6 +1009,15 @@ const updateFacilitySettingsSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+
+  firstName: z.string().trim().optional().nullable(),
+  lastName: z.string().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  notificationEmail: z.string().trim().email().optional().nullable(),
+
+  contactEmail: z.string().trim().email().optional().nullable(),
+  contactPhone: z.string().trim().optional().nullable(),
+
   defaultCnaRateCents: z.number().int().nonnegative().nullable().optional(),
   defaultLvnRateCents: z.number().int().nonnegative().nullable().optional(),
   defaultRnRateCents: z.number().int().nonnegative().nullable().optional(),
@@ -436,9 +1078,12 @@ app.post('/api/auth/register-professional', async (req, res) => {
         role: UserRole.PROFESSIONAL,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
+        phone: parsed.data.phone || null,
         professional: {
           create: {
             role: parsed.data.role,
+            addressLine1: parsed.data.addressLine1 || null,
+            addressLine2: parsed.data.addressLine2 || null,
             city: parsed.data.city,
             state: parsed.data.state,
             zipCode: parsed.data.zipCode,
@@ -447,9 +1092,11 @@ app.post('/api/auth/register-professional', async (req, res) => {
           },
         },
       },
-      include: {
-        professional: true,
-      },
+    });
+
+    const professional = await prisma.professionalProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true },
     });
 
     const token = signAuthToken({
@@ -463,7 +1110,7 @@ app.post('/api/auth/register-professional', async (req, res) => {
       data: {
         userId: user.id,
         role: user.role,
-        professionalId: user.professional?.id ?? null,
+        professionalId: professional?.id ?? null,
       },
     });
   } catch (error) {
@@ -851,8 +1498,8 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
         facilityId,
         role: parsed.data.role,
         shiftType: parsed.data.shiftType,
-        date: new Date(parsed.data.date),
-        startTimeLabel: parsed.data.startTimeLabel,
+        date: new Date(`${parsed.data.date}T12:00:00.000Z`),
+	startTimeLabel: parsed.data.startTimeLabel,
         endTimeLabel: parsed.data.endTimeLabel,
         workersNeeded: parsed.data.workersNeeded,
         specialInstructions: parsed.data.specialInstructions,
@@ -893,13 +1540,35 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedR
     facilityId: true,
     date: true,
     shiftType: true,
+    startTimeLabel: true,
+    endTimeLabel: true,
     workersNeeded: true,
+    status: true,
   },
 });
 
     if (!shift) {
       return res.status(404).json({ error: 'Shift not found' });
     }
+
+    const shiftStart = buildShiftStartDate(shift.date, shift.startTimeLabel);
+
+if (shiftStart.getTime() <= Date.now()) {
+  await prisma.shift.update({
+    where: { id: shift.id },
+    data: { status: 'UNFILLED' },
+  });
+
+  return res.status(400).json({
+    error: 'This shift has already started and can no longer be requested.',
+  });
+}
+
+if (shift.status !== 'OPEN') {
+  return res.status(400).json({
+    error: 'This shift is no longer open for requests.',
+  });
+}
 
         const facilityStatus = await ensureFacilityIsActive(shift.facilityId);
     if (!facilityStatus.ok) {
@@ -946,6 +1615,12 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedR
         professionalId,
       },
     });
+    
+    try {
+  await sendFacilityShiftRequestEmail(created.id);
+} catch (emailError) {
+  console.error('Facility shift request email failed:', emailError);
+}
 
     res.status(201).json({ data: created });
   } catch (error) {
@@ -1103,13 +1778,19 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
       },
     });
 
+    try {
+  await sendWorkerShiftApprovedEmail(updated.id);
+} catch (emailError) {
+  console.error('Worker approved shift email failed:', emailError);
+}
+
     const newApprovedCount = approvedCount + 1;
 
     if (newApprovedCount >= requestRecord.shift.workersNeeded) {
       await prisma.shift.update({
         where: { id: requestRecord.shift.id },
         data: {
-          status: 'OPEN',
+          status: 'FILLED',
         },
       });
     }
@@ -1183,6 +1864,286 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
   } catch (error) {
     console.error('POST /api/shift-requests/:id/reject error:', error);
     res.status(500).json({ error: 'Failed to reject request' });
+  }
+});
+
+app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const professionalId = await getProfessionalProfileIdForUser(userId);
+
+    if (!id) {
+      return res.status(400).json({ error: 'Request id is required' });
+    }
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const existing = await prisma.shiftRequest.findUnique({
+      where: { id },
+      include: {
+        shift: true,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Shift request not found' });
+    }
+
+    if (existing.professionalId !== professionalId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (existing.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Only approved shifts can have a cancellation request.' });
+    }
+
+    const shiftStart = buildShiftStartDate(existing.shift.date, existing.shift.startTimeLabel);
+const now = new Date();
+const fourHoursMs = 4 * 60 * 60 * 1000;
+
+if (shiftStart.getTime() - now.getTime() < fourHoursMs) {
+  return res.status(400).json({
+    error: 'Cancellation requests are not allowed within 4 hours of shift start time. Please contact Wezen Staffing support.',
+  });
+}
+
+    const updated = await prisma.shiftRequest.update({
+      where: { id },
+      data: {
+        status: 'CANCELLATION_REQUESTED',
+        reviewedAt: null,
+        reviewNotes: 'Cancellation requested by worker',
+      },
+    });
+
+    await createWorkerNotification({
+      professionalId,
+      type: 'GENERAL',
+      title: 'Cancellation request submitted',
+      message: 'Your cancellation request has been sent to the facility for review.',
+    });
+
+    try {
+      await sendFacilityShiftCancellationRequestEmail(updated.id);
+    } catch (emailError) {
+      console.error('Facility cancellation request email failed:', emailError);
+    }
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/shift-requests/:id/request-cancellation error:', error);
+    res.status(500).json({ error: 'Failed to request cancellation' });
+  }
+});
+
+app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const facilityStatus = await ensureFacilityIsActive(facilityId);
+    if (!facilityStatus.ok) {
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
+    }
+
+    const existing = await prisma.shiftRequest.findUnique({
+      where: { id },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Shift request not found' });
+    }
+
+    if (existing.shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (existing.status !== 'CANCELLATION_REQUESTED') {
+      return res.status(400).json({ error: 'This request is not awaiting cancellation approval.' });
+    }
+
+    const updated = await prisma.shiftRequest.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        reviewedAt: new Date(),
+        reviewNotes: 'Cancellation approved by facility',
+      },
+    });
+
+    const remainingApprovedCount = await prisma.shiftRequest.count({
+  where: {
+    shiftId: existing.shiftId,
+    status: 'APPROVED',
+  },
+});
+
+if (
+  existing.shift.status === 'FILLED' &&
+  remainingApprovedCount < existing.shift.workersNeeded
+) {
+  await prisma.shift.update({
+    where: { id: existing.shiftId },
+    data: { status: 'OPEN' },
+  });
+}
+
+    await createWorkerNotification({
+      professionalId: updated.professionalId,
+      type: 'GENERAL',
+      title: 'Cancellation approved',
+      message: 'Your cancellation request was approved by the facility.',
+    });
+
+    if (existing.professional.user.email) {
+      try {
+        await sendEmail({
+          to: existing.professional.user.email,
+          subject: `Cancellation approved: ${existing.shift.facility.name}`,
+          html: `
+            <h2>Cancellation approved</h2>
+            <p>Your cancellation request has been approved.</p>
+            <p><strong>Facility:</strong> ${existing.shift.facility.name}</p>
+            <p><strong>Role:</strong> ${existing.shift.role}</p>
+            <p><strong>Shift Type:</strong> ${existing.shift.shiftType}</p>
+            <p><strong>Date:</strong> ${new Date(existing.shift.date).toLocaleDateString()}</p>
+            <p><strong>Time:</strong> ${existing.shift.startTimeLabel} - ${existing.shift.endTimeLabel}</p>
+          `,
+          text: [
+            'Cancellation approved',
+            `Facility: ${existing.shift.facility.name}`,
+            `Role: ${existing.shift.role}`,
+            `Shift Type: ${existing.shift.shiftType}`,
+            `Date: ${new Date(existing.shift.date).toLocaleDateString()}`,
+            `Time: ${existing.shift.startTimeLabel} - ${existing.shift.endTimeLabel}`,
+          ].join('\n'),
+        });
+      } catch (emailError) {
+        console.error('Worker cancellation approved email failed:', emailError);
+      }
+    }
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/shift-requests/:id/approve-cancellation error:', error);
+    res.status(500).json({ error: 'Failed to approve cancellation request' });
+  }
+});
+
+app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const facilityStatus = await ensureFacilityIsActive(facilityId);
+    if (!facilityStatus.ok) {
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
+    }
+
+    const existing = await prisma.shiftRequest.findUnique({
+      where: { id },
+      include: {
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Shift request not found' });
+    }
+
+    if (existing.shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (existing.status !== 'CANCELLATION_REQUESTED') {
+      return res.status(400).json({ error: 'This request is not awaiting cancellation review.' });
+    }
+
+    const updated = await prisma.shiftRequest.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        reviewedAt: new Date(),
+        reviewNotes: 'Cancellation denied by facility',
+      },
+    });
+
+    await createWorkerNotification({
+      professionalId: updated.professionalId,
+      type: 'GENERAL',
+      title: 'Cancellation denied',
+      message: 'Your cancellation request was denied. You are still scheduled for this shift.',
+    });
+
+    if (existing.professional.user.email) {
+      try {
+        await sendEmail({
+          to: existing.professional.user.email,
+          subject: `Cancellation denied: ${existing.shift.facility.name}`,
+          html: `
+            <h2>Cancellation denied</h2>
+            <p>Your cancellation request was denied. You remain scheduled for this shift.</p>
+            <p><strong>Facility:</strong> ${existing.shift.facility.name}</p>
+            <p><strong>Role:</strong> ${existing.shift.role}</p>
+            <p><strong>Shift Type:</strong> ${existing.shift.shiftType}</p>
+            <p><strong>Date:</strong> ${new Date(existing.shift.date).toLocaleDateString()}</p>
+            <p><strong>Time:</strong> ${existing.shift.startTimeLabel} - ${existing.shift.endTimeLabel}</p>
+          `,
+          text: [
+            'Cancellation denied',
+            'You remain scheduled for this shift.',
+            `Facility: ${existing.shift.facility.name}`,
+            `Role: ${existing.shift.role}`,
+            `Shift Type: ${existing.shift.shiftType}`,
+            `Date: ${new Date(existing.shift.date).toLocaleDateString()}`,
+            `Time: ${existing.shift.startTimeLabel} - ${existing.shift.endTimeLabel}`,
+          ].join('\n'),
+        });
+      } catch (emailError) {
+        console.error('Worker cancellation denied email failed:', emailError);
+      }
+    }
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/shift-requests/:id/deny-cancellation error:', error);
+    res.status(500).json({ error: 'Failed to deny cancellation request' });
   }
 });
 
@@ -1553,15 +2514,23 @@ if (hasDocuments) {
   }
 });
 
-app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PROFESSIONAL'), async (req, res) => {
+
+app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
-    const professionalId = String(req.body.professionalId || '');
+    const userId = req.authUser!.userId;
+    const bodyProfessionalId = String(req.body.professionalId || '');
     const category = String(req.body.category || '');
     const name = String(req.body.name || '');
     const expiresAtRaw = String(req.body.expiresAt || '').trim();
 
+    const professionalId = await getProfessionalProfileIdForUser(userId);
+
     if (!professionalId) {
-      return res.status(400).json({ error: 'professionalId is required' });
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    if (bodyProfessionalId && bodyProfessionalId !== professionalId) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     if (!category) {
@@ -1584,18 +2553,118 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
       expiresAt = parsedDate;
     }
 
+    const professional = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!professional) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const uploadedName = name || req.file.originalname;
+
+    const uploaded = await uploadFileToCandidateFolder({
+      firstName: professional.user.firstName,
+      lastName: professional.user.lastName,
+      professionalId,
+      originalFileName: uploadedName,
+      localFilePath: req.file.path,
+      mimeType: req.file.mimetype,
+    });
+
     const document = await prisma.professionalDocument.create({
       data: {
         professionalId,
+        uploadedByUserId: userId,
         category: category as any,
-        name: name || req.file.originalname,
-        fileUrl: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`,
+        name: uploadedName,
+        fileUrl: uploaded.webUrl,
+        storageProvider: 'ONEDRIVE',
+        oneDriveItemId: uploaded.itemId,
+        oneDriveWebUrl: uploaded.webUrl,
+        oneDrivePath: `${uploaded.folderPath}/${uploaded.name}`,
+        oneDriveFolder: uploaded.folderPath,
+        mimeType: req.file.mimetype || null,
         status: 'PENDING',
         expiresAt,
       },
     });
 
-    res.status(201).json({
+    try {
+      await fs.promises.unlink(req.file.path);
+    } catch (cleanupError) {
+      console.warn('Failed to remove temp upload file:', cleanupError);
+    }
+
+    try {
+  const professionalName =
+    `${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim() ||
+    professional.user.email ||
+    'Unknown Professional';
+
+  const professionalEmail = professional.user.email || 'Not available';
+
+  if (!ADMIN_ALERT_EMAIL) {
+    console.error('Document upload email skipped: ADMIN_ALERT_EMAIL is not configured');
+  } else {
+    console.log('Sending document upload admin email', {
+      to: ADMIN_ALERT_EMAIL,
+      professionalId,
+      documentId: document.id,
+      category: document.category,
+      storageProvider: document.storageProvider,
+    });
+
+    await sendEmail({
+      to: ADMIN_ALERT_EMAIL,
+      subject: `Document uploaded for review: ${document.category}`,
+      html: `
+        <h2>Candidate document uploaded</h2>
+        <p><strong>Professional:</strong> ${professionalName}</p>
+        <p><strong>Email:</strong> ${professionalEmail}</p>
+        <p><strong>Document Name:</strong> ${document.name}</p>
+        <p><strong>Category:</strong> ${document.category}</p>
+        <p><strong>Status:</strong> ${document.status}</p>
+        <p><strong>Uploaded At:</strong> ${document.createdAt.toISOString()}</p>
+        <p><strong>Storage Provider:</strong> ${document.storageProvider}</p>
+        <p><strong>OneDrive Folder:</strong> ${document.oneDriveFolder || 'Not available'}</p>
+        <p><strong>OneDrive File:</strong> <a href="${document.oneDriveWebUrl || document.fileUrl}">${document.oneDriveWebUrl || document.fileUrl}</a></p>
+        ${
+          document.expiresAt
+            ? `<p><strong>Expires At:</strong> ${document.expiresAt.toISOString()}</p>`
+            : ''
+        }
+      `,
+      text: [
+        'Candidate document uploaded',
+        `Professional: ${professionalName}`,
+        `Email: ${professionalEmail}`,
+        `Document Name: ${document.name}`,
+        `Category: ${document.category}`,
+        `Status: ${document.status}`,
+        `Uploaded At: ${document.createdAt.toISOString()}`,
+        `Storage Provider: ${document.storageProvider}`,
+        `OneDrive Folder: ${document.oneDriveFolder || 'Not available'}`,
+        `OneDrive File: ${document.oneDriveWebUrl || document.fileUrl}`,
+        document.expiresAt ? `Expires At: ${document.expiresAt.toISOString()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    });
+
+    console.log('Document upload admin email sent', {
+      to: ADMIN_ALERT_EMAIL,
+      documentId: document.id,
+    });
+  }
+} catch (emailError) {
+  console.error('Document upload email notification failed:', emailError);
+}
+
+    return res.status(201).json({
       data: {
         id: document.id,
         name: document.name,
@@ -1603,12 +2672,16 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
         status: document.status,
         expiresAt: document.expiresAt,
         fileUrl: document.fileUrl,
+        storageProvider: document.storageProvider,
+        oneDriveItemId: document.oneDriveItemId,
+        oneDriveWebUrl: document.oneDriveWebUrl,
+        oneDriveFolder: document.oneDriveFolder,
         createdAt: document.createdAt,
       },
     });
   } catch (error) {
     console.error('POST /api/worker/documents/upload error:', error);
-    res.status(500).json({ error: 'Failed to upload document' });
+    return res.status(500).json({ error: 'Failed to upload document' });
   }
 });
 
@@ -2609,6 +3682,69 @@ const facilityDnrSchema = z.object({
   reason: z.string().optional(),
 });
 
+app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const shiftId = String(req.params.id);
+    const userId = req.authUser!.userId;
+
+    const facilityId = await getFacilityIdForUser(userId);
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: { requests: true },
+    });
+
+    if (!shift) {
+      return res.status(404).json({ error: 'Shift not found' });
+    }
+
+    if (shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // 🚫 Do NOT allow edits if already assigned
+    const hasApproved = shift.requests.some(r => r.status === 'APPROVED');
+
+    if (shift.status !== 'OPEN' || hasApproved) {
+      return res.status(400).json({
+        error: 'Cannot edit shift after approvals. Cancel and recreate instead.',
+      });
+    }
+
+    const {
+      date,
+      shiftType,
+      startTimeLabel,
+      endTimeLabel,
+      workersNeeded,
+      payRateCents,
+      specialInstructions,
+    } = req.body;
+
+    const updated = await prisma.shift.update({
+      where: { id: shiftId },
+      data: {
+        date: date ? new Date(`${String(date)}T12:00:00.000Z`) : undefined,
+	shiftType,
+        startTimeLabel,
+        endTimeLabel,
+        workersNeeded,
+        payRateCents,
+        specialInstructions,
+      },
+    });
+
+    return res.json({ data: updated });
+
+  } catch (error) {
+    console.error('PUT /api/facility/shifts/:id error:', error);
+    res.status(500).json({ error: 'Failed to update shift' });
+  }
+});
+
 app.post('/api/facility/dnr', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   const parsed = facilityDnrSchema.safeParse(req.body);
 
@@ -3073,8 +4209,8 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
 
     const facilityStatus = await ensureFacilityIsActive(facilityId);
     if (!facilityStatus.ok) {
-       clearAuthCookie(res);
-       return res.status(403).json({ error: facilityStatus.error });
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
     }
 
     const existingShift = await prisma.shift.findUnique({
@@ -3082,6 +4218,9 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
       select: {
         id: true,
         facilityId: true,
+        date: true,
+        startTimeLabel: true,
+        status: true,
       },
     });
 
@@ -3093,12 +4232,35 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
       return res.status(403).json({ error: 'Forbidden' });
     }
 
+    if (existingShift.status === 'CANCELLED') {
+      return res.json({
+        data: existingShift,
+      });
+    }
+
+    const shiftStart = buildShiftStartDate(existingShift.date, existingShift.startTimeLabel);
+    const now = new Date();
+    const diffMs = shiftStart.getTime() - now.getTime();
+    const fourHoursMs = 4 * 60 * 60 * 1000;
+
+    if (diffMs < fourHoursMs) {
+      return res.status(400).json({
+        error: 'Shifts cannot be cancelled within 4 hours of the start time. Please contact Wezen Staffing for assistance.',
+      });
+    }
+
     const updated = await prisma.shift.update({
       where: { id },
       data: {
         status: 'CANCELLED',
       },
     });
+
+    try {
+  await sendFacilityShiftCancelledEmail(updated.id);
+} catch (emailError) {
+  console.error('Facility shift cancelled email failed:', emailError);
+}
 
     res.json({ data: updated });
   } catch (error) {
@@ -3183,6 +4345,85 @@ app.get('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (_req: Aut
   }
 });
 
+app.delete('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = String(req.params.facilityId || '');
+
+    if (!facilityId) {
+      return res.status(400).json({ error: 'facilityId is required' });
+    }
+
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: { id: true, name: true },
+    });
+
+    if (!facility) {
+      return res.status(404).json({ error: 'Facility not found' });
+    }
+
+    const adminUsers = await prisma.facilityAdmin.findMany({
+      where: { facilityId },
+      select: { userId: true },
+    });
+
+    const shifts = await prisma.shift.findMany({
+      where: { facilityId },
+      select: { id: true },
+    });
+
+    const shiftIds = shifts.map((shift) => shift.id);
+    const adminUserIds = adminUsers.map((admin) => admin.userId);
+
+    await prisma.$transaction(async (tx) => {
+      if (shiftIds.length > 0) {
+        await tx.shiftRequest.deleteMany({
+          where: { shiftId: { in: shiftIds } },
+        });
+      }
+
+      await tx.facilityDnr.deleteMany({
+        where: { facilityId },
+      });
+
+      await tx.facilityRequirement.deleteMany({
+        where: { facilityId },
+      });
+
+      await tx.facilityInvite.deleteMany({
+        where: { facilityId },
+      });
+
+      await tx.shift.deleteMany({
+        where: { facilityId },
+      });
+
+      await tx.facilityAdmin.deleteMany({
+        where: { facilityId },
+      });
+
+      if (adminUserIds.length > 0) {
+        await tx.user.deleteMany({
+          where: { id: { in: adminUserIds } },
+        });
+      }
+
+      await tx.facility.delete({
+        where: { id: facilityId },
+      });
+    });
+
+    return res.json({
+      ok: true,
+      deletedFacilityId: facility.id,
+      deletedFacilityName: facility.name,
+    });
+  } catch (error) {
+    console.error('DELETE /api/admin/facilities/:facilityId error:', error);
+    return res.status(500).json({ error: 'Failed to delete facility' });
+  }
+});
+
 app.post('/api/admin/facility-invites', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const { facilityId, email, expiresAt } = req.body || {};
@@ -3211,6 +4452,47 @@ app.post('/api/admin/facility-invites', requireRole('INTERNAL_ADMIN'), async (re
         expiresAt: expiresAt ? new Date(String(expiresAt)) : null,
       },
     });
+
+    const activationLink = `https://wezenstaffing.com/signup/facility?invite=${invite.inviteCode}`;
+
+if (invite.email) {
+  try {
+    await sendEmail({
+      to: invite.email,
+      subject: `Wezen Staffing facility activation invite: ${facility.name}`,
+      html: `
+        <h2>Facility activation invite</h2>
+        <p>You have been invited to activate your facility admin account for <strong>${facility.name}</strong>.</p>
+        <p><strong>Invite Code:</strong> ${invite.inviteCode}</p>
+        <p><a href="${activationLink}">Activate Facility Account</a></p>
+        ${
+          invite.expiresAt
+            ? `<p><strong>Expires:</strong> ${invite.expiresAt.toLocaleString()}</p>`
+            : '<p>This invite does not currently have an expiration date.</p>'
+        }
+      `,
+      text: [
+        `Facility activation invite for ${facility.name}`,
+        `Invite Code: ${invite.inviteCode}`,
+        `Activation Link: ${activationLink}`,
+        invite.expiresAt ? `Expires: ${invite.expiresAt.toLocaleString()}` : 'No expiration date',
+      ].join('\n'),
+    });
+
+    console.log('Facility invite email sent:', {
+      facilityId: facility.id,
+      inviteId: invite.id,
+      to: invite.email,
+    });
+  } catch (emailError) {
+    console.error('Facility invite email failed:', {
+      facilityId: facility.id,
+      inviteId: invite.id,
+      to: invite.email,
+      error: emailError,
+    });
+  }
+}
 
     res.status(201).json({
       data: {
@@ -3676,6 +4958,278 @@ app.get('/api/admin/shift-requests', requireRole('INTERNAL_ADMIN'), async (_req:
   }
 });
 
+app.get('/api/facility/reports/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const startDateRaw = String(req.query.startDate || '');
+    const endDateRaw = String(req.query.endDate || '');
+
+    if (!startDateRaw || !endDateRaw) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const startDate = new Date(startDateRaw);
+    const endDate = new Date(endDateRaw);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid date range' });
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        facilityId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        facility: true,
+        requests: {
+          include: {
+            professional: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }],
+    });
+
+      const rows: any[] = [];
+
+      for (const shift of shifts) {
+      const approvedRequests = shift.requests.filter((r) => r.status === 'APPROVED');
+
+      if (approvedRequests.length === 0) {
+        rows.push(  
+	  {
+            shiftId: shift.id,
+            date: shift.date,
+            role: shift.role,
+            shiftType: shift.shiftType,
+            startTime: shift.startTimeLabel,
+            endTime: shift.endTimeLabel,
+            facilityName: shift.facility.name,
+            shiftStatus: shift.status,
+            requestStatus: 'NONE',
+            workerName: null,
+            workerEmail: null,
+            workerPhone: null,
+            completed: shift.status === 'COMPLETED',
+            payRateCents: shift.payRateCents,
+            specialInstructions: shift.specialInstructions,
+          },
+	  );
+  continue;
+}
+
+    for (const request of approvedRequests) {
+  rows.push({    
+	shiftId: shift.id,
+        date: shift.date,
+        role: shift.role,
+        shiftType: shift.shiftType,
+        startTime: shift.startTimeLabel,
+        endTime: shift.endTimeLabel,
+        facilityName: shift.facility.name,
+        shiftStatus: shift.status,
+        requestStatus: request.status,
+        workerName:
+          [request.professional.user.firstName, request.professional.user.lastName]
+            .filter(Boolean)
+            .join(' ') || null,
+        workerEmail: request.professional.user.email,
+        workerPhone: request.professional.user.phone,
+        completed: shift.status === 'COMPLETED',
+        payRateCents: shift.payRateCents,
+        specialInstructions: shift.specialInstructions,
+        });
+}
+}
+
+    const totalShifts = shifts.length;
+    const filledShifts = shifts.filter((s) => s.status === 'FILLED' || s.status === 'COMPLETED').length;
+    const completedShifts = shifts.filter((s) => s.status === 'COMPLETED').length;
+    const cancelledShifts = shifts.filter((s) => s.status === 'CANCELLED').length;
+    const unfilledShifts = shifts.filter((s) => s.status === 'UNFILLED').length;
+
+    return res.json({
+      data: {
+        summary: {
+          totalShifts,
+          filledShifts,
+          completedShifts,
+          cancelledShifts,
+          unfilledShifts,
+          fillRate:
+            totalShifts > 0
+              ? Math.round((filledShifts / totalShifts) * 10000) / 100
+              : 0,
+        },
+        rows,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/facility/reports/shifts error:', error);
+    return res.status(500).json({ error: 'Failed to build facility shift report' });
+  }
+});
+
+app.get('/api/facility/reports/shifts/export', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {  
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const startDateRaw = String(req.query.startDate || '');
+    const endDateRaw = String(req.query.endDate || '');
+
+    if (!startDateRaw || !endDateRaw) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const startDate = new Date(startDateRaw);
+    const endDate = new Date(endDateRaw);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid date range' });
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        facilityId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        facility: true,
+        requests: {
+          include: {
+            professional: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }],
+    });
+
+      const rows: any[] = [];
+
+      for (const shift of shifts) {
+      const approvedRequests = shift.requests.filter((r) => r.status === 'APPROVED');
+
+      if (approvedRequests.length === 0) {
+        rows.push( 
+          {
+            shiftId: shift.id,
+            date: shift.date,
+            role: shift.role,
+            shiftType: shift.shiftType,
+            startTime: shift.startTimeLabel,
+            endTime: shift.endTimeLabel,
+            facilityName: shift.facility.name,
+            shiftStatus: shift.status,
+            requestStatus: 'NONE',
+            workerName: null,
+            workerEmail: null,
+            workerPhone: null,
+            completed: shift.status === 'COMPLETED',
+            payRateCents: shift.payRateCents,
+            specialInstructions: shift.specialInstructions,
+          },
+          );
+  continue;
+}
+
+    for (const request of approvedRequests) {
+  rows.push({   
+        shiftId: shift.id,
+        date: shift.date,
+        role: shift.role,
+        shiftType: shift.shiftType,
+        startTime: shift.startTimeLabel,
+        endTime: shift.endTimeLabel,
+        facilityName: shift.facility.name,
+        shiftStatus: shift.status,
+        requestStatus: request.status,
+        workerName:
+          [request.professional.user.firstName, request.professional.user.lastName]
+            .filter(Boolean)
+            .join(' ') || null,
+        workerEmail: request.professional.user.email,
+        workerPhone: request.professional.user.phone,
+        completed: shift.status === 'COMPLETED',
+        payRateCents: shift.payRateCents,
+        specialInstructions: shift.specialInstructions,
+        });
+}
+}
+
+const csvHeader = [
+  'Date',
+  'Role',
+  'Shift Type',
+  'Start Time',
+  'End Time',
+  'Worker Name',
+  'Worker Email',
+  'Status',
+  'Completed',
+  'Pay Rate',
+];
+
+const csvRows = rows.map((r) => [
+  new Date(r.date).toLocaleDateString(),
+  r.role,
+  r.shiftType,
+  r.startTime,
+  r.endTime,
+  r.workerName || '',
+  r.workerEmail || '',
+  r.shiftStatus,
+  r.completed ? 'YES' : 'NO',
+  r.payRateCents ? (r.payRateCents / 100).toFixed(2) : '',
+]);
+
+const csv = [
+  csvHeader.join(','),
+  ...csvRows.map((row) =>
+    row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(',')
+  ),
+].join('\n');
+
+res.setHeader('Content-Type', 'text/csv');
+res.setHeader(
+  'Content-Disposition',
+  `attachment; filename="facility-shift-report.csv"`
+);
+
+return res.send(csv);
+  } catch (error) {
+    console.error('GET /api/facility/reports/shifts/export error:', error);
+    return res.status(500).json({ error: 'Failed to export facility shift report' });
+  }
+});
+
 app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
@@ -4091,6 +5645,17 @@ app.get('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
       return res.status(403).json({ error: facilityStatus.error });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        notificationEmail: true,
+      },
+    });
+
     const facility = await prisma.facility.findUnique({
       where: { id: facilityId },
       select: {
@@ -4100,6 +5665,8 @@ app.get('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         city: true,
         state: true,
         zipCode: true,
+        contactEmail: true,
+        contactPhone: true,
         defaultCnaRateCents: true,
         defaultLvnRateCents: true,
         defaultRnRateCents: true,
@@ -4111,7 +5678,16 @@ app.get('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
       return res.status(404).json({ error: 'Facility not found' });
     }
 
-    res.json({ data: facility });
+    res.json({
+      data: {
+        ...facility,
+        firstName: user?.firstName || null,
+        lastName: user?.lastName || null,
+        email: user?.email || null,
+        phone: user?.phone || null,
+        notificationEmail: user?.notificationEmail || null,
+      },
+    });
   } catch (error) {
     console.error('GET /api/facility/settings error:', error);
     res.status(500).json({ error: 'Failed to fetch facility settings' });
@@ -4139,7 +5715,7 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
       return res.status(403).json({ error: facilityStatus.error });
     }
 
-    const updated = await prisma.facility.update({
+    const facility = await prisma.facility.update({
       where: { id: facilityId },
       data: {
         name: parsed.data.name,
@@ -4147,26 +5723,46 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         city: parsed.data.city,
         state: parsed.data.state,
         zipCode: parsed.data.zipCode,
+        contactEmail: parsed.data.contactEmail,
+        contactPhone: parsed.data.contactPhone,
         defaultCnaRateCents: parsed.data.defaultCnaRateCents ?? null,
         defaultLvnRateCents: parsed.data.defaultLvnRateCents ?? null,
         defaultRnRateCents: parsed.data.defaultRnRateCents ?? null,
         allowRateOverride: parsed.data.allowRateOverride ?? false,
       },
-      select: {
-        id: true,
-        name: true,
-        facilityType: true,
-        city: true,
-        state: true,
-        zipCode: true,
-        defaultCnaRateCents: true,
-        defaultLvnRateCents: true,
-        defaultRnRateCents: true,
-        allowRateOverride: true,
+    });
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: parsed.data.firstName ?? null,
+        lastName: parsed.data.lastName ?? null,
+        phone: parsed.data.phone ?? null,
+        notificationEmail: parsed.data.notificationEmail ?? null,
       },
     });
 
-    res.json({ data: updated });
+    res.json({
+      data: {
+        id: facility.id,
+        name: facility.name,
+        facilityType: facility.facilityType,
+        city: facility.city,
+        state: facility.state,
+        zipCode: facility.zipCode,
+        contactEmail: facility.contactEmail,
+        contactPhone: facility.contactPhone,
+        defaultCnaRateCents: facility.defaultCnaRateCents,
+        defaultLvnRateCents: facility.defaultLvnRateCents,
+        defaultRnRateCents: facility.defaultRnRateCents,
+        allowRateOverride: facility.allowRateOverride,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        notificationEmail: user.notificationEmail,
+      },
+    });
   } catch (error) {
     console.error('PUT /api/facility/settings error:', error);
     res.status(500).json({ error: 'Failed to update facility settings' });
@@ -4458,56 +6054,519 @@ app.post('/api/admin/change-password', requireRole('INTERNAL_ADMIN'), async (req
   }
 });
 
-app.get('/api/documents/:id/download', requireAuth, async (req: AuthedRequest, res) => {
+app.get('/api/documents/:id/view', requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const documentId = String(req.params.id);
+    const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
     const role = req.authUser!.role;
 
-    const doc = await prisma.professionalDocument.findUnique({
-      where: { id: documentId },
+    const access = await canUserAccessDocument(userId, role, id);
+
+    if (!access.ok || !access.document) {
+      return res
+        .status(access.error === 'Document not found' ? 404 : 403)
+        .json({ error: access.error });
+    }
+
+    const doc = access.document;
+
+    if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
+      const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
+
+      if (doc.mimeType) {
+        res.setHeader('Content-Type', doc.mimeType);
+      } else {
+        res.setHeader('Content-Type', 'application/octet-stream');
+      }
+
+      res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+      return res.send(fileBuffer);
+    }
+
+    const filePath = getUploadsFilePathFromUrl(doc.fileUrl);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error('GET /api/documents/:id/view error:', error);
+    return res.status(500).json({ error: 'Failed to view document' });
+  }
+});
+
+app.get('/api/documents/:id/download', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const role = req.authUser!.role;
+
+    const access = await canUserAccessDocument(userId, role, id);
+
+    if (!access.ok || !access.document) {
+      return res
+        .status(access.error === 'Document not found' ? 404 : 403)
+        .json({ error: access.error });
+    }
+
+    const doc = access.document;
+
+    if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
+      const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
+
+      if (doc.mimeType) {
+        res.setHeader('Content-Type', doc.mimeType);
+      } else {
+        res.setHeader('Content-Type', 'application/octet-stream');
+      }
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeDownloadName({
+          category: doc.category,
+          id: doc.id,
+          name: doc.name,
+          mimeType: doc.mimeType,
+        })}"`
+      );
+
+      return res.send(fileBuffer);
+    }
+
+    const filePath = getUploadsFilePathFromUrl(doc.fileUrl);
+
+    console.log('Document download debug', {
+      documentId: doc.id,
+      fileUrl: doc.fileUrl,
+      filePath,
+      exists: fs.existsSync(filePath),
+      storageProvider: doc.storageProvider,
+      oneDriveItemId: doc.oneDriveItemId,
+    });
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+
+    return res.download(filePath, doc.name);
+  } catch (error) {
+    console.error('GET /api/documents/:id/download error:', error);
+    return res.status(500).json({ error: 'Failed to download document' });
+  }
+});
+
+app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const workerId = String(req.params.workerId || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: workerId },
       include: {
-        professional: {
+        user: true,
+        requests: {
           include: {
-            requests: {
-              include: {
-                shift: true,
+            shift: {
+              select: {
+                facilityId: true,
               },
             },
           },
         },
+        documents: {
+          orderBy: [{ createdAt: 'desc' }],
+        },
       },
     });
 
-    if (!doc) {
-      return res.status(404).json({ error: 'Document not found' });
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
     }
 
-    // ✅ ADMIN can access everything
-    if (role === 'INTERNAL_ADMIN') {
-      return res.redirect(doc.fileUrl);
+    const belongsToFacility = worker.requests.some(
+      (request) => request.shift.facilityId === facilityId
+    );
+
+    if (!belongsToFacility) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
-    // ✅ FACILITY can access only if worker is tied to them
-    if (role === 'FACILITY_ADMIN') {
-      const facilityId = await getFacilityIdForUser(userId);
+    if (!worker.documents.length) {
+      return res.status(404).json({ error: 'No documents found' });
+    }
 
-      const hasAccess = doc.professional.requests.some(
-        (r) => r.shift.facilityId === facilityId
-      );
+    const fullName =
+      [worker.user.firstName, worker.user.lastName].filter(Boolean).join('_') ||
+      worker.user.email ||
+      'worker';
 
-      if (!hasAccess) {
-        return res.status(403).json({ error: 'Forbidden' });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${fullName}_documents.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('error', (err: Error) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    for (const doc of worker.documents) {
+  try {
+    if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
+      const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
+      archive.append(fileBuffer, { name: safeDownloadName(doc) });
+      continue;
+    }
+
+    const filePath = getUploadsFilePathFromUrl(doc.fileUrl);
+
+    console.log('ZIP document debug', {
+      docId: doc.id,
+      name: doc.name,
+      fileUrl: doc.fileUrl,
+      filePath,
+      exists: fs.existsSync(filePath),
+      storageProvider: doc.storageProvider,
+      oneDriveItemId: doc.oneDriveItemId,
+    });
+
+    if (fs.existsSync(filePath)) {
+      archive.file(filePath, { name: safeDownloadName(doc) });
+    }
+  } catch (docError) {
+    console.error('Facility ZIP document failed:', {
+      docId: doc.id,
+      name: doc.name,
+      error: docError,
+    });
+  }
+}
+
+await archive.finalize();
+  } catch (error) {
+    console.error('GET /api/facility/workers/:workerId/documents/download-all error:', error);
+    return res.status(500).json({ error: 'Failed to download all documents' });
+  }
+});
+
+app.get('/api/admin/workers/:professionalId/documents/download-all', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: true,
+        documents: {
+          orderBy: [{ createdAt: 'desc' }],
+        },
+      },
+    });
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    if (!worker.documents.length) {
+      return res.status(404).json({ error: 'No documents found' });
+    }
+
+    const fullName =
+      [worker.user.firstName, worker.user.lastName].filter(Boolean).join('_') ||
+      worker.user.email ||
+      'worker';
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${fullName}_documents.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('error', (err: Error) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    for (const doc of worker.documents) {
+  try {
+    if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
+      const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
+      archive.append(fileBuffer, { name: safeDownloadName(doc) });
+      continue;
+    }
+
+    const filePath = getUploadsFilePathFromUrl(doc.fileUrl);
+
+    console.log('ZIP document debug', {
+      docId: doc.id,
+      name: doc.name,
+      fileUrl: doc.fileUrl,
+      filePath,
+      exists: fs.existsSync(filePath),
+      storageProvider: doc.storageProvider,
+      oneDriveItemId: doc.oneDriveItemId,
+    });
+
+    if (fs.existsSync(filePath)) {
+      archive.file(filePath, { name: safeDownloadName(doc) });
+    }
+  } catch (docError) {
+    console.error('Admin ZIP document failed:', {
+      docId: doc.id,
+      name: doc.name,
+      error: docError,
+    });
+  }
+}
+await archive.finalize();
+  } catch (error) {
+    console.error('GET /api/admin/workers/:professionalId/documents/download-all error:', error);
+    return res.status(500).json({ error: 'Failed to download all documents' });
+  }
+});
+app.get('/api/admin/test-onedrive', requireRole('INTERNAL_ADMIN'), async (_req: AuthedRequest, res) => {
+  try {
+    const drive = await getOneDriveInfo();
+    const rootChildren = await listOneDriveRootChildren();
+
+    return res.json({
+      ok: true,
+      drive: {
+        id: drive.id,
+        driveType: drive.driveType,
+        owner: drive.owner,
+        webUrl: drive.webUrl,
+      },
+      rootChildrenCount: Array.isArray(rootChildren?.value) ? rootChildren.value.length : 0,
+      rootChildren: Array.isArray(rootChildren?.value)
+        ? rootChildren.value.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            folder: Boolean(item.folder),
+            file: Boolean(item.file),
+          }))
+        : [],
+    });
+  } catch (error) {
+    console.error('GET /api/admin/test-onedrive error:', error);
+
+    const message =
+      error instanceof Error ? error.message : 'Failed to connect to OneDrive';
+
+    return res.status(500).json({
+      ok: false,
+      error: message,
+    });
+  }
+});
+
+app.post('/api/internal/jobs/send-shift-reminders', async (req, res) => {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!process.env.REMINDER_JOB_TOKEN || token !== process.env.REMINDER_JOB_TOKEN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const now = new Date();
+
+    const tomorrowStart = new Date(now);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    tomorrowStart.setHours(0, 0, 0, 0);
+
+    const tomorrowEnd = new Date(tomorrowStart);
+    tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+    const approvedRequests = await prisma.shiftRequest.findMany({
+      where: {
+        status: 'APPROVED',
+        shift: {
+          status: {
+	     in: ['OPEN', 'FILLED']
+            },
+          date: {
+            gte: tomorrowStart,
+            lt: tomorrowEnd,
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    let sent = 0;
+
+    for (const request of approvedRequests) {
+      try {
+        await sendWorkerShiftReminderEmail(request.id);
+        sent += 1;
+      } catch (error) {
+        console.error('Reminder send failed for request', request.id, error);
       }
-
-      return res.redirect(doc.fileUrl);
     }
 
-    return res.status(403).json({ error: 'Forbidden' });
+    return res.json({
+      ok: true,
+      reminderCount: approvedRequests.length,
+      sent,
+    });
+  } catch (error) {
+    console.error('POST /api/internal/jobs/send-shift-reminders error:', error);
+    return res.status(500).json({ error: 'Failed to send shift reminders' });
+  }
+});
 
-  } catch (err) {
-    console.error('Download doc error:', err);
-    res.status(500).json({ error: 'Failed to download document' });
+async function autoCompleteShifts() {
+  const now = new Date();
+
+  const shifts = await prisma.shift.findMany({
+    where: {
+      status: 'FILLED',
+      date: {
+        lt: now,
+      },
+    },
+  });
+
+  for (const shift of shifts) {
+    await prisma.shift.update({
+      where: { id: shift.id },
+      data: { status: 'COMPLETED' },
+    });
+  }
+
+  console.log(`Auto-completed ${shifts.length} shifts`);
+}
+
+async function autoMarkUnfilledShifts() {
+  const now = new Date();
+
+  const shifts = await prisma.shift.findMany({
+    where: {
+      status: 'OPEN',
+      date: {
+        lt: now,
+      },
+    },
+  });
+
+  for (const shift of shifts) {
+    await prisma.shift.update({
+      where: { id: shift.id },
+      data: { status: 'UNFILLED' },
+    });
+  }
+
+  console.log(`Auto-marked ${shifts.length} shifts as UNFILLED`);
+}
+
+setInterval(() => {
+  autoCompleteShifts().catch((error) => {
+    console.error('autoCompleteShifts interval error:', error);
+  });
+
+  autoMarkUnfilledShifts().catch((error) => {
+    console.error('autoMarkUnfilledShifts interval error:', error);
+  });
+}, 10 * 60 * 1000);
+
+async function sendDocumentExpirationAlerts() {
+  const now = new Date();
+
+  const thirtyDaysFromNow = new Date(now);
+  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+  const expiringDocs = await prisma.professionalDocument.findMany({
+    where: {
+      expiresAt: {
+        gte: now,
+        lte: thirtyDaysFromNow,
+      },
+      status: {
+        in: ['PENDING', 'APPROVED'],
+      },
+    },
+    include: {
+      professional: {
+        include: {
+          user: true,
+        },
+      },
+    },
+    orderBy: [{ expiresAt: 'asc' }],
+  });
+
+  let sent = 0;
+
+  for (const doc of expiringDocs) {
+    const email = doc.professional.user.email;
+
+    if (!email || !doc.expiresAt) continue;
+
+    try {
+      await sendEmail({
+        to: email,
+        subject: `Document expiring soon: ${doc.category}`,
+        html: `
+          <h2>Document expiring soon</h2>
+          <p>Your document is expiring soon and may need to be renewed.</p>
+          <p><strong>Document:</strong> ${doc.name}</p>
+          <p><strong>Category:</strong> ${doc.category}</p>
+          <p><strong>Expiration Date:</strong> ${doc.expiresAt.toLocaleDateString()}</p>
+          <p>Please log in to your Wezen Staffing account and upload an updated document.</p>
+        `,
+        text: [
+          'Document expiring soon',
+          `Document: ${doc.name}`,
+          `Category: ${doc.category}`,
+          `Expiration Date: ${doc.expiresAt.toLocaleDateString()}`,
+          'Please log in to your Wezen Staffing account and upload an updated document.',
+        ].join('\n'),
+      });
+
+      sent += 1;
+    } catch (error) {
+      console.error('Document expiration email failed:', {
+        documentId: doc.id,
+        professionalId: doc.professionalId,
+        error,
+      });
+    }
+  }
+
+  return {
+    checked: expiringDocs.length,
+    sent,
+  };
+}
+
+app.post('/api/internal/jobs/send-document-expiration-alerts', async (req, res) => {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!process.env.REMINDER_JOB_TOKEN || token !== process.env.REMINDER_JOB_TOKEN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await sendDocumentExpirationAlerts();
+
+    return res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error('POST /api/internal/jobs/send-document-expiration-alerts error:', error);
+    return res.status(500).json({ error: 'Failed to send document expiration alerts' });
   }
 });
 

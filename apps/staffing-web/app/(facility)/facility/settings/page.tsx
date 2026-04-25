@@ -11,10 +11,17 @@ type FacilitySettings = {
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   defaultCnaRateCents?: number | null;
   defaultLvnRateCents?: number | null;
   defaultRnRateCents?: number | null;
   allowRateOverride: boolean;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notificationEmail?: string | null;
 };
 
 export default function FacilitySettingsPage() {
@@ -24,6 +31,12 @@ export default function FacilitySettingsPage() {
 
   const [name, setName] = useState('');
   const [facilityType, setFacilityType] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
@@ -45,6 +58,12 @@ export default function FacilitySettingsPage() {
     setCity(data.city || '');
     setState(data.state || '');
     setZipCode(data.zipCode || '');
+    setContactEmail(data.contactEmail || '');
+    setContactPhone(data.contactPhone || '');
+    setFirstName(data.firstName || '');
+    setLastName(data.lastName || '');
+    setPhone(data.phone || '');
+    setNotificationEmail(data.notificationEmail || '');
     setDefaultCnaRateDollars(
       data.defaultCnaRateCents != null ? (data.defaultCnaRateCents / 100).toFixed(2) : ''
     );
@@ -87,6 +106,12 @@ export default function FacilitySettingsPage() {
           city,
           state,
           zipCode,
+          contactEmail: contactEmail || null,
+	  contactPhone: contactPhone || null,
+	  firstName: firstName || null,
+	  lastName: lastName || null,
+	  phone: phone || null,
+	  notificationEmail: notificationEmail || null,
           defaultCnaRateCents: defaultCnaRateDollars
             ? Math.round(Number(defaultCnaRateDollars) * 100)
             : null,
@@ -184,6 +209,72 @@ async function changePassword() {
         </div>
       ) : null}
 
+	<section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+  <h2 className="text-xl font-bold tracking-tight text-slate-950">
+    Facility admin profile
+  </h2>
+  <p className="mt-2 text-sm text-slate-600">
+    Update the contact information for the facility admin account.
+  </p>
+
+  <div className="mt-6 grid gap-4 md:grid-cols-2">
+    <div>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        First name
+      </label>
+      <input
+        value={firstName}
+        onChange={(e) => setFirstName(e.target.value)}
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+      />
+    </div>
+
+    <div>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        Last name
+      </label>
+      <input
+        value={lastName}
+        onChange={(e) => setLastName(e.target.value)}
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+      />
+    </div>
+
+    <div>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        Login email
+      </label>
+      <input
+        value={settings.email || ''}
+        disabled
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500"
+      />
+    </div>
+
+    <div>
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        Phone
+      </label>
+      <input
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+      />
+    </div>
+
+    <div className="md:col-span-2">
+      <label className="mb-2 block text-sm font-medium text-slate-700">
+        Notification email
+      </label>
+      <input
+        value={notificationEmail}
+        onChange={(e) => setNotificationEmail(e.target.value)}
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+      />
+    </div>
+  </div>
+</section>
+
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold tracking-tight text-slate-950">
           Facility profile
@@ -244,6 +335,28 @@ async function changePassword() {
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
             />
           </div>
+  
+	   <div>
+  <label className="mb-2 block text-sm font-medium text-slate-700">
+    Facility contact email
+  </label>
+  <input
+    value={contactEmail}
+    onChange={(e) => setContactEmail(e.target.value)}
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+  />
+</div>
+
+<div>
+  <label className="mb-2 block text-sm font-medium text-slate-700">
+    Facility contact phone
+  </label>
+  <input
+    value={contactPhone}
+    onChange={(e) => setContactPhone(e.target.value)}
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+  />
+</div>
         </div>
       </section>
 

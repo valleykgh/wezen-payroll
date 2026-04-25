@@ -14,6 +14,9 @@ export function ProfessionalSignupForm() {
     lastName: '',
     email: '',
     password: '',
+    phone: '',
+    addressLine1: '',
+    addressLine2: '',
     role: 'LVN',
     city: '',
     state: '',
@@ -37,6 +40,9 @@ export function ProfessionalSignupForm() {
         password: form.password,
         firstName: form.firstName,
         lastName: form.lastName,
+        phone: form.phone || undefined,
+        addressLine1: form.addressLine1 || undefined,
+        addressLine2: form.addressLine2 || undefined,  
         role: form.role as 'CNA' | 'LVN' | 'RN',
         city: form.city || undefined,
         state: form.state || undefined,
@@ -108,6 +114,30 @@ export function ProfessionalSignupForm() {
             required
           />
         </FormField>
+
+	<FormField label="Phone number" htmlFor="phone">
+  <TextInput
+    id="phone"
+    value={form.phone}
+    onChange={(e) => update('phone', e.target.value)}
+  />
+</FormField>
+
+	<FormField label="Address line 1" htmlFor="addressLine1">
+  <TextInput
+    id="addressLine1"
+    value={form.addressLine1}
+    onChange={(e) => update('addressLine1', e.target.value)}
+  />
+</FormField>
+
+<FormField label="Address line 2" htmlFor="addressLine2">
+  <TextInput
+    id="addressLine2"
+    value={form.addressLine2}
+    onChange={(e) => update('addressLine2', e.target.value)}
+  />
+</FormField>	
 
         <FormField label="Role" htmlFor="role">
           <SelectInput

@@ -44,6 +44,12 @@ type ShiftDetail = {
   }>;
 };
 
+function formatShiftDate(dateValue: string) {
+  const dateOnly = dateValue.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 export default function FacilityShiftDetailPage({
   params,
 }: {
@@ -105,6 +111,50 @@ export default function FacilityShiftDetailPage({
       setBusyId(null);
     }
   }
+
+  async function updateCancellationRequest(
+  requestId: string,
+  action: 'approve-cancellation' | 'deny-cancellation'
+) {
+  try {
+    setBusyId(requestId);
+    setMessage('');
+
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
+      {
+        method: 'POST',
+        credentials: 'include',
+      }
+    );
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(
+        text ||
+          (action === 'approve-cancellation'
+            ? 'Failed to approve cancellation request'
+            : 'Failed to deny cancellation request')
+      );
+    }
+
+    if (shiftId) {
+      await load(shiftId);
+    }
+
+    setMessage(
+      action === 'approve-cancellation'
+        ? 'Cancellation request approved successfully.'
+        : 'Cancellation request denied successfully.'
+    );
+  } catch (error) {
+    setMessage(
+      error instanceof Error ? error.message : 'Failed to update cancellation request'
+    );
+  } finally {
+    setBusyId(null);
+  }
+}
 
   async function updateShift(action: 'close' | 'reopen' | 'cancel') {
     try {
@@ -173,8 +223,8 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
               {detail.role} • {detail.shiftType}
             </h1>
             <p className="mt-2 text-slate-600">
-              {new Date(detail.date).toLocaleDateString()} • {detail.time}
-            </p>
+            {formatShiftDate(detail.date)}
+	    </p>
           </div>
 
           <Link
@@ -302,17 +352,17 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-3">
                           <div className="text-lg font-bold text-slate-950">{fullName}</div>
-                          <StatusBadge
-                            label={request.status}
-                            tone={
-                              request.status === 'APPROVED'
-                                ? 'success'
-                                : request.status === 'REJECTED'
-                                  ? 'danger'
-                                  : 'warning'
-                            }
-                          />
-                          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                           <StatusBadge
+  label={request.status}
+  tone={
+    request.status === 'APPROVED'
+      ? 'success'
+      : request.status === 'REJECTED' || request.status === 'CANCELLED'
+        ? 'danger'
+        : 'warning'
+  }
+/>
+			  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                             {request.professional.role}
                           </div>
                         </div>
@@ -342,44 +392,73 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
                         </div>
                       </div>
 
-                      <div className="flex w-full flex-col gap-3 lg:w-56">
-                        <Link
-                          href={`/facility/applicants/${request.id}`}
-                          className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                        >
-                          Review Applicant
-                        </Link>
+                     <div className="flex w-full flex-col gap-3 lg:w-56">
+  <Link
+    href={`/facility/applicants/${request.id}`}
+    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+  >
+    Review Applicant
+  </Link>
 
-                        <button
-                          onClick={() => updateRequest(request.id, 'approve')}
-                          disabled={
-  busyId === request.id ||
-  request.status === 'APPROVED' ||
-  detail.status !== 'OPEN' ||
-  isShiftFull
-}
-			  className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
-                        >
-                        
-			{busyId === request.id
-  ? 'Working...'
-  : request.status === 'APPROVED'
-    ? 'Approved'
-    : isShiftFull
-      ? 'Shift Full'
-      : 'Approve'}			
+  {request.status === 'CANCELLATION_REQUESTED' ? (
+    <>
+      <button
+        onClick={() => updateCancellationRequest(request.id, 'approve-cancellation')}
+        disabled={busyId === request.id}
+        className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+      >
+        {busyId === request.id ? 'Working...' : 'Approve Cancellation'}
+      </button>
 
-			</button>
+      <button
+        onClick={() => updateCancellationRequest(request.id, 'deny-cancellation')}
+        disabled={busyId === request.id}
+        className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+      >
+        {busyId === request.id ? 'Working...' : 'Deny Cancellation'}
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        onClick={() => updateRequest(request.id, 'approve')}
+        disabled={
+          busyId === request.id ||
+          request.status === 'APPROVED' ||
+          request.status === 'REJECTED' ||
+          request.status === 'CANCELLED' ||
+          request.status === 'CANCELLATION_REQUESTED' ||
+          detail.status !== 'OPEN' ||
+          isShiftFull
+        }
+        className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+      >
+        {busyId === request.id
+          ? 'Working...'
+          : request.status === 'APPROVED'
+            ? 'Approved'
+            : isShiftFull
+              ? 'Shift Full'
+              : 'Approve'}
+      </button>
 
-                        <button
-                          onClick={() => updateRequest(request.id, 'reject')}
-                          disabled={busyId === request.id || request.status === 'REJECTED' || detail.status !== 'OPEN'}
-                          className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-                        >
-                          {busyId === request.id ? 'Working...' : 'Reject'}
-                        </button>
-                      </div>
-                    </div>
+      <button
+        onClick={() => updateRequest(request.id, 'reject')}
+        disabled={
+          busyId === request.id ||
+          request.status === 'REJECTED' ||
+          request.status === 'CANCELLED' ||
+          request.status === 'CANCELLATION_REQUESTED' ||
+          detail.status !== 'OPEN'
+        }
+        className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+      >
+        {busyId === request.id ? 'Working...' : 'Reject'}
+      </button>
+    </>
+  )}
+</div> 
+		   </div>
                   </div>
                 );
               })
