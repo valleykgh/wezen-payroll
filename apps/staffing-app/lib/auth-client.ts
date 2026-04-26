@@ -6,21 +6,23 @@ export type StaffingUserRole =
   | 'INTERNAL_ADMIN';
 
 export type StaffingUser = {
-  id: string;
-  email: string;
+  id?: string;
+  userId?: string;
+  email?: string;
   role: StaffingUserRole;
   professionalId?: string | null;
   facilityId?: string | null;
   facilityName?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  token?: string;
 };
 
 export type AuthMeResponse = {
   data: {
     userId: string;
     email: string;
-    role: 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN';
+    role: StaffingUserRole;
     employeeId?: string | null;
     facilityId?: string | null;
     facilityName?: string | null;
@@ -34,6 +36,16 @@ export type AuthMeResponse = {
 export type LoginResponse = {
   data: StaffingUser;
 };
+
+export function getAuthToken() {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem('wezen_auth_token');
+}
+
+export function clearAuthToken() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem('wezen_auth_token');
+}
 
 async function parseResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -55,14 +67,27 @@ export async function loginRequest(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
 
-return parseResponse<LoginResponse>(res);
+  const parsed = await parseResponse<LoginResponse>(res);
+
+  if (parsed.data.token && typeof window !== 'undefined') {
+    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+  }
+
+  return parsed;
 }
 
 export async function logoutRequest() {
+  const token = getAuthToken();
+
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/logout`, {
     method: 'POST',
     credentials: 'include',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
+
+  clearAuthToken();
 
   if (!res.ok) {
     throw new Error('Logout failed');
@@ -70,14 +95,20 @@ export async function logoutRequest() {
 }
 
 export async function meRequest(): Promise<AuthMeResponse> {
+  const token = getAuthToken();
+
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/me`, {
     method: 'GET',
     credentials: 'include',
     cache: 'no-store',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
 
   return parseResponse<AuthMeResponse>(res);
 }
+
 export async function registerProfessionalRequest(payload: {
   email: string;
   password: string;
@@ -100,7 +131,13 @@ export async function registerProfessionalRequest(payload: {
     body: JSON.stringify(payload),
   });
 
-return parseResponse<any>(res);
+  const parsed = await parseResponse<any>(res);
+
+  if (parsed?.data?.token && typeof window !== 'undefined') {
+    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+  }
+
+  return parsed;
 }
 
 export async function registerFacilityRequest(payload: {
@@ -119,5 +156,11 @@ export async function registerFacilityRequest(payload: {
     body: JSON.stringify(payload),
   });
 
-return parseResponse<any>(res);
+  const parsed = await parseResponse<any>(res);
+
+  if (parsed?.data?.token && typeof window !== 'undefined') {
+    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+  }
+
+  return parsed;
 }

@@ -1,6 +1,12 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-local-dev-key';
+function getJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET is not configured');
+    }
+    return secret;
+}
 const COOKIE_NAME = 'wezen_auth';
 export async function hashPassword(password) {
     return bcrypt.hash(password, 10);
@@ -9,7 +15,7 @@ export async function verifyPassword(password, hash) {
     return bcrypt.compare(password, hash);
 }
 export function signAuthToken(payload) {
-    return jwt.sign(payload, JWT_SECRET, {
+    return jwt.sign(payload, getJwtSecret(), {
         expiresIn: '7d',
     });
 }
@@ -39,7 +45,7 @@ export function readAuthToken(req) {
 }
 export function verifyAuthToken(token) {
     try {
-        return jwt.verify(token, JWT_SECRET);
+        return jwt.verify(token, getJwtSecret());
     }
     catch {
         return null;

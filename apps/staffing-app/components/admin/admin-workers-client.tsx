@@ -42,6 +42,13 @@ export function AdminWorkersClient() {
       setLoading(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   useEffect(() => {
     loadWorkers();
@@ -74,7 +81,7 @@ export function AdminWorkersClient() {
           'Unnamed worker';
 
         return (
-          <Link href={`/app/admin/workers/${worker.id}`} key={worker.id} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <Link href={`/app/admin/worker-detail/index.html?professionalId=${worker.id}`} key={worker.id} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">

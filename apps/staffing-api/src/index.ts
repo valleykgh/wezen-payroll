@@ -27,7 +27,6 @@ import {
 } from './auth.js';
 
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
-import testEmailRoutes from "./routes/testEmail.js";
 import { sendEmail } from './services/email.js';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren,downloadOneDriveFileBuffer } from './services/onedrive.js';
@@ -599,22 +598,38 @@ async function getWorkerEligibility(professionalId: string) {
     reasons.push('Independent Contractor Agreement must be signed before requesting shifts');
   }
 
-  const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
+  const documentsByCategory = new Map<string, (typeof profile.documents)[number]>(profile.documents.map((doc) => [String(doc.category), doc]));
 
-  for (const category of requiredCategories) {
-    const doc = profile.documents.find((item) => item.category === category);
+  const requiredDocumentGroups = [
+    { label: 'LICENSE', categories: ['LICENSE'] },
+    { label: 'CPR', categories: ['CPR'] },
+    { label: 'PHYSICAL', categories: ['PHYSICAL'] },
+    { label: 'TB_REPORT', categories: ['TB_REPORT', 'TB_TEST'] },
+    { label: 'ID', categories: ['ID', 'STATE_ID'] },
+  ];
+
+  for (const group of requiredDocumentGroups) {
+    const doc = group.categories
+      .map((category) => documentsByCategory.get(category))
+      .find(Boolean);
 
     if (!doc) {
-      reasons.push(`Missing required document: ${category}`);
+      reasons.push(`Missing required document: ${group.label}`);
       continue;
     }
 
     if (doc.status === 'REJECTED') {
-      reasons.push(`Rejected required document: ${category}`);
+      reasons.push(`Rejected required document: ${group.label}`);
+      continue;
     }
 
-    if (doc.status === 'EXPIRED') {
-      reasons.push(`Expired required document: ${category}`);
+    if (doc.status === 'EXPIRED' || (doc.expiresAt && doc.expiresAt < new Date())) {
+      reasons.push(`Expired required document: ${group.label}`);
+      continue;
+    }
+
+    if (doc.status !== 'APPROVED') {
+      reasons.push(`Required document pending approval: ${group.label}`);
     }
   }
 
@@ -935,6 +950,9 @@ const allowedOrigins = [
   process.env.FRONTEND_URL_WWW || '',
   process.env.FRONTEND_URL_APP || '',
   'http://localhost:3005',
+  'http://localhost:3010',
+  'capacitor://localhost',
+  'ionic://localhost',
   'https://wezenstaffing.com',
   'https://www.wezenstaffing.com',
 ].filter(Boolean);
@@ -950,9 +968,13 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      console.warn(`CORS blocked for origin: ${origin}`);
+      return callback(null, false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -960,7 +982,6 @@ app.use(express.json());
 app.use(cookieParser());
 app.use('/uploads', express.static(uploadsDir));
 app.use(cookieParser());
-app.use("/api", testEmailRoutes);
 
 app.get('/health', async (_req, res) => {
   res.json({ status: 'ok', service: 'staffing-api' });
@@ -1112,6 +1133,7 @@ app.post('/api/auth/register-professional', async (req, res) => {
         userId: user.id,
         role: user.role,
         professionalId: professional?.id ?? null,
+        token,
       },
     });
   } catch (error) {
@@ -1216,6 +1238,7 @@ app.post('/api/auth/register-facility', async (req, res) => {
         userId: user.id,
         role: user.role,
         facilityId: facilityAdmin.facilityId,
+        token,
       },
     });
   } catch (error) {
@@ -1267,6 +1290,7 @@ app.post('/api/auth/login', async (req, res) => {
         role: user.role,
         professionalId: user.professional?.id ?? null,
         facilityId: user.facilityAdmin?.facilityId ?? null,
+        token,
       },
     });
   } catch (error) {
@@ -1601,6 +1625,25 @@ if (shift.status !== 'OPEN') {
       });
     }
 
+    const existingRequestForShift = await prisma.shiftRequest.findFirst({
+      where: {
+        shiftId: shift.id,
+        professionalId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (existingRequestForShift) {
+      return res.status(409).json({
+        error: 'You already requested this shift before. You cannot request the same shift again, even if it is reopened.',
+        existingRequestId: existingRequestForShift.id,
+        existingStatus: existingRequestForShift.status,
+      });
+    }
+
     const eligibility = await getWorkerEligibility(professionalId);
 
     if (!eligibility.eligible) {
@@ -1815,6 +1858,11 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
+    const rejectionReason = String(req.body?.reason || '').trim();
+
+    if (!rejectionReason) {
+      return res.status(400).json({ error: 'Rejection reason is required.' });
+    }
 
     if (!facilityId) {
       return res.status(404).json({ error: 'Facility admin not found' });
@@ -1851,6 +1899,7 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
       data: {
         status: 'REJECTED',
         reviewedAt: new Date(),
+        reviewNotes: rejectionReason,
       },
     });
 
@@ -1858,7 +1907,7 @@ app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async 
       professionalId: updated.professionalId,
       type: 'SHIFT_REJECTED',
       title: 'Shift rejected',
-      message: 'Your shift request has been rejected by the facility.',
+      message: `Your shift request was rejected by the facility. Reason: ${rejectionReason}`,
     });
 
     res.json({ data: updated });
@@ -2662,14 +2711,14 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
       console.warn('Failed to remove temp upload file:', cleanupError);
     }
 
+    const professionalName =
+      `${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim() ||
+      professional.user.email ||
+      'Unknown Professional';
+
+    const professionalEmail = professional.user.email || 'Not available';
+
     try {
-  const professionalName =
-    `${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim() ||
-    professional.user.email ||
-    'Unknown Professional';
-
-  const professionalEmail = professional.user.email || 'Not available';
-
   if (!ADMIN_ALERT_EMAIL) {
     console.error('Document upload email skipped: ADMIN_ALERT_EMAIL is not configured');
   } else {
@@ -2729,7 +2778,7 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
 
 
     try {
-      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
+      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'ID'];
 
       const allDocs = await prisma.professionalDocument.findMany({
         where: { professionalId },
@@ -2763,8 +2812,7 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
               <li>CPR / BLS</li>
               <li>Physical Report</li>
               <li>TB Report</li>
-              <li>SSN</li>
-              <li>State ID</li>
+                            <li>State ID</li>
             </ul>
           `,
           text: [
@@ -2776,7 +2824,6 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
             'CPR / BLS',
             'Physical Report',
             'TB Report',
-            'SSN',
             'State ID',
           ].join('\n'),
         });
@@ -3382,7 +3429,7 @@ app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN
     if (profile) {
       const ica = profile.agreements.find((agreement) => agreement.agreementType === 'ICA');
 
-      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'SSN', 'STATE_ID'];
+      const requiredCategories = ['LICENSE', 'CPR', 'PHYSICAL', 'TB_REPORT', 'ID'];
       const hasAllRequiredDocs = requiredCategories.every((category) => {
         const doc = profile.documents.find((item) => item.category === category);
         return !!doc && doc.status === 'APPROVED';

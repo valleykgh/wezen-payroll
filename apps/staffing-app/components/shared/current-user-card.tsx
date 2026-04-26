@@ -28,7 +28,7 @@ export function CurrentUserCard() {
   async function handleLogout() {
     try {
       await logoutRequest();
-      router.push('/login');
+      window.location.href = '/login/index.html';
       router.refresh();
     } catch (error) {
       console.error(error);

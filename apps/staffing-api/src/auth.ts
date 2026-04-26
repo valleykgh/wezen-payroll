@@ -2,7 +2,15 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import type { Request, Response, NextFunction } from 'express';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-local-dev-key';
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+
+  return secret;
+}
 const COOKIE_NAME = 'wezen_auth';
 
 export type AuthTokenPayload = {
@@ -19,7 +27,7 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export function signAuthToken(payload: AuthTokenPayload) {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '7d',
   });
 }
@@ -53,7 +61,7 @@ export function readAuthToken(req: Request) {
 
 export function verifyAuthToken(token: string): AuthTokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
+    return jwt.verify(token, getJwtSecret()) as unknown as AuthTokenPayload;
   } catch {
     return null;
   }

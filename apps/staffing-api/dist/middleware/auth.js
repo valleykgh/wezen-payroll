@@ -1,8 +1,15 @@
 import jwt from 'jsonwebtoken';
 const AUTH_COOKIE_NAME = 'wezen_auth';
+function getToken(req) {
+    const authHeader = String(req.headers.authorization || '');
+    if (authHeader.startsWith('Bearer ')) {
+        return authHeader.slice('Bearer '.length).trim();
+    }
+    return req.cookies?.[process.env.AUTH_COOKIE_NAME || AUTH_COOKIE_NAME] || '';
+}
 export function readAuthUser(req) {
     try {
-        const token = req.cookies?.[AUTH_COOKIE_NAME];
+        const token = getToken(req);
         if (!token)
             return null;
         const secret = process.env.JWT_SECRET;

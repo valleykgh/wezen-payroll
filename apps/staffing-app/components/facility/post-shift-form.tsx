@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 function formatTimeLabel(value: string) {
@@ -50,7 +50,7 @@ export function PostShiftForm() {
 
     try {
 
-      const me = await apiFetch('/api/auth/me');
+	const me = await apiFetch<{ data: { facilityId?: string | null } }>('/api/auth/me');
 
 await apiFetch('/api/shifts', {
   method: 'POST',
@@ -66,7 +66,7 @@ await apiFetch('/api/shifts', {
   }),
 });
 	
-      setMessage('Shift posted successfully.');
+      setMessage('Success! Shift posted successfully.');
       setDate('');
       setStartTimeLabel('');
       setEndTimeLabel('');
@@ -78,13 +78,20 @@ await apiFetch('/api/shifts', {
       setLoading(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   return (
     <form onSubmit={handleSubmit} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <h2 className="text-lg font-bold text-slate-950">Post a Shift</h2>
 
       {message ? (
-        <div className="mt-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-xl font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -104,7 +111,19 @@ await apiFetch('/api/shifts', {
           </select>
         </div>
 
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
+        <div className="grid gap-1">
+          <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+            Shift date
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            required
+            className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-4 text-base font-semibold text-slate-950"
+          />
+          <p className="text-xs text-slate-500">Tap to open calendar</p>
+        </div>
 
         <input
           placeholder="Start time: 7 or 7:00 or 15:30"

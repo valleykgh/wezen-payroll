@@ -1,7 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { loginRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
@@ -11,7 +10,6 @@ type LoginFormProps = {
 };
 
 export function LoginForm({ next = '' }: LoginFormProps) {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -34,14 +32,13 @@ async function handleSubmit(e: React.FormEvent) {
     let target = '/';
 
     if (role === 'INTERNAL_ADMIN') {
-  target = '/app/admin';
+  target = '/app/admin/index.html';
 } else if (role === 'FACILITY_ADMIN') {
-  target = '/app/facility';
+  target = '/app/facility/index.html';
 } else if (role === 'PROFESSIONAL') {
-  target = '/app/worker';
+  target = '/app/worker/index.html';
 }
-
-    window.location.assign(target);
+    window.location.href = target;
     return;
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Login failed');
@@ -49,6 +46,13 @@ async function handleSubmit(e: React.FormEvent) {
     setSubmitting(false);
   }
 }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
   return (
     <form
       onSubmit={handleSubmit}

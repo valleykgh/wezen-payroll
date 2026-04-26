@@ -22,6 +22,7 @@ type WorkerDetail = {
     status: string;
     fileUrl: string | null;
     createdAt: string;
+    expiresAt?: string | null;
   }>;
   agreements: Array<{
     id: string;
@@ -65,6 +66,13 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
       setBusy('');
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   useEffect(() => {
     loadWorker();
@@ -85,7 +93,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
   return (
     <div className="grid gap-4">
       {message ? (
-        <div className="rounded-2xl bg-cyan-50 px-4 py-3 text-sm text-cyan-800 ring-1 ring-cyan-200">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -170,6 +178,52 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
             <div key={doc.id} className="rounded-2xl bg-slate-50 p-4">
               <p className="font-bold text-slate-950">{doc.name}</p>
               <p className="mt-1 text-sm text-slate-600">{doc.category} • {doc.status}</p>
+              {doc.expiresAt ? (
+                <p className={
+                  new Date(doc.expiresAt) < new Date()
+                    ? "mt-1 text-xs font-bold text-red-600"
+                    : "mt-1 text-xs font-semibold text-slate-500"
+                }>
+                  Expires {new Date(doc.expiresAt).toLocaleDateString()}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-amber-600">
+                  No expiration date listed
+                </p>
+              )}
+
+              {doc.fileUrl ? (
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-800 ring-1 ring-slate-200"
+                >
+                  View document
+                </a>
+              ) : null}
+
+              {doc.status === 'PENDING' ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => runAction('Approve document', `/api/admin/documents/${doc.id}/approve`)}
+                    disabled={Boolean(busy)}
+                    className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    Approve
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => runAction('Reject document', `/api/admin/documents/${doc.id}/reject`)}
+                    disabled={Boolean(busy)}
+                    className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

@@ -1,35 +1,26 @@
-import { meRequest } from "@/lib/auth-client";
-import { redirect } from "next/navigation";
+'use client';
 
-export default async function AppLandingPage() {
-  try {
-    const res = await meRequest();
-    const role = res.data.role;
+import { useEffect } from 'react';
+import { meRequest } from '@/lib/auth-client';
 
-    if (role === "PROFESSIONAL") {
-      redirect("/app/worker");
+export default function AppLandingPage() {
+  useEffect(() => {
+    async function routeUser() {
+      try {
+        const res = await meRequest();
+        const role = res.data.role;
+
+        if (role === 'PROFESSIONAL') window.location.assign('/app/worker/index.html');
+        else if (role === 'FACILITY_ADMIN') window.location.assign('/app/facility/index.html');
+        else if (role === 'INTERNAL_ADMIN') window.location.assign('/app/admin/index.html');
+        else window.location.assign('/login/index.html');
+      } catch {
+        window.location.assign('/login/index.html');
+      }
     }
 
-    if (role === "FACILITY_ADMIN") {
-      redirect("/app/facility");
-    }
+    routeUser();
+  }, []);
 
-    if (role === "INTERNAL_ADMIN") {
-      redirect("/app/admin");
-    }
-
-    return (
-      <div className="p-5">
-        <p>Unknown role</p>
-      </div>
-    );
-  } catch (err) {
-    // Not logged in OR API failed
-    return (
-      <div className="p-5">
-        <p>Not authenticated — redirecting to login...</p>
-        {redirect("/login")}
-      </div>
-    );
-  }
+  return <div className="p-5 text-sm text-slate-600">Opening your workspace...</div>;
 }

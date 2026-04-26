@@ -1,25 +1,42 @@
-import { redirect } from 'next/navigation';
-import { meRequestServer } from '@/lib/auth-server';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { meRequest } from '@/lib/auth-client';
 
 type RoleGuardProps = {
   allowed: Array<'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN'>;
   children: React.ReactNode;
 };
 
-export async function RoleGuard({ allowed, children }: RoleGuardProps) {
-  try {
-    const res = await meRequestServer();
-    const role = res.data.role;
+export function RoleGuard({ allowed, children }: RoleGuardProps) {
+  const [ok, setOk] = useState(false);
 
-    if (!allowed.includes(role)) {
-      if (role === 'PROFESSIONAL') redirect('/app/worker');
-      if (role === 'FACILITY_ADMIN') redirect('/app/facility');
-      if (role === 'INTERNAL_ADMIN') redirect('/app/admin');
-      redirect('/login');
+  useEffect(() => {
+    async function check() {
+      try {
+        const res = await meRequest();
+        const role = res.data.role;
+
+        if (!allowed.includes(role)) {
+          if (role === 'PROFESSIONAL') window.location.assign('/app/worker/index.html');
+          else if (role === 'FACILITY_ADMIN') window.location.assign('/app/facility/index.html');
+          else if (role === 'INTERNAL_ADMIN') window.location.assign('/app/admin/index.html');
+          else window.location.assign('/login/index.html');
+          return;
+        }
+
+        setOk(true);
+      } catch (error) {
+        window.location.assign('/login/index.html');
+      }
     }
 
-    return <>{children}</>;
-  } catch {
-    redirect('/login');
+    check();
+  }, [allowed]);
+
+  if (!ok) {
+    return <div className="p-6 text-sm text-slate-600">Checking access...</div>;
   }
+
+  return <>{children}</>;
 }

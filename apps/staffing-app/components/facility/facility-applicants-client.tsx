@@ -52,7 +52,20 @@ export function FacilityApplicantsClient() {
     setMessage('');
 
     try {
-      await apiFetch(`/api/shift-requests/${id}/${action}`, { method: 'POST' });
+      const reason =
+        action === 'reject'
+          ? window.prompt('Please enter the reason for rejecting this applicant:')?.trim()
+          : undefined;
+
+      if (action === 'reject' && !reason) {
+        setMessage('Rejection reason is required.');
+        return;
+      }
+
+      await apiFetch(`/api/shift-requests/${id}/${action}`, {
+        method: 'POST',
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+      });
       setMessage(action === 'approve' ? 'Applicant approved.' : 'Applicant rejected.');
       await loadRequests();
     } catch (error) {
@@ -61,6 +74,13 @@ export function FacilityApplicantsClient() {
       setBusyId('');
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   useEffect(() => {
     loadRequests();
@@ -69,7 +89,7 @@ export function FacilityApplicantsClient() {
   return (
     <div className="grid gap-4">
       {message ? (
-        <div className="rounded-2xl bg-cyan-50 px-4 py-3 text-sm text-cyan-800 ring-1 ring-cyan-200">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -99,7 +119,7 @@ export function FacilityApplicantsClient() {
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">
                   {request.professional.role}
                 </p>
-                <Link href={`/app/facility/applicants/${request.id}`} className="mt-2 block text-lg font-bold text-slate-950 underline decoration-slate-300 underline-offset-4">{workerName}</Link>
+                <Link href={`/app/facility/applicant-detail/index.html?requestId=${request.id}`} className="mt-2 block text-lg font-bold text-slate-950 underline decoration-slate-300 underline-offset-4">{workerName}</Link>
                 <p className="mt-1 text-sm text-slate-600">{request.professional.email}</p>
               </div>
 

@@ -1,13 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { registerFacilityRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
 
 export function FacilitySignupForm() {
-  const router = useRouter();
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -36,14 +34,23 @@ export function FacilitySignupForm() {
         inviteCode: form.inviteCode,
       });
 
-      router.push('/facility/dashboard');
-      router.refresh();
+      setMessage('Success! Your facility account has been created. Opening your facility dashboard...');
+      setTimeout(() => {
+        window.location.href = '/app/facility/index.html';
+      }, 2200);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signup failed');
     } finally {
       setSubmitting(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   return (
     <form
@@ -59,7 +66,7 @@ export function FacilitySignupForm() {
       </p>
 
       {message ? (
-        <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-center text-sm font-bold text-emerald-800 shadow-lg">
           {message}
         </div>
       ) : null}

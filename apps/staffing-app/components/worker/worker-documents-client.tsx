@@ -11,6 +11,7 @@ type DocumentItem = {
   status: string;
   fileUrl: string | null;
   createdAt: string;
+  expiresAt?: string | null;
 };
 
 export function WorkerDocumentsClient() {
@@ -92,6 +93,13 @@ export function WorkerDocumentsClient() {
       setUploading(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
   useEffect(() => {
     loadDocuments();
@@ -103,25 +111,42 @@ export function WorkerDocumentsClient() {
         <h2 className="text-lg font-bold text-slate-950">Upload Required Document</h2>
 
         {message ? (
-          <div className="mt-4 rounded-2xl bg-cyan-50 px-4 py-3 text-sm text-cyan-800 ring-1 ring-cyan-200">
-            {message}
-          </div>
-        ) : null}
+        <div className="fixed left-1/2 top-1/2 z-50 w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
+          {message}
+        </div>
+      ) : null}
 
         <div className="mt-4 grid gap-3">
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+          >
             <option value="LICENSE">License</option>
             <option value="CPR">CPR / BLS</option>
             <option value="PHYSICAL">Physical Report</option>
             <option value="TB_REPORT">TB Report</option>
-            <option value="SSN">SSN</option>
-            <option value="STATE_ID">State ID</option>
+            <option value="ID">State ID</option>
+            <option value="VACCINATION">Vaccination Record</option>
             <option value="OTHER">Other</option>
           </select>
 
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Document name" className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
-          <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
+          <div className="grid gap-1">
+            <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              Expiration date
+            </label>
+            <input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-4 text-base font-semibold text-slate-950"
+            />
+            <p className="text-xs text-slate-500">
+              Required for licenses, CPR/BLS, physicals, TB, and vaccination records when applicable.
+            </p>
+          </div>
 
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
@@ -145,6 +170,11 @@ export function WorkerDocumentsClient() {
             <div key={doc.id} className="rounded-2xl bg-slate-50 p-4">
               <p className="font-bold text-slate-950">{doc.name}</p>
               <p className="mt-1 text-sm text-slate-600">{doc.category} • {doc.status}</p>
+              {doc.expiresAt ? (
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  Expires {new Date(doc.expiresAt).toLocaleDateString()}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

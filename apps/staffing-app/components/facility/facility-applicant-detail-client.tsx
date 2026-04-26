@@ -70,8 +70,19 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
     setMessage('');
 
     try {
+      const reason =
+        action === 'reject'
+          ? window.prompt('Please enter the reason for rejecting this applicant:')?.trim()
+          : undefined;
+
+      if (action === 'reject' && !reason) {
+        setMessage('Rejection reason is required.');
+        return;
+      }
+
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
         method: 'POST',
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
       });
 
       setMessage(
@@ -132,6 +143,13 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
       setBusy(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+
 
 
 
@@ -155,7 +173,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
   return (
     <div className="grid gap-4">
       {message ? (
-        <div className="rounded-2xl bg-cyan-50 px-4 py-3 text-sm text-cyan-800 ring-1 ring-cyan-200">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
