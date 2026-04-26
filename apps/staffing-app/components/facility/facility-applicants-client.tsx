@@ -8,6 +8,7 @@ type FacilityRequest = {
   id: string;
   status: string;
   requestedAt: string;
+  reviewNotes?: string | null;
   shift: {
     role: string;
     shiftType: string;
@@ -123,10 +124,31 @@ export function FacilityApplicantsClient() {
                 <p className="mt-1 text-sm text-slate-600">{request.professional.email}</p>
               </div>
 
-              <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-                {request.status}
+              <span
+                className={
+                  request.status === 'CANCELLATION_REQUESTED'
+                    ? 'rounded-full bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800'
+                    : request.status === 'REJECTED'
+                      ? 'rounded-full bg-rose-100 px-3 py-2 text-xs font-bold text-rose-800'
+                      : 'rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700'
+                }
+              >
+                {request.status === 'CANCELLATION_REQUESTED'
+                  ? 'CANCEL REQUEST'
+                  : request.reviewNotes?.startsWith('Cancellation denied')
+                    ? 'CANCEL DENIED'
+                    : request.status}
               </span>
             </div>
+
+            {request.reviewNotes ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <span className="font-bold">
+                  {request.reviewNotes.startsWith('Cancellation') ? 'Cancellation note: ' : 'Reason: '}
+                </span>
+                {request.reviewNotes}
+              </div>
+            ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-2xl bg-slate-50 p-3">

@@ -220,7 +220,7 @@ export function FacilityShiftsClient() {
               <button
                 type="button"
                 onClick={() => runShiftAction(shift.id, 'close')}
-                disabled={busyId === shift.id || shift.status === 'COMPLETED'}
+                disabled={busyId === shift.id || ['COMPLETED', 'CLOSED', 'CANCELLED'].includes(shift.status)}
                 className="rounded-2xl bg-slate-950 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
               >
                 Close
@@ -229,7 +229,7 @@ export function FacilityShiftsClient() {
               <button
                 type="button"
                 onClick={() => runShiftAction(shift.id, 'reopen')}
-                disabled={busyId === shift.id || shift.status === 'OPEN'}
+                disabled={busyId === shift.id || !['CLOSED', 'CANCELLED', 'UNFILLED'].includes(shift.status)}
                 className="rounded-2xl bg-cyan-700 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
               >
                 Reopen

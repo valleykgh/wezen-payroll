@@ -1494,6 +1494,47 @@ app.get('/api/facility/requests', requireRole('FACILITY_ADMIN'), async (req, res
         res.status(500).json({ error: 'Failed to fetch facility requests' });
     }
 });
+app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const id = String(req.params.id || '');
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        const notes = String(req.body?.notes || '').trim();
+        if (!id) {
+            return res.status(400).json({ error: 'Request id is required' });
+        }
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const requestRecord = await prisma.shiftRequest.findUnique({
+            where: { id },
+            include: {
+                shift: {
+                    select: {
+                        facilityId: true,
+                    },
+                },
+            },
+        });
+        if (!requestRecord) {
+            return res.status(404).json({ error: 'Shift request not found' });
+        }
+        if (requestRecord.shift.facilityId !== facilityId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const updated = await prisma.shiftRequest.update({
+            where: { id },
+            data: {
+                reviewNotes: notes || null,
+            },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('PUT /api/shift-requests/:id/notes error:', error);
+        res.status(500).json({ error: 'Failed to update facility notes' });
+    }
+});
 app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
@@ -1688,6 +1729,10 @@ app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSION
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
         const professionalId = await getProfessionalProfileIdForUser(userId);
+        const cancellationReason = String(req.body?.reason || '').trim();
+        if (!cancellationReason) {
+            return res.status(400).json({ error: 'Cancellation reason is required.' });
+        }
         if (!id) {
             return res.status(400).json({ error: 'Request id is required' });
         }
@@ -1722,7 +1767,7 @@ app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSION
             data: {
                 status: 'CANCELLATION_REQUESTED',
                 reviewedAt: null,
-                reviewNotes: 'Cancellation requested by worker',
+                reviewNotes: cancellationReason,
             },
         });
         await createWorkerNotification({
@@ -1848,6 +1893,10 @@ app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMI
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
         const facilityId = await getFacilityIdForUser(userId);
+        const denialReason = String(req.body?.reason || '').trim();
+        if (!denialReason) {
+            return res.status(400).json({ error: 'Cancellation denial reason is required.' });
+        }
         if (!facilityId) {
             return res.status(404).json({ error: 'Facility admin not found' });
         }
@@ -1885,14 +1934,14 @@ app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMI
             data: {
                 status: 'APPROVED',
                 reviewedAt: new Date(),
-                reviewNotes: 'Cancellation denied by facility',
+                reviewNotes: `Cancellation denied by facility: ${denialReason}`,
             },
         });
         await createWorkerNotification({
             professionalId: updated.professionalId,
             type: 'GENERAL',
             title: 'Cancellation denied',
-            message: 'Your cancellation request was denied. You are still scheduled for this shift.',
+            message: `Your cancellation request was denied. You are still scheduled for this shift. Reason: ${denialReason}`,
         });
         if (existing.professional.user.email) {
             try {

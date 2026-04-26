@@ -17,6 +17,7 @@ const navByRole = {
   worker: [
     { label: 'Home', href: '/app/worker/index.html' },
     { label: 'Shifts', href: '/app/worker/shifts/index.html' },
+    { label: 'Requests', href: '/app/worker/requests/index.html' },
     { label: 'Alerts', href: '/app/worker/notifications/index.html' },
     { label: 'Profile', href: '/app/worker/profile/index.html' },
   ],
@@ -87,7 +88,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
       <section className="px-5 py-5">{children}</section>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-none">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {nav.map((item) => {
             const active =
               pathname === item.href ||

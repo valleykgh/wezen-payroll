@@ -8,6 +8,7 @@ type ApplicantDetail = {
   status: string;
   requestedAt: string;
   reviewedAt?: string | null;
+  reviewNotes?: string | null;
   shift: {
     id: string;
     role: string;
@@ -48,6 +49,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dnrReason, setDnrReason] = useState('');
+  const [facilityNotes, setFacilityNotes] = useState('');
 
   async function loadDetail() {
     setLoading(true);
@@ -58,6 +60,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
         `/api/facility/applicants/${requestId}`
       );
       setDetail(res.data);
+      setFacilityNotes(res.data.reviewNotes || '');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load applicant detail');
     } finally {
@@ -95,6 +98,59 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
       await loadDetail();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to update applicant');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateCancellation(action: 'approve-cancellation' | 'deny-cancellation') {
+    setBusy(true);
+    setMessage('');
+
+    try {
+      const reason =
+        action === 'deny-cancellation'
+          ? window.prompt('Reason for denying cancellation request?')?.trim()
+          : undefined;
+
+      if (action === 'deny-cancellation' && !reason) {
+        setMessage('Cancellation denial reason is required.');
+        return;
+      }
+
+      await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
+        method: 'POST',
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+      });
+
+      setMessage(
+        action === 'approve-cancellation'
+          ? 'Cancellation approved. Shift slot reopened if needed.'
+          : 'Cancellation denied. Worker remains scheduled.'
+      );
+
+      await loadDetail();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update cancellation request');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveFacilityNotes() {
+    setBusy(true);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/shift-requests/${requestId}/notes`, {
+        method: 'PUT',
+        body: JSON.stringify({ notes: facilityNotes }),
+      });
+
+      setMessage('Facility note saved.');
+      await loadDetail();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to save facility note');
     } finally {
       setBusy(false);
     }
@@ -209,6 +265,27 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
           </div>
         ) : null}
 
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-bold text-slate-900">Facility private note</p>
+          <p className="mt-1 text-xs text-slate-500">Visible to facility/admin only. Not shown to worker.</p>
+
+          <textarea
+            value={facilityNotes}
+            onChange={(e) => setFacilityNotes(e.target.value)}
+            placeholder="Example: strong worker, late response, good fit for NOC..."
+            className="mt-3 min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+          />
+
+          <button
+            type="button"
+            onClick={saveFacilityNotes}
+            disabled={busy}
+            className="mt-3 w-full rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+          >
+            {busy ? 'Saving...' : 'Save Facility Note'}
+          </button>
+        </div>
+
         {detail.professional.isDnr ? (
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
             <div>Facility DNR active: {detail.professional.dnrReason || 'No reason listed'}</div>
@@ -290,6 +367,35 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
             >
               {busy ? 'Working...' : 'Reject'}
             </button>
+          </div>
+        ) : null}
+
+        {detail.status === 'CANCELLATION_REQUESTED' ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-bold text-amber-900">Cancellation requested</p>
+            <p className="mt-1 text-xs text-amber-800">
+              Approve to release the worker and reopen the shift slot if coverage is still needed. Deny to keep the worker scheduled.
+            </p>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => updateCancellation('approve-cancellation')}
+                disabled={busy}
+                className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {busy ? 'Working...' : 'Approve Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateCancellation('deny-cancellation')}
+                disabled={busy}
+                className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {busy ? 'Working...' : 'Deny Cancel'}
+              </button>
+            </div>
           </div>
         ) : null}
 
