@@ -108,6 +108,7 @@ model User {
   facilityAdmin FacilityAdmin?
   professional  ProfessionalProfile?
   uploadedDocs  ProfessionalDocument[] @relation("UploadedBy")
+  adminNotifications AdminNotification[]
   deviceTokens  UserDeviceToken[]
 }
 
@@ -133,6 +134,7 @@ model Facility {
   updatedAt             DateTime       @updatedAt
 
   admins          FacilityAdmin[]
+  notifications   FacilityNotification[]
   shifts          Shift[]
   requirements    FacilityRequirement[]
   facilityDnrs    FacilityDnr[]
@@ -160,6 +162,8 @@ model ProfessionalProfile {
   state              String?
   zipCode            String?
   maxDistanceMiles   Int?                   @default(25)
+  openShiftAlertsEnabled Boolean             @default(false)
+  openShiftAlertRadiusMiles Int?             @default(50)
   hourlyRateCents    Int?
   regularPayRateCents Int?
   overtimePayRateCents Int?
@@ -312,6 +316,37 @@ model UserDeviceToken {
   token     String   @unique
   platform  String?
   isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+
+model FacilityNotification {
+  id         String   @id @default(cuid())
+  facilityId String
+  type       NotificationType
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId])
+}
+
+model AdminNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
