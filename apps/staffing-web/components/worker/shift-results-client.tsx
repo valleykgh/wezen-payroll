@@ -62,6 +62,7 @@ export function ShiftResultsClient({ shifts }: Props) {
   const [shiftDetail, setShiftDetail] = useState<ShiftDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [lastMessageShiftId, setLastMessageShiftId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -157,12 +158,29 @@ export function ShiftResultsClient({ shifts }: Props) {
       return 'This shift is already fully assigned.';
     }
 
-    return 'Failed to request shift.';
+    try {
+      const parsed = JSON.parse(text);
+      return parsed.error || 'Failed to request shift.';
+    } catch {
+      return text || 'Failed to request shift.';
+    }
   }
+
+  useEffect(() => {
+    if (!successMessage && !errorMessage) return;
+
+    const timer = setTimeout(() => {
+      setSuccessMessage('');
+      setErrorMessage('');
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [successMessage, errorMessage]);
 
   async function requestShift(shiftId: string) {
     try {
       setSubmittingId(shiftId);
+      setLastMessageShiftId(shiftId);
       setSuccessMessage('');
       setErrorMessage('');
 
@@ -183,7 +201,7 @@ export function ShiftResultsClient({ shifts }: Props) {
         throw new Error(normalizeRequestError(text));
       }
 
-      setSuccessMessage('Shift request submitted successfully.');
+      setSuccessMessage('Shift request sent. The facility will review and approve/reject it.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Request failed.');
     } finally {
@@ -205,22 +223,12 @@ export function ShiftResultsClient({ shifts }: Props) {
           </div>
         ) : null}
 
-        {successMessage ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {successMessage}
-          </div>
-        ) : null}
-
-        {errorMessage ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {errorMessage}
-          </div>
-        ) : null}
 
         {shifts.map((shift) => {
           const blocked = Boolean(shift.isBlockedByFacilityDnr);
-
-          return (
+          const isCurrentShift = lastMessageShiftId === shift.id;
+	
+	  return (
             <div
               key={shift.id}
               className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -228,6 +236,17 @@ export function ShiftResultsClient({ shifts }: Props) {
               <div className="h-1.5 bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500" />
 
               <div className="p-6">
+ 		{successMessage && isCurrentShift ? (
+  <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+    {successMessage}
+  </div>
+) : null}
+
+{errorMessage && isCurrentShift ? (
+  <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+    {errorMessage}
+  </div>
+) : null}
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-3">

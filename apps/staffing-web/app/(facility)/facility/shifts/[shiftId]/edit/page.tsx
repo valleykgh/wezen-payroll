@@ -47,6 +47,45 @@ function toTimeInput(label?: string) {
   return `${String(hour).padStart(2, '0')}:${minute}`;
 }
 
+
+function normalizeTimeInput(value: string) {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return '';
+
+  const hasPm = raw.includes('pm') || raw.includes('p.m.');
+  const hasAm = raw.includes('am') || raw.includes('a.m.');
+  const clean = raw.replace(/a\.?m\.?|p\.?m\.?/g, '').trim();
+
+  let hour = 0;
+  let minute = 0;
+
+  if (clean.includes(':')) {
+    const [h, m] = clean.split(':');
+    hour = Number(h);
+    minute = Number(m || '0');
+  } else if (/^\d{3,4}$/.test(clean)) {
+    hour = Number(clean.slice(0, -2));
+    minute = Number(clean.slice(-2));
+  } else {
+    hour = Number(clean);
+    minute = 0;
+  }
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
+  if (minute < 0 || minute > 59) return value;
+
+  if (hasPm && hour < 12) hour += 12;
+  if (hasAm && hour === 12) hour = 0;
+
+  if (!hasAm && !hasPm && hour >= 1 && hour <= 7) {
+    // Facility shorthand: 7 means 7 AM.
+  }
+
+  if (hour < 0 || hour > 23) return value;
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 function formatTimeLabel(value: string) {
   if (!value) return '';
   const [hourString, minute] = value.split(':');
@@ -212,11 +251,11 @@ export default function EditShiftPage({
           </FormField>
 
           <FormField label="Start time" htmlFor="startTime">
-            <TextInput id="startTime" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+            <TextInput id="startTime" type="text" value={startTime} onChange={(e) => setStartTime(e.target.value)} onBlur={(e) => setStartTime(normalizeTimeInput(e.target.value))} required />
           </FormField>
 
           <FormField label="End time" htmlFor="endTime">
-            <TextInput id="endTime" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+            <TextInput id="endTime" type="text" value={endTime} onChange={(e) => setEndTime(e.target.value)} onBlur={(e) => setEndTime(normalizeTimeInput(e.target.value))} required />
           </FormField>
 
           <div className="md:col-span-2">

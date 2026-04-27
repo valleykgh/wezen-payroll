@@ -79,6 +79,13 @@ export default function WorkerSchedulePage() {
   }, [requests, sortBy]);
 
 async function requestCancellation(requestId: string) {
+  const reason = window.prompt('Reason for requesting cancellation?')?.trim();
+
+  if (!reason) {
+    setMessage('Cancellation reason is required.');
+    return;
+  }
+
   try {
     setBusyId(requestId);
     setMessage('');
@@ -88,6 +95,10 @@ async function requestCancellation(requestId: string) {
       {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
       }
     );
 
@@ -111,7 +122,8 @@ async function requestCancellation(requestId: string) {
     setRequests(refreshed.data);
     setMessage('Cancellation request sent to the facility for review.');
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : 'Failed to request cancellation');
+    const text = error instanceof Error ? error.message : 'Failed to request cancellation';
+    setMessage(text.includes('within 4 hours') ? 'Cancellation is locked within 4 hours of shift start. Please contact Wezen Staffing support.' : text);
   } finally {
     setBusyId(null);
   }

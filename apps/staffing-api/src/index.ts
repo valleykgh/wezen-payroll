@@ -660,6 +660,44 @@ function calculateDistanceMiles(
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+
+async function sendPushToUser(userId: string, title: string, body: string) {
+  try {
+    const tokens = await prisma.userDeviceToken.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+      select: {
+        token: true,
+        platform: true,
+      },
+    });
+
+    if (tokens.length === 0) return;
+
+    // APNs send will be implemented here after Apple push credentials are configured.
+    console.log('Push notification queued', {
+      userId,
+      title,
+      tokenCount: tokens.length,
+    });
+  } catch (error) {
+    console.error('sendPushToUser error:', error);
+  }
+}
+
+async function sendPushToFacilityAdmins(facilityId: string, title: string, body: string) {
+  const admins = await prisma.facilityAdmin.findMany({
+    where: { facilityId },
+    select: { userId: true },
+  });
+
+  await Promise.all(
+    admins.map((admin) => sendPushToUser(admin.userId, title, body))
+  );
+}
+
 async function createWorkerNotification(params: {
   professionalId: string;
   type: NotificationType;
@@ -674,6 +712,51 @@ async function createWorkerNotification(params: {
       message: params.message,
     },
   });
+
+  const professional = await prisma.professionalProfile.findUnique({
+    where: { id: params.professionalId },
+    select: { userId: true },
+  });
+
+  if (professional?.userId) {
+    await sendPushToUser(professional.userId, params.title, params.message);
+  }
+}
+
+async function createFacilityNotification(params: {
+  facilityId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+}) {
+  await prisma.facilityNotification.create({
+    data: {
+      facilityId: params.facilityId,
+      type: params.type,
+      title: params.title,
+      message: params.message,
+    },
+  });
+
+  await sendPushToFacilityAdmins(params.facilityId, params.title, params.message);
+}
+
+async function createAdminNotification(params: {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+}) {
+  await prisma.adminNotification.create({
+    data: {
+      userId: params.userId,
+      type: params.type,
+      title: params.title,
+      message: params.message,
+    },
+  });
+
+  await sendPushToUser(params.userId, params.title, params.message);
 }
 
 async function getWorkerDashboardData(userId: string) {
@@ -1128,6 +1211,30 @@ app.post('/api/auth/register-professional', async (req, res) => {
 
     setAuthCookie(res, token);
 
+    try {
+      const admins = await prisma.user.findMany({
+        where: {
+          role: 'INTERNAL_ADMIN',
+          isActive: true,
+          notifyNewWorkerSignup: true,
+        },
+        select: { id: true },
+      });
+
+      await Promise.all(
+        admins.map((admin) =>
+          createAdminNotification({
+            userId: admin.id,
+            type: 'GENERAL',
+            title: 'New worker signup',
+            message: `${parsed.data.firstName} ${parsed.data.lastName} created a professional profile and needs review.`,
+          })
+        )
+      );
+    } catch (notificationError) {
+      console.error('New worker signup admin notification failed:', notificationError);
+    }
+
     res.status(201).json({
       data: {
         userId: user.id,
@@ -1232,6 +1339,30 @@ app.post('/api/auth/register-facility', async (req, res) => {
     });
 
     setAuthCookie(res, token);
+
+    try {
+      const admins = await prisma.user.findMany({
+        where: {
+          role: 'INTERNAL_ADMIN',
+          isActive: true,
+          notifyNewWorkerSignup: true,
+        },
+        select: { id: true },
+      });
+
+      await Promise.all(
+        admins.map((admin) =>
+          createAdminNotification({
+            userId: admin.id,
+            type: 'GENERAL',
+            title: 'New worker signup',
+            message: `${parsed.data.firstName} ${parsed.data.lastName} created a professional profile and needs review.`,
+          })
+        )
+      );
+    } catch (notificationError) {
+      console.error('New worker signup admin notification failed:', notificationError);
+    }
 
     res.status(201).json({
       data: {
@@ -1532,6 +1663,64 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
       },
     });
 
+    try {
+      const facilityForAlerts = await prisma.facility.findUnique({
+        where: { id: facilityId },
+        select: {
+          name: true,
+          city: true,
+          state: true,
+          latitude: true,
+          longitude: true,
+        },
+      });
+
+      if (facilityForAlerts?.latitude != null && facilityForAlerts?.longitude != null) {
+        const workers = await prisma.professionalProfile.findMany({
+          where: {
+            approvedByWezen: true,
+            role: parsed.data.role,
+            openShiftAlertsEnabled: true,
+            latitude: { not: null },
+            longitude: { not: null },
+          },
+          select: {
+            id: true,
+            latitude: true,
+            longitude: true,
+            openShiftAlertRadiusMiles: true,
+          },
+        });
+
+        const matchingWorkers = workers.filter((worker) => {
+          if (worker.latitude == null || worker.longitude == null) return false;
+
+          const radius = worker.openShiftAlertRadiusMiles ?? 50;
+          const distance = calculateDistanceMiles(
+            worker.latitude,
+            worker.longitude,
+            facilityForAlerts.latitude!,
+            facilityForAlerts.longitude!
+          );
+
+          return distance <= radius;
+        });
+
+        await Promise.all(
+          matchingWorkers.map((worker) =>
+            createWorkerNotification({
+              professionalId: worker.id,
+              type: 'GENERAL',
+              title: 'New shift opened near you',
+              message: `${facilityForAlerts.name} posted a ${parsed.data.role} ${parsed.data.shiftType} shift on ${parsed.data.date} from ${parsed.data.startTimeLabel} to ${parsed.data.endTimeLabel}.`,
+            })
+          )
+        );
+      }
+    } catch (notificationError) {
+      console.error('Open shift worker notification failed:', notificationError);
+    }
+
     res.status(201).json({ data: shift });
   } catch (error) {
     console.error('POST /api/shifts error:', error);
@@ -1665,6 +1854,13 @@ if (shift.status !== 'OPEN') {
 } catch (emailError) {
   console.error('Facility shift request email failed:', emailError);
 }
+
+    await createFacilityNotification({
+      facilityId: shift.facilityId,
+      type: 'GENERAL',
+      title: 'New shift request',
+      message: 'A worker requested one of your open shifts. Please review the applicant.',
+    });
 
     res.status(201).json({ data: created });
   } catch (error) {
@@ -2092,6 +2288,13 @@ if (shiftStart.getTime() - now.getTime() < fourHoursMs) {
       message: 'Your cancellation request has been sent to the facility for review.',
     });
 
+    await createFacilityNotification({
+      facilityId: existing.shift.facilityId,
+      type: 'GENERAL',
+      title: 'Cancellation requested',
+      message: 'A worker requested cancellation for an approved shift. Please review urgently.',
+    });
+
     try {
       await sendFacilityShiftCancellationRequestEmail(updated.id);
     } catch (emailError) {
@@ -2154,7 +2357,7 @@ app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_A
       data: {
         status: 'CANCELLED',
         reviewedAt: new Date(),
-        reviewNotes: 'Cancellation approved by facility',
+        reviewNotes: 'Cancellation approved by facility. Worker released from this shift.',
       },
     });
 
@@ -2179,7 +2382,7 @@ if (
       professionalId: updated.professionalId,
       type: 'GENERAL',
       title: 'Cancellation approved',
-      message: 'Your cancellation request was approved by the facility.',
+      message: 'Your cancellation request was approved by the facility. You have been released from this shift.',
     });
 
     if (existing.professional.user.email) {
@@ -2189,7 +2392,7 @@ if (
           subject: `Cancellation approved: ${existing.shift.facility.name}`,
           html: `
             <h2>Cancellation approved</h2>
-            <p>Your cancellation request has been approved.</p>
+            <p>Your cancellation request has been approved. You have been released from this shift.</p>
             <p><strong>Facility:</strong> ${existing.shift.facility.name}</p>
             <p><strong>Role:</strong> ${existing.shift.role}</p>
             <p><strong>Shift Type:</strong> ${existing.shift.shiftType}</p>
@@ -2403,6 +2606,8 @@ app.get('/api/worker/profile', async (req, res) => {
         state: profile.state,
         zipCode: profile.zipCode,
         maxDistanceMiles: profile.maxDistanceMiles,
+        openShiftAlertsEnabled: profile.openShiftAlertsEnabled,
+        openShiftAlertRadiusMiles: profile.openShiftAlertRadiusMiles,
         hourlyRateCents: profile.hourlyRateCents,
 	regularPayRateCents: profile.regularPayRateCents,
 	overtimePayRateCents: profile.overtimePayRateCents,
@@ -2431,6 +2636,8 @@ const updateWorkerProfileSchema = z.object({
   state: z.string().optional(),
   zipCode: z.string().optional(),
   maxDistanceMiles: z.number().int().positive().optional(),
+  openShiftAlertsEnabled: z.boolean().optional(),
+  openShiftAlertRadiusMiles: z.number().int().positive().optional(),
   hourlyRateCents: z.number().int().nonnegative().optional(),
   bio: z.string().optional(),
 });
@@ -2459,6 +2666,8 @@ app.put('/api/worker/profile', async (req, res) => {
         state: parsed.data.state,
         zipCode: parsed.data.zipCode,
         maxDistanceMiles: parsed.data.maxDistanceMiles,
+        openShiftAlertsEnabled: parsed.data.openShiftAlertsEnabled,
+        openShiftAlertRadiusMiles: parsed.data.openShiftAlertRadiusMiles,
         hourlyRateCents: parsed.data.hourlyRateCents,
         bio: parsed.data.bio,
       },
@@ -2484,6 +2693,8 @@ app.put('/api/worker/profile', async (req, res) => {
         state: updated.state,
         zipCode: updated.zipCode,
         maxDistanceMiles: updated.maxDistanceMiles,
+        openShiftAlertsEnabled: updated.openShiftAlertsEnabled,
+        openShiftAlertRadiusMiles: updated.openShiftAlertRadiusMiles,
         hourlyRateCents: updated.hourlyRateCents,
         bio: updated.bio,
         onboardingStatus: updated.onboardingStatus,
@@ -2778,6 +2989,30 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
     const professionalEmail = professional.user.email || 'Not available';
 
     try {
+      const admins = await prisma.user.findMany({
+        where: {
+          role: 'INTERNAL_ADMIN',
+          isActive: true,
+          notifyDocumentUploads: true,
+        },
+        select: { id: true },
+      });
+
+      await Promise.all(
+        admins.map((admin) =>
+          createAdminNotification({
+            userId: admin.id,
+            type: 'GENERAL',
+            title: 'Document uploaded',
+            message: `${professionalName} uploaded ${document.category} for review.`,
+          })
+        )
+      );
+    } catch (notificationError) {
+      console.error('Document upload admin notification failed:', notificationError);
+    }
+
+    try {
   if (!ADMIN_ALERT_EMAIL) {
     console.error('Document upload email skipped: ADMIN_ALERT_EMAIL is not configured');
   } else {
@@ -2856,6 +3091,28 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
       const hasAllRequiredDocsUploaded = requiredCategories.every((category) =>
         uploadedRequiredCategories.has(category)
       );
+
+      if (hasAllRequiredDocsUploaded) {
+        const admins = await prisma.user.findMany({
+          where: {
+            role: 'INTERNAL_ADMIN',
+            isActive: true,
+            notifyWorkerReadyForReview: true,
+          },
+          select: { id: true },
+        });
+
+        await Promise.all(
+          admins.map((admin) =>
+            createAdminNotification({
+              userId: admin.id,
+              type: 'GENERAL',
+              title: 'Worker ready for review',
+              message: `${professionalName} uploaded all required documents and is ready for admin review.`,
+            })
+          )
+        );
+      }
 
       if (hasAllRequiredDocsUploaded && ADMIN_ALERT_EMAIL) {
         await sendEmail({
@@ -4609,6 +4866,187 @@ app.post('/api/worker/notifications/mark-all-read', requireRole('PROFESSIONAL'),
 });
 
 
+app.post('/api/users/device-tokens', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const token = String(req.body?.token || '').trim();
+    const platform = String(req.body?.platform || '').trim() || null;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Device token is required' });
+    }
+
+    const saved = await prisma.userDeviceToken.upsert({
+      where: { token },
+      update: {
+        userId,
+        platform,
+        isActive: true,
+      },
+      create: {
+        userId,
+        token,
+        platform,
+      },
+    });
+
+    res.json({ data: saved });
+  } catch (error) {
+    console.error('POST /api/users/device-tokens error:', error);
+    res.status(500).json({ error: 'Failed to save device token' });
+  }
+});
+
+app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const notifications = await prisma.facilityNotification.findMany({
+      where: { facilityId },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 100,
+    });
+
+    res.json({ data: notifications });
+  } catch (error) {
+    console.error('GET /api/facility/notifications error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility notifications' });
+  }
+});
+
+app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const count = await prisma.facilityNotification.count({
+      where: {
+        facilityId,
+        isRead: false,
+      },
+    });
+
+    res.json({ data: { unreadCount: count, count } });
+  } catch (error) {
+    console.error('GET /api/facility/notifications/unread-count error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility unread count' });
+  }
+});
+
+app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const updated = await prisma.facilityNotification.updateMany({
+      where: { id, facilityId },
+      data: { isRead: true },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/facility/notifications/:id/read error:', error);
+    res.status(500).json({ error: 'Failed to mark facility notification read' });
+  }
+});
+
+app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    await prisma.facilityNotification.updateMany({
+      where: { facilityId, isRead: false },
+      data: { isRead: true },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/facility/notifications/mark-all-read error:', error);
+    res.status(500).json({ error: 'Failed to mark facility notifications read' });
+  }
+});
+
+app.get('/api/admin/notifications', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+
+    const notifications = await prisma.adminNotification.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 100,
+    });
+
+    res.json({ data: notifications });
+  } catch (error) {
+    console.error('GET /api/admin/notifications error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin notifications' });
+  }
+});
+
+app.get('/api/admin/notifications/unread-count', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+
+    const count = await prisma.adminNotification.count({
+      where: { userId, isRead: false },
+    });
+
+    res.json({ data: { unreadCount: count, count } });
+  } catch (error) {
+    console.error('GET /api/admin/notifications/unread-count error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin unread count' });
+  }
+});
+
+app.post('/api/admin/notifications/:id/read', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+
+    const updated = await prisma.adminNotification.updateMany({
+      where: { id, userId },
+      data: { isRead: true },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/admin/notifications/:id/read error:', error);
+    res.status(500).json({ error: 'Failed to mark admin notification read' });
+  }
+});
+
+app.post('/api/admin/notifications/mark-all-read', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+
+    await prisma.adminNotification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/admin/notifications/mark-all-read error:', error);
+    res.status(500).json({ error: 'Failed to mark admin notifications read' });
+  }
+});
+
+
 app.get('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (_req: AuthedRequest, res) => {
   try {
     const facilities = await prisma.facility.findMany({
@@ -5629,21 +6067,33 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: Au
 
     const activeWorkers = activeWorkerIds.size;
 
-    const recentShifts = shifts
-      .sort((a, b) => +new Date(b.date) - +new Date(a.date))
-      .slice(0, 6)
-      .map((shift) => {
-        const approvedCount = shift.requests.filter((r) => r.status === 'APPROVED').length;
-        return {
-          id: shift.id,
-          role: shift.role,
-          shiftType: shift.shiftType,
-          date: shift.date,
-          applicants: shift.requests.length,
-          approvedCount,
-          status: shift.status,
-        };
-      });
+	const recentShifts = shifts
+  .sort((a, b) => +new Date(b.date) - +new Date(a.date))
+  .slice(0, 6)
+  .map((shift) => {
+    const approvedCount = shift.requests.filter(
+      (r) => r.status === 'APPROVED'
+    ).length;
+
+    const activeApplicantCount = shift.requests.filter((r) =>
+      [
+        'REQUESTED',
+        'UNDER_REVIEW',
+        'APPROVED',
+        'CANCELLATION_REQUESTED',
+      ].includes(r.status)
+    ).length;
+
+    return {
+      id: shift.id,
+      role: shift.role,
+      shiftType: shift.shiftType,
+      date: shift.date,
+      applicants: activeApplicantCount,
+      approvedCount,
+      status: shift.status,
+    };
+  });
 
     res.json({
       data: {

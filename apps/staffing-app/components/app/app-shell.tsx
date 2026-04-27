@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { logoutRequest } from '@/lib/auth-client';
+import { PushRegistration } from '@/components/app/push-registration';
 
 type AppShellProps = {
   title: string;
@@ -65,6 +66,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
 
   return (
     <main className="min-h-screen bg-slate-100 pb-28">
+      <PushRegistration />
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-7 pb-5 pt-[calc(env(safe-area-inset-top)+5.25rem)] backdrop-blur">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

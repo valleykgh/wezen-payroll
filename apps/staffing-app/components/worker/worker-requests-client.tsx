@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
+function requestStatusLabel(status: string, notes?: string | null) {
+  if (status === 'CANCELLATION_REQUESTED') return 'CANCELLATION PENDING';
+  if (status === 'CANCELLED' && notes?.startsWith('Cancellation approved')) return 'CANCELLATION APPROVED';
+  if (status === 'APPROVED' && notes?.startsWith('Cancellation denied')) return 'CANCELLATION DENIED';
+  if (status === 'REJECTED') return 'SHIFT REJECTED';
+  if (status === 'APPROVED') return 'SHIFT APPROVED';
+  return status;
+}
+
 type WorkerRequest = {
   id: string;
   status: string;
@@ -128,7 +137,7 @@ export function WorkerRequestsClient() {
             </div>
 
             <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-              {request.status}
+              {requestStatusLabel(request.status, request.reviewNotes)}
             </span>
           </div>
 
@@ -152,6 +161,12 @@ export function WorkerRequestsClient() {
           {request.status === 'CANCELLATION_REQUESTED' ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
               Cancellation pending facility review.
+            </div>
+          ) : null}
+
+          {request.status === 'CANCELLED' && request.reviewNotes?.startsWith('Cancellation approved') ? (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+              Cancellation approved. You have been released from this shift.
             </div>
           ) : null}
         </div>

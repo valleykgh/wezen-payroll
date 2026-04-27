@@ -60,6 +60,13 @@ export default function WorkerRequestsPage() {
     load();
   }, []);
 async function requestCancellation(requestId: string) {
+  const reason = window.prompt('Reason for requesting cancellation?')?.trim();
+
+  if (!reason) {
+    setMessage('Cancellation reason is required.');
+    return;
+  }
+
   try {
     setBusyId(requestId);
     setMessage('');
@@ -69,6 +76,10 @@ async function requestCancellation(requestId: string) {
       {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
       }
     );
 
@@ -92,11 +103,13 @@ async function requestCancellation(requestId: string) {
     setItems(refreshed.data);
     setMessage('Cancellation request sent to the facility for review.');
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : 'Failed to request cancellation');
+    const text = error instanceof Error ? error.message : 'Failed to request cancellation';
+    setMessage(text.includes('within 4 hours') ? 'Cancellation is locked within 4 hours of shift start. Please contact Wezen Staffing support.' : text);
   } finally {
     setBusyId(null);
   }
 }
+
   return (
     <div className="space-y-8">
       <div className="page-gradient rounded-[2rem] p-6">
@@ -249,10 +262,10 @@ async function requestCancellation(requestId: string) {
       {request.status === 'CANCELLED' ? (
         <div className="mt-4 rounded-[1.25rem] border border-rose-200 bg-rose-50 p-4 text-rose-900">
           <div className="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
-            Shift Cancelled
+            Shift / Cancellation Closed
           </div>
           <div className="mt-2 text-sm">
-            This shift has been cancelled.
+            If this was a cancellation request, you have been released from the shift.
           </div>
         </div>
       ) : null}

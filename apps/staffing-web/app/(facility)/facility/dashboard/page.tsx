@@ -8,6 +8,24 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
+type FacilityRequest = {
+  id: string;
+  status: string;
+  reviewNotes?: string | null;
+  professional: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  };
+  shift: {
+    role: string;
+    shiftType: string;
+    date: string;
+    time: string;
+    facilityName: string;
+  };
+};
+
 type DashboardData = {
   data: {
     stats: {
@@ -40,6 +58,7 @@ export default function FacilityDashboardPage() {
   const [message, setMessage] = useState('Loading dashboard...');
   const [report, setReport] = useState<any | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [facilityRequests, setFacilityRequests] = useState<FacilityRequest[]>([]);
 
   const today = new Date();
 const thirtyDaysAgo = new Date();
@@ -52,6 +71,15 @@ const [endDate, setEndDate] = useState(
   today.toISOString().split('T')[0]
 );  
  
+async function loadFacilityRequests() {
+  try {
+    const res = await apiFetch<{ data: FacilityRequest[] }>('/api/facility/requests');
+    setFacilityRequests(res.data || []);
+  } catch {
+    setFacilityRequests([]);
+  }
+}
+
 async function loadReport() {
   try {
     setLoadingReport(true);
@@ -91,7 +119,12 @@ async function loadReport() {
 }
     load();
     loadReport();
+    loadFacilityRequests();
   }, []);
+
+const cancellationRequests = facilityRequests.filter(
+  (request) => request.status === 'CANCELLATION_REQUESTED'
+);
 
 const chartData = report
   ? [
@@ -124,6 +157,23 @@ const chartData = report
           Live snapshot of staffing, approvals, and compliance.
         </p>
       </div>
+
+      {cancellationRequests.length > 0 ? (
+        <Link
+          href="/facility/applicants"
+          className="block rounded-[1.75rem] border-2 border-rose-300 bg-rose-50 p-6 shadow-sm transition hover:bg-rose-100"
+        >
+          <div className="text-sm font-bold uppercase tracking-[0.2em] text-rose-700">
+            Urgent cancellation requests
+          </div>
+          <div className="mt-2 text-3xl font-extrabold text-rose-950">
+            {cancellationRequests.length} need review
+          </div>
+          <p className="mt-2 text-sm font-semibold text-rose-800">
+            Workers are requesting cancellation. Review and approve or deny now.
+          </p>
+        </Link>
+      ) : null}
 
         {message && !dashboard ? (
         <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6 shadow-sm">

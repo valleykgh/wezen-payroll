@@ -44,6 +44,68 @@ export function ApplicantsClient({ requests }: Props) {
     setItems(requests);
   }, [requests]);
 
+  async function updateCancellationRequest(requestId: string, action: 'approve-cancellation' | 'deny-cancellation') {
+    const reason =
+      action === 'deny-cancellation'
+        ? window.prompt('Reason for denying cancellation request?')?.trim()
+        : undefined;
+
+    if (action === 'deny-cancellation' && !reason) {
+      setMessage('Cancellation denial reason is required.');
+      return;
+    }
+
+    try {
+      setBusyId(requestId);
+      setMessage('');
+
+      const res = await fetch(
+        `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+        }
+      );
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || 'Failed to update cancellation request');
+      }
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === requestId
+            ? {
+                ...item,
+                status: action === 'approve-cancellation' ? 'CANCELLED' : 'APPROVED',
+                reviewNotes:
+                  action === 'approve-cancellation'
+                    ? 'Cancellation approved by facility. Worker released from this shift.'
+                    : `Cancellation denied by facility: ${reason}`,
+              }
+            : item
+        )
+      );
+
+      setMessage(
+        action === 'approve-cancellation'
+          ? 'Cancellation approved. Worker released from shift.'
+          : 'Cancellation denied. Worker remains scheduled.'
+      );
+
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update cancellation request');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
       setBusyId(requestId);
@@ -183,25 +245,47 @@ export function ApplicantsClient({ requests }: Props) {
                   Review Details
                 </Link>
 
-                {request.status !== 'APPROVED' ? (
-                  <button
-                    onClick={() => updateRequest(request.id, 'approve')}
-                    disabled={busyId === request.id}
-                    className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {busyId === request.id ? 'Working...' : 'Approve'}
-                  </button>
-                ) : null}
+                {request.status === 'CANCELLATION_REQUESTED' ? (
+                  <>
+                    <button
+                      onClick={() => updateCancellationRequest(request.id, 'approve-cancellation')}
+                      disabled={busyId === request.id}
+                      className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busyId === request.id ? 'Working...' : 'Approve Cancellation'}
+                    </button>
 
-                {request.status !== 'REJECTED' ? (
-                  <button
-                    onClick={() => updateRequest(request.id, 'reject')}
-                    disabled={busyId === request.id}
-                    className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {busyId === request.id ? 'Working...' : 'Reject'}
-                  </button>
-                ) : null}
+                    <button
+                      onClick={() => updateCancellationRequest(request.id, 'deny-cancellation')}
+                      disabled={busyId === request.id}
+                      className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busyId === request.id ? 'Working...' : 'Deny Cancellation'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {request.status !== 'APPROVED' && request.status !== 'CANCELLED' ? (
+                      <button
+                        onClick={() => updateRequest(request.id, 'approve')}
+                        disabled={busyId === request.id}
+                        className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busyId === request.id ? 'Working...' : 'Approve'}
+                      </button>
+                    ) : null}
+
+                    {request.status !== 'REJECTED' && request.status !== 'CANCELLED' ? (
+                      <button
+                        onClick={() => updateRequest(request.id, 'reject')}
+                        disabled={busyId === request.id}
+                        className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busyId === request.id ? 'Working...' : 'Reject'}
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
           </div>

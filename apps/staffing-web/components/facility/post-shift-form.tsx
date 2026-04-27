@@ -220,9 +220,10 @@ export function PostShiftForm() {
           <FormField label="Start time" htmlFor="startTime">
             <TextInput
               id="startTime"
-              type="time"
+              type="text"
+              placeholder="7, 7am, 15:30, 3:30pm"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={(e) => setStartTime(e.target.value)} onBlur={(e) => setStartTime(normalizeTimeInput(e.target.value))}
               required
             />
           </FormField>
@@ -230,9 +231,10 @@ export function PostShiftForm() {
           <FormField label="End time" htmlFor="endTime">
             <TextInput
               id="endTime"
-              type="time"
+              type="text"
+              placeholder="7, 7am, 15:30, 3:30pm"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
+              onChange={(e) => setEndTime(e.target.value)} onBlur={(e) => setEndTime(normalizeTimeInput(e.target.value))}
               required
             />
           </FormField>
@@ -352,6 +354,45 @@ export function PostShiftForm() {
       </div>
     </div>
   );
+}
+
+
+function normalizeTimeInput(value: string) {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return '';
+
+  const hasPm = raw.includes('pm') || raw.includes('p.m.');
+  const hasAm = raw.includes('am') || raw.includes('a.m.');
+  const clean = raw.replace(/a\.?m\.?|p\.?m\.?/g, '').trim();
+
+  let hour = 0;
+  let minute = 0;
+
+  if (clean.includes(':')) {
+    const [h, m] = clean.split(':');
+    hour = Number(h);
+    minute = Number(m || '0');
+  } else if (/^\d{3,4}$/.test(clean)) {
+    hour = Number(clean.slice(0, -2));
+    minute = Number(clean.slice(-2));
+  } else {
+    hour = Number(clean);
+    minute = 0;
+  }
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
+  if (minute < 0 || minute > 59) return value;
+
+  if (hasPm && hour < 12) hour += 12;
+  if (hasAm && hour === 12) hour = 0;
+
+  if (!hasAm && !hasPm && hour >= 1 && hour <= 7) {
+    // Facility shorthand: 7 means 7 AM.
+  }
+
+  if (hour < 0 || hour > 23) return value;
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function formatTimeLabel(value: string) {
