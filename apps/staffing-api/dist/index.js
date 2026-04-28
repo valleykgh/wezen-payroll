@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { hashPassword, verifyPassword, signAuthToken, setAuthCookie, clearAuthCookie, } from './auth.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sendEmail } from './services/email.js';
+import { createHash, randomBytes } from 'crypto';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer } from './services/onedrive.js';
 import { uploadFileToCandidateFolder } from './services/onedrive.js';
@@ -894,6 +895,8 @@ const registerProfessionalSchema = z.object({
     phone: z.string().trim().optional(),
     addressLine1: z.string().trim().optional(),
     addressLine2: z.string().trim().optional(),
+    openShiftAlertsEnabled: z.boolean().optional(),
+    openShiftAlertRadiusMiles: z.number().int().positive().optional(),
     role: z.nativeEnum(ClinicianRole),
     city: z.string().optional(),
     state: z.string().optional(),
@@ -994,6 +997,8 @@ app.post('/api/auth/register-professional', async (req, res) => {
                         zipCode: parsed.data.zipCode,
                         onboardingStatus: 'PENDING',
                         approvedByWezen: false,
+                        openShiftAlertsEnabled: parsed.data.openShiftAlertsEnabled ?? false,
+                        openShiftAlertRadiusMiles: parsed.data.openShiftAlertRadiusMiles ?? 50,
                     },
                 },
             },
@@ -1149,6 +1154,121 @@ app.post('/api/auth/register-facility', async (req, res) => {
 const loginSchema = z.object({
     email: z.email(),
     password: z.string().min(6),
+});
+const passwordResetRequestSchema = z.object({
+    email: z.email(),
+});
+const passwordResetConfirmSchema = z.object({
+    token: z.string().min(20),
+    newPassword: z.string().min(8),
+});
+function hashResetToken(token) {
+    return createHash('sha256').update(token).digest('hex');
+}
+function getPasswordResetBaseUrl() {
+    return (process.env.STAFFING_WEB_BASE_URL ||
+        process.env.FRONTEND_BASE_URL ||
+        'https://wezenstaffing.com').replace(/\/$/, '');
+}
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const parsed = passwordResetRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const email = parsed.data.email.toLowerCase().trim();
+        const user = await prisma.user.findUnique({
+            where: { email },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                isActive: true,
+                isSystemUser: true,
+            },
+        });
+        if (!user || !user.isActive || user.isSystemUser) {
+            return res.json({ ok: true });
+        }
+        await prisma.passwordResetToken.updateMany({
+            where: {
+                userId: user.id,
+                usedAt: null,
+                expiresAt: { gt: new Date() },
+            },
+            data: { usedAt: new Date() },
+        });
+        const token = randomBytes(32).toString('hex');
+        const tokenHash = hashResetToken(token);
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+        await prisma.passwordResetToken.create({
+            data: {
+                userId: user.id,
+                tokenHash,
+                expiresAt,
+            },
+        });
+        const resetUrl = `${getPasswordResetBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+        const appResetUrl = `${getPasswordResetBaseUrl()}/app/reset-password/index.html?token=${encodeURIComponent(token)}`;
+        await sendEmail({
+            to: user.email,
+            subject: 'Reset your Wezen Staffing password',
+            html: `
+        <h2>Reset your password</h2>
+        <p>Hello ${user.firstName || 'there'},</p>
+        <p>Use the link below to reset your Wezen Staffing password. This link expires in 30 minutes.</p>
+        <p><a href="${resetUrl}">Reset Password</a></p>
+        <p>If you are using the iPhone app, open this link from your phone: <a href="${appResetUrl}">Reset in App</a></p>
+        <p>If you did not request this, you can ignore this email.</p>
+      `,
+            text: [
+                'Reset your Wezen Staffing password',
+                `Use this link to reset your password. It expires in 30 minutes: ${resetUrl}`,
+                `iPhone app reset link: ${appResetUrl}`,
+                'If you did not request this, you can ignore this email.',
+            ].join('\n'),
+        });
+        return res.json({ ok: true });
+    }
+    catch (error) {
+        console.error('POST /api/auth/forgot-password error:', error);
+        return res.status(500).json({ error: 'Failed to request password reset' });
+    }
+});
+app.post('/api/auth/reset-password', async (req, res) => {
+    const parsed = passwordResetConfirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const tokenHash = hashResetToken(parsed.data.token);
+        const reset = await prisma.passwordResetToken.findUnique({
+            where: { tokenHash },
+            include: { user: true },
+        });
+        if (!reset || reset.usedAt || reset.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'Reset link is invalid or expired.' });
+        }
+        if (!reset.user.isActive || reset.user.isSystemUser) {
+            return res.status(403).json({ error: 'Password cannot be reset for this account.' });
+        }
+        const passwordHash = await hashPassword(parsed.data.newPassword);
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: reset.userId },
+                data: { passwordHash },
+            }),
+            prisma.passwordResetToken.update({
+                where: { id: reset.id },
+                data: { usedAt: new Date() },
+            }),
+        ]);
+        return res.json({ ok: true });
+    }
+    catch (error) {
+        console.error('POST /api/auth/reset-password error:', error);
+        return res.status(500).json({ error: 'Failed to reset password' });
+    }
 });
 app.post('/api/auth/login', async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
@@ -1723,6 +1843,11 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         if (requestRecord.status === 'APPROVED') {
             return res.json({ data: requestRecord });
         }
+        if (req.body?.facilityDocumentReviewConfirmed !== true) {
+            return res.status(400).json({
+                error: 'Facility document review confirmation is required before approving this applicant.',
+            });
+        }
         const approvedCount = await prisma.shiftRequest.count({
             where: {
                 shiftId: requestRecord.shift.id,
@@ -2207,6 +2332,8 @@ app.get('/api/worker/profile', async (req, res) => {
             data: {
                 id: profile.id,
                 role: profile.role,
+                addressLine1: profile.addressLine1,
+                addressLine2: profile.addressLine2,
                 city: profile.city,
                 state: profile.state,
                 zipCode: profile.zipCode,
@@ -2237,6 +2364,8 @@ const updateWorkerProfileSchema = z.object({
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     phone: z.string().optional(),
+    addressLine1: z.string().optional(),
+    addressLine2: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
     zipCode: z.string().optional(),
@@ -2262,6 +2391,8 @@ app.put('/api/worker/profile', async (req, res) => {
         const updated = await prisma.professionalProfile.update({
             where: { id: parsed.data.professionalId },
             data: {
+                addressLine1: parsed.data.addressLine1,
+                addressLine2: parsed.data.addressLine2,
                 city: parsed.data.city,
                 state: parsed.data.state,
                 zipCode: parsed.data.zipCode,
@@ -2287,6 +2418,8 @@ app.put('/api/worker/profile', async (req, res) => {
             data: {
                 id: updated.id,
                 role: updated.role,
+                addressLine1: updated.addressLine1,
+                addressLine2: updated.addressLine2,
                 city: updated.city,
                 state: updated.state,
                 zipCode: updated.zipCode,
@@ -3045,6 +3178,49 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
 });
 const adminRejectDocumentSchema = z.object({
     notes: z.string().min(1),
+});
+const adminResetWorkerPasswordSchema = z.object({
+    newPassword: z.string().min(8),
+});
+app.post('/api/admin/workers/:professionalId/reset-password', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    const parsed = adminResetWorkerPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const professionalId = String(req.params.professionalId || '');
+        if (!professionalId) {
+            return res.status(400).json({ error: 'professionalId is required' });
+        }
+        const worker = await prisma.professionalProfile.findUnique({
+            where: { id: professionalId },
+            include: {
+                user: true,
+            },
+        });
+        if (!worker) {
+            return res.status(404).json({ error: 'Worker not found' });
+        }
+        if (worker.user.isSystemUser) {
+            return res.status(403).json({ error: 'System user password cannot be reset here.' });
+        }
+        const passwordHash = await hashPassword(parsed.data.newPassword);
+        await prisma.user.update({
+            where: { id: worker.userId },
+            data: { passwordHash },
+        });
+        return res.json({
+            data: {
+                ok: true,
+                workerId: worker.id,
+                email: worker.user.email,
+            },
+        });
+    }
+    catch (error) {
+        console.error('POST /api/admin/workers/:professionalId/reset-password error:', error);
+        return res.status(500).json({ error: 'Failed to reset worker password' });
+    }
 });
 app.put('/api/admin/workers/:professionalId/pay-rates', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     const parsed = updateWorkerPayRatesSchema.safeParse(req.body);

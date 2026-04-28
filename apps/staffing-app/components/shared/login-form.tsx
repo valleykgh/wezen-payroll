@@ -95,6 +95,15 @@ async function handleSubmit(e: React.FormEvent) {
         </FormField>
       </div>
 
+      <div className="mt-4 text-right">
+        <a
+          href="/forgot-password/index.html"
+          className="text-sm font-medium text-cyan-700 underline underline-offset-4"
+        >
+          Forgot password?
+        </a>
+      </div>
+
       <div className="mt-6">
         <button
           type="submit"

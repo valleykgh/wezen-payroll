@@ -83,9 +83,27 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
         return;
       }
 
+      const body =
+        action === 'approve'
+          ? { facilityDocumentReviewConfirmed: true }
+          : reason
+            ? { reason }
+            : undefined;
+
+      if (action === 'approve') {
+        const confirmed = window.confirm(
+          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
+        );
+
+        if (!confirmed) {
+          setMessage('Approval cancelled. Please review worker documents first.');
+          return;
+        }
+      }
+
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
         method: 'POST',
-        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+        ...(body ? { body: JSON.stringify(body) } : {}),
       });
 
       setMessage(
@@ -104,6 +122,8 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
   }
 
   async function updateCancellation(action: 'approve-cancellation' | 'deny-cancellation') {
+    if (!detail) return;
+
     setBusy(true);
     setMessage('');
 
@@ -118,7 +138,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
         return;
       }
 
-      await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
+      await apiFetch(`/api/shift-requests/${detail.id}/${action}`, {
         method: 'POST',
         ...(reason ? { body: JSON.stringify({ reason }) } : {}),
       });

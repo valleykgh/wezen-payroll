@@ -8,6 +8,8 @@ import { WorkerProfileForm } from '@/components/worker/worker-profile-form';
 type WorkerProfile = {
   id: string;
   role: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;

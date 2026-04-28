@@ -69,6 +69,7 @@ export default function AdminWorkerDetailPage({
   const [worker, setWorker] = useState<WorkerDetail | null>(null);
   const [message, setMessage] = useState('Loading worker detail...');
   const [busy, setBusy] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
   const [workerRejectReason, setWorkerRejectReason] = useState('');
   const [regularPayRateDollars, setRegularPayRateDollars] = useState('');
@@ -318,6 +319,45 @@ async function downloadAllDocuments() {
     setBusy(false);
   }
 }
+  async function resetWorkerPassword() {
+    const newPassword = resetPassword.trim();
+
+    if (newPassword.length < 8) {
+      setMessage('Temporary password must be at least 8 characters.');
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setMessage('');
+
+      const res = await fetch(
+        `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/reset-password`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ newPassword }),
+        }
+      );
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || 'Failed to reset worker password');
+      }
+
+      setResetPassword('');
+      setMessage(`Password reset successfully for ${worker?.email || 'worker'}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to reset worker password');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteWorker() {
     try {
       const confirmed = window.confirm(
@@ -445,6 +485,33 @@ const icaSignedStepLabel = isIcaSigned
               <div className="mt-2 text-sm text-slate-700">
                 {worker.bio || 'No professional summary provided.'}
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-[1.75rem] border border-rose-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-bold tracking-tight text-slate-950">
+              Reset worker password
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Username/email: <span className="font-semibold text-slate-950">{worker.email}</span>
+            </p>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Temporary password, minimum 8 characters"
+                className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+              />
+              <button
+                type="button"
+                onClick={resetWorkerPassword}
+                disabled={busy || resetPassword.trim().length < 8}
+                className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Reset Password
+              </button>
             </div>
           </section>
 

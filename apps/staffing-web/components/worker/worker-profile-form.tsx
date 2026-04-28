@@ -11,6 +11,8 @@ import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 type WorkerProfile = {
   id: string;
   role: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
@@ -36,6 +38,8 @@ export function WorkerProfileForm({ profile }: Props) {
     firstName: profile.firstName || '',
     lastName: profile.lastName || '',
     phone: profile.phone || '',
+    addressLine1: profile.addressLine1 || '',
+    addressLine2: profile.addressLine2 || '',
     city: profile.city || '',
     state: profile.state || '',
     zipCode: profile.zipCode || '',
@@ -72,6 +76,8 @@ export function WorkerProfileForm({ profile }: Props) {
           firstName: form.firstName,
           lastName: form.lastName,
           phone: form.phone || undefined,
+          addressLine1: form.addressLine1 || undefined,
+          addressLine2: form.addressLine2 || undefined,
           city: form.city || undefined,
           state: form.state || undefined,
           zipCode: form.zipCode || undefined,
@@ -163,6 +169,22 @@ export function WorkerProfileForm({ profile }: Props) {
               type="number"
               value={form.maxDistanceMiles}
               onChange={(e) => update('maxDistanceMiles', e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Address line 1" htmlFor="addressLine1">
+            <TextInput
+              id="addressLine1"
+              value={form.addressLine1}
+              onChange={(e) => update('addressLine1', e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Address line 2" htmlFor="addressLine2">
+            <TextInput
+              id="addressLine2"
+              value={form.addressLine2}
+              onChange={(e) => update('addressLine2', e.target.value)}
             />
           </FormField>
 

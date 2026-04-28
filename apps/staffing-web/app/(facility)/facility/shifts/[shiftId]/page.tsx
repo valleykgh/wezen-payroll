@@ -83,6 +83,17 @@ export default function FacilityShiftDetailPage({
 
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
+      if (action === 'approve') {
+        const confirmed = window.confirm(
+          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
+        );
+
+        if (!confirmed) {
+          setMessage('Approval cancelled. Please review worker documents first.');
+          return;
+        }
+      }
+
       setBusyId(requestId);
       setMessage('');
 

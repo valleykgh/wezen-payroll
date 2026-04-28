@@ -86,6 +86,8 @@ export async function registerProfessionalRequest(payload: {
   phone?: string;
   addressLine1?: string;
   addressLine2?: string;
+  openShiftAlertsEnabled?: boolean;
+  openShiftAlertRadiusMiles?: number;
   role: 'CNA' | 'LVN' | 'RN';
   city?: string;
   state?: string;
@@ -120,4 +122,27 @@ export async function registerFacilityRequest(payload: {
   });
 
 return parseResponse<any>(res);
+}
+
+
+export async function forgotPasswordRequest(email: string) {
+  const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+  });
+
+  return parseResponse<{ ok: boolean }>(res);
+}
+
+export async function resetPasswordRequest(token: string, newPassword: string) {
+  const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token, newPassword }),
+  });
+
+  return parseResponse<{ ok: boolean }>(res);
 }

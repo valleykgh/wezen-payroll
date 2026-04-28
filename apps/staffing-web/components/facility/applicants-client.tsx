@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type FacilityRequest = {
@@ -45,37 +46,24 @@ export function ApplicantsClient({ requests }: Props) {
   }, [requests]);
 
   async function updateCancellationRequest(requestId: string, action: 'approve-cancellation' | 'deny-cancellation') {
-    const reason =
-      action === 'deny-cancellation'
-        ? window.prompt('Reason for denying cancellation request?')?.trim()
-        : undefined;
-
-    if (action === 'deny-cancellation' && !reason) {
-      setMessage('Cancellation denial reason is required.');
-      return;
-    }
+    setBusyId(requestId);
+    setMessage('');
 
     try {
-      setBusyId(requestId);
-      setMessage('');
+      const reason =
+        action === 'deny-cancellation'
+          ? window.prompt('Please enter the reason for denying this cancellation request:')?.trim()
+          : undefined;
 
-      const res = await fetch(
-        `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          ...(reason ? { body: JSON.stringify({ reason }) } : {}),
-        }
-      );
-
-      const text = await res.text();
-
-      if (!res.ok) {
-        throw new Error(text || 'Failed to update cancellation request');
+      if (action === 'deny-cancellation' && !reason) {
+        setMessage('Denial reason is required.');
+        return;
       }
+
+      await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
+        method: 'POST',
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+      });
 
       setItems((prev) =>
         prev.map((item) =>
@@ -86,23 +74,23 @@ export function ApplicantsClient({ requests }: Props) {
                 reviewNotes:
                   action === 'approve-cancellation'
                     ? 'Cancellation approved by facility. Worker released from this shift.'
-                    : `Cancellation denied by facility: ${reason}`,
+                    : `Cancellation denied by facility.${reason ? ` Reason: ${reason}` : ''}`,
               }
             : item
         )
       );
+
+      router.refresh();
 
       setMessage(
         action === 'approve-cancellation'
           ? 'Cancellation approved. Worker released from shift.'
           : 'Cancellation denied. Worker remains scheduled.'
       );
-
-      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to update cancellation request');
     } finally {
-      setBusyId(null);
+      setBusyId('');
     }
   }
 

@@ -72,9 +72,27 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
         return;
       }
 
+      const body =
+        action === 'approve'
+          ? { facilityDocumentReviewConfirmed: true }
+          : reason
+            ? { reason }
+            : undefined;
+
+      if (action === 'approve') {
+        const confirmed = window.confirm(
+          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
+        );
+
+        if (!confirmed) {
+          setMessage('Approval cancelled. Please review worker documents first.');
+          return;
+        }
+      }
+
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
         method: 'POST',
-        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+        ...(body ? { body: JSON.stringify(body) } : {}),
       });
       setMessage(
         action === 'approve'
@@ -90,6 +108,40 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
       setBusyId('');
     }
   }
+  async function updateCancellation(requestId: string, action: 'approve-cancellation' | 'deny-cancellation') {
+    setBusyId(requestId);
+    setMessage('');
+
+    try {
+      const reason =
+        action === 'deny-cancellation'
+          ? window.prompt('Please enter the reason for denying this cancellation request:')?.trim()
+          : undefined;
+
+      if (action === 'deny-cancellation' && !reason) {
+        setMessage('Denial reason is required.');
+        return;
+      }
+
+      await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
+        method: 'POST',
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+      });
+
+      setMessage(
+        action === 'approve-cancellation'
+          ? 'Cancellation approved. Worker released from shift.'
+          : 'Cancellation denied. Worker remains scheduled.'
+      );
+
+      await loadShift();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update cancellation request');
+    } finally {
+      setBusyId('');
+    }
+  }
+
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
@@ -175,7 +227,33 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
                   </span>
                 </div>
 
-                {request.status !== 'APPROVED' && request.status !== 'REJECTED' && request.status !== 'NO_SHOW' ? (
+                {request.status === 'CANCELLATION_REQUESTED' ? (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-bold text-amber-900">
+                      Worker requested cancellation. Approve to release them, or deny to keep them scheduled.
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateCancellation(request.id, 'approve-cancellation')}
+                        disabled={busyId === request.id}
+                        className="rounded-2xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+                      >
+                        {busyId === request.id ? 'Working...' : 'Approve Cancel'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateCancellation(request.id, 'deny-cancellation')}
+                        disabled={busyId === request.id}
+                        className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+                      >
+                        {busyId === request.id ? 'Working...' : 'Deny Cancel'}
+                      </button>
+                    </div>
+                  </div>
+                ) : request.status !== 'APPROVED' && request.status !== 'REJECTED' && request.status !== 'NO_SHOW' ? (
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <button
                       type="button"

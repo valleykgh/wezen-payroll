@@ -15,6 +15,8 @@ export function ProfessionalSignupForm() {
     phone: '',
     addressLine1: '',
     addressLine2: '',
+    openShiftAlertsEnabled: false,
+    openShiftAlertRadiusMiles: '50',
     role: 'LVN',
     city: '',
     state: '',
@@ -40,7 +42,9 @@ export function ProfessionalSignupForm() {
         lastName: form.lastName,
         phone: form.phone || undefined,
         addressLine1: form.addressLine1 || undefined,
-        addressLine2: form.addressLine2 || undefined,  
+        addressLine2: form.addressLine2 || undefined,
+        openShiftAlertsEnabled: form.openShiftAlertsEnabled,
+        openShiftAlertRadiusMiles: Number(form.openShiftAlertRadiusMiles || 50),
         role: form.role as 'CNA' | 'LVN' | 'RN',
         city: form.city || undefined,
         state: form.state || undefined,
@@ -184,7 +188,30 @@ export function ProfessionalSignupForm() {
       </div>
 
       <div className="mt-6">
-        <button
+        <div className="rounded-3xl border-2 border-cyan-200 bg-cyan-50 p-5">
+        <label className="flex items-start gap-3 text-sm font-extrabold text-cyan-950">
+          <input
+            type="checkbox"
+            checked={form.openShiftAlertsEnabled}
+            onChange={(e) => update('openShiftAlertsEnabled', e.target.checked)}
+            className="mt-1 h-5 w-5"
+          />
+          Notify me when matching shifts open near me
+        </label>
+
+        <label className="mt-4 block text-sm font-bold text-cyan-950">
+          Alert radius in miles
+          <input
+            type="number"
+            min={1}
+            value={form.openShiftAlertRadiusMiles}
+            onChange={(e) => update('openShiftAlertRadiusMiles', e.target.value)}
+            className="mt-2 w-full rounded-2xl border border-cyan-200 bg-white px-4 py-4 text-base font-bold"
+          />
+        </label>
+      </div>
+
+      <button
           type="submit"
           disabled={submitting}
           className="w-full rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"

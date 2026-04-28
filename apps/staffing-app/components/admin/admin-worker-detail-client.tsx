@@ -37,6 +37,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
 
   async function loadWorker() {
     setLoading(true);
@@ -49,6 +50,32 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
       setMessage(error instanceof Error ? error.message : 'Failed to load worker');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resetWorkerPassword() {
+    const newPassword = resetPassword.trim();
+
+    if (newPassword.length < 8) {
+      setMessage('Temporary password must be at least 8 characters.');
+      return;
+    }
+
+    setBusy('Reset password');
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/admin/workers/${professionalId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ newPassword }),
+      });
+
+      setResetPassword('');
+      setMessage(`Password reset successfully for ${worker?.email || 'worker'}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Password reset failed');
+    } finally {
+      setBusy('');
     }
   }
 
@@ -165,6 +192,34 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
             {busy === 'Mark ICA signed' ? 'Updating...' : 'Mark ICA signed'}
           </button>
         </div>
+      </div>
+
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-rose-200">
+        <h3 className="text-lg font-bold text-slate-950">Reset worker password</h3>
+        <p className="mt-2 text-sm font-semibold text-slate-600">
+          Username/email: {worker.email || 'Not available'}
+        </p>
+
+        <input
+          type="text"
+          value={resetPassword}
+          onChange={(e) => setResetPassword(e.target.value)}
+          placeholder="Temporary password"
+          className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold"
+        />
+
+        <button
+          type="button"
+          onClick={resetWorkerPassword}
+          disabled={Boolean(busy) || resetPassword.trim().length < 8}
+          className="mt-3 w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+        >
+          {busy === 'Reset password' ? 'Resetting...' : 'Reset Password'}
+        </button>
+
+        <p className="mt-3 text-xs font-semibold text-slate-500">
+          Temporary password must be at least 8 characters. Give it directly to the worker.
+        </p>
       </div>
 
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
