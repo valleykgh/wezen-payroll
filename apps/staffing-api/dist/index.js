@@ -6263,6 +6263,23 @@ app.get('/api/admin/test-onedrive', requireRole('INTERNAL_ADMIN'), async (_req, 
         });
     }
 });
+function parseShiftStartDateTime(shiftDate, startTimeLabel) {
+    const base = new Date(shiftDate);
+    const label = String(startTimeLabel || '').trim();
+    const match = label.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (!match) {
+        return base;
+    }
+    let hour = Number(match[1]);
+    const minute = Number(match[2] || 0);
+    const meridiem = match[3].toUpperCase();
+    if (meridiem === 'PM' && hour !== 12)
+        hour += 12;
+    if (meridiem === 'AM' && hour === 12)
+        hour = 0;
+    base.setHours(hour, minute, 0, 0);
+    return base;
+}
 app.post('/api/internal/jobs/send-shift-reminders', async (req, res) => {
     try {
         const authHeader = String(req.headers.authorization || '');
@@ -6271,32 +6288,55 @@ app.post('/api/internal/jobs/send-shift-reminders', async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized' });
         }
         const now = new Date();
-        const tomorrowStart = new Date(now);
-        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-        tomorrowStart.setHours(0, 0, 0, 0);
-        const tomorrowEnd = new Date(tomorrowStart);
-        tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+        const windowStart = new Date(now.getTime() + 11.75 * 60 * 60 * 1000);
+        const windowEnd = new Date(now.getTime() + 12.25 * 60 * 60 * 1000);
         const approvedRequests = await prisma.shiftRequest.findMany({
             where: {
                 status: 'APPROVED',
+                reminderSentAt: null,
                 shift: {
                     status: {
-                        in: ['OPEN', 'FILLED']
+                        in: ['OPEN', 'FILLED'],
                     },
                     date: {
-                        gte: tomorrowStart,
-                        lt: tomorrowEnd,
+                        gte: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+                        lt: new Date(now.getTime() + 48 * 60 * 60 * 1000),
                     },
                 },
             },
             select: {
                 id: true,
+                professionalId: true,
+                shift: {
+                    select: {
+                        facility: { select: { name: true } },
+                        role: true,
+                        shiftType: true,
+                        date: true,
+                        startTimeLabel: true,
+                        endTimeLabel: true,
+                    },
+                },
             },
         });
         let sent = 0;
         for (const request of approvedRequests) {
             try {
+                const shiftStart = parseShiftStartDateTime(request.shift.date, request.shift.startTimeLabel);
+                if (shiftStart < windowStart || shiftStart >= windowEnd) {
+                    continue;
+                }
                 await sendWorkerShiftReminderEmail(request.id);
+                await createWorkerNotification({
+                    professionalId: request.professionalId,
+                    type: 'GENERAL',
+                    title: 'Upcoming shift reminder',
+                    message: `Reminder: your ${request.shift.role} ${request.shift.shiftType} shift at ${request.shift.facility.name} starts in about 12 hours.`,
+                });
+                await prisma.shiftRequest.update({
+                    where: { id: request.id },
+                    data: { reminderSentAt: new Date() },
+                });
                 sent += 1;
             }
             catch (error) {
@@ -6305,6 +6345,8 @@ app.post('/api/internal/jobs/send-shift-reminders', async (req, res) => {
         }
         return res.json({
             ok: true,
+            windowStart,
+            windowEnd,
             reminderCount: approvedRequests.length,
             sent,
         });

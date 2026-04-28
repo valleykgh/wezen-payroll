@@ -273,6 +273,7 @@ model ShiftRequest {
   professionalId   String
   status           RequestStatus     @default(REQUESTED)
   requestedAt      DateTime          @default(now())
+  reminderSentAt DateTime?
   reviewedAt       DateTime?
   reviewNotes      String?
 
