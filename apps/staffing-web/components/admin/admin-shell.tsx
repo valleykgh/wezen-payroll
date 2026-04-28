@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppLogo } from '@/components/shared/app-logo';
 import { CurrentUserCard } from '@/components/shared/current-user-card';
+import { apiFetch } from '@/lib/api-client';
 
 const adminNav = [
+  { href: '/admin/notifications', label: 'Alerts', badgeKey: 'alerts' },
   { href: '/admin/workers', label: 'Workers' },
   { href: '/admin/facilities', label: 'Facilities' },
   { href: '/admin/facilities/new', label: 'Create Facility' },
@@ -19,6 +21,20 @@ const adminNav = [
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    async function loadAlerts() {
+      try {
+        const res = await apiFetch<{ data: { count?: number; unreadCount?: number } }>('/api/admin/notifications/unread-count');
+        setAlertCount(res.data.count || res.data.unreadCount || 0);
+      } catch {
+        setAlertCount(0);
+      }
+    }
+
+    loadAlerts();
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -53,6 +69,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   }
                 >
                   {item.label}
+                  {(item as any).badgeKey === 'alerts' && alertCount > 0 ? (
+                    <span className="ml-2 inline-flex min-w-[24px] items-center justify-center rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">
+                      {alertCount > 9 ? '9+' : alertCount}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

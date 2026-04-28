@@ -24,12 +24,14 @@ const navByRole = {
   ],
   facility: [
     { label: 'Home', href: '/app/facility/index.html' },
-    { label: 'Post', href: '/app/facility/post-shift/index.html' },
+    { label: 'Alerts', href: '/app/facility/notifications/index.html' },
     { label: 'Applicants', href: '/app/facility/applicants/index.html' },
     { label: 'Shifts', href: '/app/facility/shifts/index.html' },
+    { label: 'Post', href: '/app/facility/post-shift/index.html' },
   ],
   admin: [
     { label: 'Home', href: '/app/admin/index.html' },
+    { label: 'Alerts', href: '/app/admin/notifications/index.html' },
     { label: 'Workers', href: '/app/admin/workers/index.html' },
     { label: 'Facilities', href: '/app/admin/facilities/index.html' },
     { label: 'Shifts', href: '/app/admin/shifts/index.html' },
@@ -42,12 +44,19 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (role !== 'worker') return;
+    if (role !== 'worker' && role !== 'facility' && role !== 'admin') return;
 
     async function loadUnreadCount() {
       try {
-        const res = await apiFetch<{ data: { count: number } }>('/api/worker/notifications/unread-count');
-        setUnreadCount(res.data.count || 0);
+        const endpoint =
+          role === 'worker'
+            ? '/api/worker/notifications/unread-count'
+            : role === 'facility'
+              ? '/api/facility/notifications/unread-count'
+              : '/api/admin/notifications/unread-count';
+
+        const res = await apiFetch<{ data: { count?: number; unreadCount?: number } }>(endpoint);
+        setUnreadCount(res.data.count || res.data.unreadCount || 0);
       } catch {
         setUnreadCount(0);
       }
@@ -107,7 +116,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
                 }
               >
                 {item.label}
-                {role === 'worker' && item.label === 'Alerts' && unreadCount > 0 ? (
+                {item.label === 'Alerts' && unreadCount > 0 ? (
                   <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>

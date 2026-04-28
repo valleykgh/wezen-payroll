@@ -12,6 +12,8 @@ type WorkerProfile = {
   state?: string | null;
   zipCode?: string | null;
   maxDistanceMiles?: number | null;
+  openShiftAlertsEnabled?: boolean | null;
+  openShiftAlertRadiusMiles?: number | null;
   hourlyRateCents?: number | null;
   bio?: string | null;
   onboardingStatus?: string | null;

@@ -15,6 +15,8 @@ type WorkerProfile = {
   state?: string | null;
   zipCode?: string | null;
   maxDistanceMiles?: number | null;
+  openShiftAlertsEnabled?: boolean | null;
+  openShiftAlertRadiusMiles?: number | null;
   hourlyRateCents?: number | null;
   bio?: string | null;
   onboardingStatus?: string | null;
@@ -38,6 +40,8 @@ export function WorkerProfileForm({ profile }: Props) {
     state: profile.state || '',
     zipCode: profile.zipCode || '',
     maxDistanceMiles: String(profile.maxDistanceMiles ?? 25),
+    openShiftAlertsEnabled: Boolean(profile.openShiftAlertsEnabled),
+    openShiftAlertRadiusMiles: String(profile.openShiftAlertRadiusMiles ?? 50),
     hourlyRateDollars: profile.hourlyRateCents
       ? String(profile.hourlyRateCents / 100)
       : '',
@@ -210,6 +214,41 @@ export function WorkerProfileForm({ profile }: Props) {
         </div>
 
         <div className="mt-6">
+          <div className="rounded-[1.5rem] border border-cyan-200 bg-cyan-50 p-5">
+            <label className="flex items-start gap-3 text-sm font-semibold text-cyan-950">
+              <input
+                type="checkbox"
+                checked={form.openShiftAlertsEnabled}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    openShiftAlertsEnabled: e.target.checked,
+                  }))
+                }
+                className="mt-1"
+              />
+              Notify me when matching shifts open near me
+            </label>
+
+            <div className="mt-4">
+              <label className="mb-2 block text-sm font-medium text-cyan-950">
+                Alert radius in miles
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={form.openShiftAlertRadiusMiles}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    openShiftAlertRadiusMiles: e.target.value,
+                  }))
+                }
+                className="w-full rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm"
+              />
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={submitting}

@@ -10,11 +10,12 @@ import { apiFetch } from '@/lib/api-client';
 type FacilityNavItem = {
   href: string;
   label: string;
-  badgeKey?: 'pendingRequests';
+  badgeKey?: 'pendingRequests' | 'alerts';
 };
 
 const facilityNav: FacilityNavItem[] = [
   { href: '/facility/dashboard', label: 'Dashboard' },
+  { href: '/facility/notifications', label: 'Alerts', badgeKey: 'alerts' },
   { href: '/facility/settings', label: 'Profile & Settings' },
   { href: '/facility/shifts', label: 'Shifts' },
   { href: '/facility/shifts/post', label: 'Post Shift' },
@@ -28,6 +29,7 @@ const facilityNav: FacilityNavItem[] = [
 export function FacilityShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [pendingRequests, setPendingRequests] = useState(0);
+  const [alertCount, setAlertCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => {
     async function loadBadgeCounts() {
@@ -41,8 +43,12 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
         }>('/api/facility/dashboard');
 
         setPendingRequests(res.data.stats.pendingRequests || 0);
+
+        const alerts = await apiFetch<{ data: { count?: number; unreadCount?: number } }>('/api/facility/notifications/unread-count');
+        setAlertCount(alerts.data.count || alerts.data.unreadCount || 0);
       } catch {
         setPendingRequests(0);
+        setAlertCount(0);
       }
     }
 
@@ -61,7 +67,7 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               const badgeCount =
-                item.badgeKey === 'pendingRequests' ? pendingRequests : 0;
+                item.badgeKey === 'pendingRequests' ? pendingRequests : item.badgeKey === 'alerts' ? alertCount : 0;
 
               return (
                 <Link

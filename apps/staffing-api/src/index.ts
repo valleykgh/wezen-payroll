@@ -2707,6 +2707,39 @@ app.put('/api/worker/profile', async (req, res) => {
   }
 });
 
+
+app.put('/api/worker/notification-settings', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const professionalId = await getProfessionalProfileIdForUser(userId);
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const enabled = Boolean(req.body?.openShiftAlertsEnabled);
+    const radius = Number(req.body?.openShiftAlertRadiusMiles || 50);
+
+    const updated = await prisma.professionalProfile.update({
+      where: { id: professionalId },
+      data: {
+        openShiftAlertsEnabled: enabled,
+        openShiftAlertRadiusMiles: Number.isFinite(radius) && radius > 0 ? radius : 50,
+      },
+      select: {
+        id: true,
+        openShiftAlertsEnabled: true,
+        openShiftAlertRadiusMiles: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/worker/notification-settings error:', error);
+    res.status(500).json({ error: 'Failed to update notification settings' });
+  }
+});
+
 app.get('/api/worker/documents', async (req, res) => {
   try {
     const professionalId = String(req.query.professionalId || '');
