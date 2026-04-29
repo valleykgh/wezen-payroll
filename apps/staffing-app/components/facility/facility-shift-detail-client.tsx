@@ -74,20 +74,13 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
 
       const body =
         action === 'approve'
-          ? { facilityDocumentReviewConfirmed: true }
+          ? undefined
           : reason
             ? { reason }
             : undefined;
 
       if (action === 'approve') {
-        const confirmed = window.confirm(
-          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
-        );
-
-        if (!confirmed) {
-          setMessage('Approval cancelled. Please review worker documents first.');
-          return;
-        }
+        window.alert('Please review/download the worker documents before approving this applicant.');
       }
 
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {

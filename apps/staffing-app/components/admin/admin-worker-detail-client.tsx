@@ -38,6 +38,12 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
   const [resetPassword, setResetPassword] = useState('');
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
+  const [adminUploadCategory, setAdminUploadCategory] = useState('BACKGROUND_CHECK');
+  const [adminUploadName, setAdminUploadName] = useState('');
+  const [replaceExisting, setReplaceExisting] = useState(true);
 
   async function loadWorker() {
     setLoading(true);
@@ -50,6 +56,78 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
       setMessage(error instanceof Error ? error.message : 'Failed to load worker');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendWorkerMessage() {
+    const subject = messageSubject.trim();
+    const body = messageBody.trim();
+
+    if (!subject || !body) {
+      setMessage('Subject and message are required.');
+      return;
+    }
+
+    setBusy('Send message');
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/admin/workers/${professionalId}/message`, {
+        method: 'POST',
+        body: JSON.stringify({ subject, message: body }),
+      });
+
+      setMessageSubject('');
+      setMessageBody('');
+      setMessage('Message sent to worker by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function uploadAdminDocument() {
+    if (!adminUploadFile) {
+      setMessage('Please select a file.');
+      return;
+    }
+
+    setBusy('Upload document');
+    setMessage('');
+
+    try {
+      const token = window.localStorage.getItem('wezen_auth_token');
+      const formData = new FormData();
+
+      formData.append('file', adminUploadFile);
+      formData.append('category', adminUploadCategory);
+      formData.append('name', adminUploadName || adminUploadFile.name);
+      formData.append('replaceExisting', String(replaceExisting));
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_STAFFING_API_BASE_URL || 'https://api.wezenstaffing.com'}/api/admin/workers/${professionalId}/documents/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || 'Failed to upload document');
+      }
+
+      setAdminUploadFile(null);
+      setAdminUploadName('');
+      setMessage('Admin document uploaded successfully.');
+      await loadWorker();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to upload document');
+    } finally {
+      setBusy('');
     }
   }
 
@@ -222,8 +300,85 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
         </p>
       </div>
 
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-cyan-200">
+        <h3 className="text-lg font-bold text-slate-950">Send message to worker</h3>
+        <p className="mt-2 text-sm text-slate-600">Sends email and app notification.</p>
+
+        <input
+          type="text"
+          value={messageSubject}
+          onChange={(e) => setMessageSubject(e.target.value)}
+          placeholder="Subject"
+          className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold"
+        />
+
+        <textarea
+          value={messageBody}
+          onChange={(e) => setMessageBody(e.target.value)}
+          placeholder="Message"
+          rows={5}
+          className="mt-3 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold"
+        />
+
+        <button
+          type="button"
+          onClick={sendWorkerMessage}
+          disabled={Boolean(busy) || !messageSubject.trim() || !messageBody.trim()}
+          className="mt-3 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+        >
+          {busy === 'Send message' ? 'Sending...' : 'Send Message'}
+        </button>
+      </div>
+
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h3 className="text-lg font-bold text-slate-950">Documents</h3>
+
+        <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+          <h4 className="text-sm font-extrabold text-slate-950">Upload / Replace Internal Documents</h4>
+          <p className="mt-1 text-xs text-slate-600">Use this for Background Check or internal compliance uploads.</p>
+
+          <select
+            value={adminUploadCategory}
+            onChange={(e) => setAdminUploadCategory(e.target.value)}
+            className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+          >
+            <option value="BACKGROUND_CHECK">Background Check</option>
+            <option value="OTHER">Other</option>
+          </select>
+
+          <input
+            type="text"
+            value={adminUploadName}
+            onChange={(e) => setAdminUploadName(e.target.value)}
+            placeholder="Document name"
+            className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+          />
+
+          <input
+            type="file"
+            onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)}
+            className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+          />
+
+          <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={replaceExisting}
+              onChange={(e) => setReplaceExisting(e.target.checked)}
+            />
+            Replace existing same-category document
+          </label>
+
+          <button
+            type="button"
+            onClick={uploadAdminDocument}
+            disabled={Boolean(busy) || !adminUploadFile}
+            className="mt-3 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {busy === 'Upload document' ? 'Uploading...' : 'Upload Document'}
+          </button>
+        </div>
+
         <div className="mt-4 grid gap-3">
           {worker.documents.length === 0 ? (
             <p className="text-sm text-slate-600">No documents uploaded.</p>

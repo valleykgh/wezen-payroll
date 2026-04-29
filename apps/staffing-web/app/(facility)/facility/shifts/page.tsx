@@ -379,7 +379,7 @@ export default function FacilityShiftsPage() {
                   View Shift
                 </Link>
 	    
-	        {shift.status === 'OPEN' && shift.fillCount === 0 ? (
+	        {['OPEN', 'FILLED'].includes(shift.status) && shift.fillCount === 0 ? (
   <Link
     href={`/facility/shifts/${shift.id}/edit`}
     className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
@@ -388,7 +388,7 @@ export default function FacilityShiftsPage() {
   </Link>
 ) : null}
 
-                {shift.status === 'OPEN' ? (
+                {['OPEN', 'FILLED'].includes(shift.status) ? (
                   <>
                     <button
                       onClick={() => updateShift(shift.id, 'close')}

@@ -86,6 +86,7 @@ export default function ApplicantDetailPage({
 
         await load(resolved.requestId);
         setMessage('');
+
       } catch (error) {
         setMessage(
           error instanceof Error ? error.message : 'Failed to load applicant detail'
@@ -96,12 +97,50 @@ export default function ApplicantDetailPage({
     init();
   }, [params]);
 
+  async function sendApplicantMessage() {
+    if (!requestId) return;
+
+    const subject = window.prompt('Message subject?')?.trim();
+    if (!subject) return;
+
+    const body = window.prompt('Message to applicant?')?.trim();
+    if (!body) return;
+
+    try {
+      setBusy(true);
+      setMessage('');
+
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/facility/applicants/${requestId}/message`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, message: body }),
+      });
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || 'Failed to send message');
+      }
+
+      setMessage('Message sent to applicant by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateStatus(action: 'approve' | 'reject') {
     try {
       if (!requestId) return;
 
       setBusy(true);
       setMessage('');
+
+      if (action === 'approve') {
+        window.alert('Please review/download the worker documents before approving this applicant.');
+      }
 
       const res = await fetch(
         `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
@@ -266,7 +305,13 @@ async function downloadAllApplicantDocuments() {
 }
 
   if (!detail) {
-    return (
+    useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  return (
       <div className="space-y-8">
         <div className="page-gradient rounded-[2rem] p-6">
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
@@ -315,7 +360,7 @@ async function downloadAllApplicantDocuments() {
       </div>
 
       {message ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-xl -translate-x-1/2 -translate-y-1/2 whitespace-pre-line rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -369,6 +414,14 @@ async function downloadAllApplicantDocuments() {
             </div>
 
            <div className="mt-6 flex flex-wrap gap-3">
+  <button
+    type="button"
+    onClick={sendApplicantMessage}
+    disabled={busy}
+    className="rounded-full bg-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+  >
+    {busy ? 'Working...' : 'Send Message'}
+  </button>
   {detail.status === 'CANCELLATION_REQUESTED' ? (
     <>
       <button

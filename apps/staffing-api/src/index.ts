@@ -2196,12 +2196,6 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
       return res.status(404).json({ error: 'Facility admin not found' });
     }
 
-    if (req.body?.facilityDocumentReviewConfirmed !== true) {
-      return res.status(400).json({
-        error: 'Facility document review confirmation is required before approving this applicant.',
-      });
-    }
-
     const facilityStatus = await ensureFacilityIsActive(facilityId);
     if (!facilityStatus.ok) {
       clearAuthCookie(res);
@@ -4014,6 +4008,105 @@ app.get('/api/admin/workers/:professionalId/documents', requireRole('INTERNAL_AD
   }
 });
 
+
+app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('file'), requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+    const category = String(req.body.category || '').trim();
+    const name = String(req.body.name || '').trim();
+    const expiresAtRaw = String(req.body.expiresAt || '').trim();
+    const replaceExisting = String(req.body.replaceExisting || '').toLowerCase() === 'true';
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    if (!category) {
+      return res.status(400).json({ error: 'category is required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'file is required' });
+    }
+
+    let expiresAt: Date | null = null;
+
+    if (expiresAtRaw) {
+      const parsedDate = new Date(expiresAtRaw);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ error: 'expiresAt must be a valid date' });
+      }
+      expiresAt = parsedDate;
+    }
+
+    const professional = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: { user: true },
+    });
+
+    if (!professional) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    const uploadedName = name || req.file.originalname;
+
+    const uploaded = await uploadFileToCandidateFolder({
+      firstName: professional.user.firstName,
+      lastName: professional.user.lastName,
+      professionalId,
+      originalFileName: uploadedName,
+      localFilePath: req.file.path,
+      mimeType: req.file.mimetype,
+    });
+
+    if (replaceExisting) {
+      await prisma.professionalDocument.deleteMany({
+        where: {
+          professionalId,
+          category: category as any,
+        },
+      });
+    }
+
+    const document = await prisma.professionalDocument.create({
+      data: {
+        professionalId,
+        uploadedByUserId: req.authUser!.userId,
+        category: category as any,
+        name: uploadedName,
+        fileUrl: uploaded.webUrl,
+        storageProvider: 'ONEDRIVE',
+        oneDriveItemId: uploaded.itemId,
+        oneDriveWebUrl: uploaded.webUrl,
+        oneDrivePath: `${uploaded.folderPath}/${uploaded.name}`,
+        oneDriveFolder: uploaded.folderPath,
+        mimeType: req.file.mimetype || null,
+        status: 'APPROVED',
+        expiresAt,
+      },
+    });
+
+    await createAdminAuditLog({
+      actorUserId: req.authUser!.userId,
+      action: 'ADMIN_DOCUMENT_UPLOADED',
+      entityType: 'ProfessionalDocument',
+      entityId: document.id,
+      summary: `Admin uploaded ${category} for worker ${professional.user.email}`,
+      detailsJson: {
+        professionalId,
+        workerEmail: professional.user.email,
+        category,
+        replaceExisting,
+      },
+    });
+
+    return res.status(201).json({ data: document });
+  } catch (error) {
+    console.error('POST /api/admin/workers/:professionalId/documents/upload error:', error);
+    return res.status(500).json({ error: 'Failed to upload worker document' });
+  }
+});
+
 app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN'), async (req, res) => {
   try {
     const documentId = String(req.params.documentId || '');
@@ -5370,6 +5463,163 @@ app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMI
 });
 
 
+
+
+const sendApplicantMessageSchema = z.object({
+  subject: z.string().min(1).max(160),
+  message: z.string().min(1).max(5000),
+});
+
+async function sendMessageToProfessional(params: {
+  professionalId: string;
+  subject: string;
+  message: string;
+  actorUserId: string;
+  actorRole: 'INTERNAL_ADMIN' | 'FACILITY_ADMIN';
+  auditEntityType: string;
+  auditEntityId?: string | null;
+}) {
+  const professional = await prisma.professionalProfile.findUnique({
+    where: { id: params.professionalId },
+    include: { user: true },
+  });
+
+  if (!professional) {
+    throw new Error('PROFESSIONAL_NOT_FOUND');
+  }
+
+  const workerEmail = professional.user.email;
+  const workerName =
+    `${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim() ||
+    workerEmail ||
+    'Professional';
+
+  await createWorkerNotification({
+    professionalId: professional.id,
+    type: 'GENERAL',
+    title: params.subject,
+    message: params.message,
+  });
+
+  if (workerEmail) {
+    await sendEmail({
+      to: workerEmail,
+      subject: params.subject,
+      html: `
+        <h2>${params.subject}</h2>
+        <p>Hello ${workerName},</p>
+        <p>${params.message.replace(/\n/g, '<br />')}</p>
+        <p>Thank you,<br />Wezen Staffing</p>
+      `,
+      text: [
+        `Hello ${workerName},`,
+        '',
+        params.message,
+        '',
+        'Thank you,',
+        'Wezen Staffing',
+      ].join('\n'),
+    });
+  }
+
+  await createAdminAuditLog({
+    actorUserId: params.actorUserId,
+    action: params.actorRole === 'INTERNAL_ADMIN' ? 'ADMIN_MESSAGE_SENT' : 'FACILITY_MESSAGE_SENT',
+    entityType: params.auditEntityType,
+    entityId: params.auditEntityId || professional.id,
+    summary: `${params.actorRole} sent message to ${workerEmail}`,
+    detailsJson: {
+      professionalId: professional.id,
+      workerEmail,
+      subject: params.subject,
+      message: params.message,
+    },
+  });
+
+  return { ok: true, professionalId: professional.id, email: workerEmail };
+}
+
+app.post('/api/admin/workers/:professionalId/message', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = sendApplicantMessageSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const professionalId = String(req.params.professionalId || '');
+
+    const result = await sendMessageToProfessional({
+      professionalId,
+      subject: parsed.data.subject,
+      message: parsed.data.message,
+      actorUserId: req.authUser!.userId,
+      actorRole: 'INTERNAL_ADMIN',
+      auditEntityType: 'ProfessionalProfile',
+      auditEntityId: professionalId,
+    });
+
+    return res.json({ data: result });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROFESSIONAL_NOT_FOUND') {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    console.error('POST /api/admin/workers/:professionalId/message error:', error);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+app.post('/api/facility/applicants/:requestId/message', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = sendApplicantMessageSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const requestId = String(req.params.requestId || '');
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const requestRecord = await prisma.shiftRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        shift: { select: { facilityId: true } },
+      },
+    });
+
+    if (!requestRecord) {
+      return res.status(404).json({ error: 'Applicant request not found' });
+    }
+
+    if (requestRecord.shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const result = await sendMessageToProfessional({
+      professionalId: requestRecord.professionalId,
+      subject: parsed.data.subject,
+      message: parsed.data.message,
+      actorUserId: req.authUser!.userId,
+      actorRole: 'FACILITY_ADMIN',
+      auditEntityType: 'ShiftRequest',
+      auditEntityId: requestId,
+    });
+
+    return res.json({ data: result });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROFESSIONAL_NOT_FOUND') {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    console.error('POST /api/facility/applicants/:requestId/message error:', error);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
 
 app.get('/api/admin/dashboard', requireRole('INTERNAL_ADMIN'), async (_req: AuthedRequest, res) => {
   try {

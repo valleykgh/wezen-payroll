@@ -54,6 +54,7 @@ enum DocumentCategory {
   STATE_ID
   ID
   VACCINATION
+  BACKGROUND_CHECK
   OTHER
 }
 

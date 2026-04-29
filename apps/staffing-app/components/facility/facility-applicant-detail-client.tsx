@@ -68,6 +68,30 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
     }
   }
 
+  async function sendApplicantMessage() {
+    const subject = window.prompt('Message subject?')?.trim();
+    if (!subject) return;
+
+    const body = window.prompt('Message to applicant?')?.trim();
+    if (!body) return;
+
+    setBusy(true);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/facility/applicants/${requestId}/message`, {
+        method: 'POST',
+        body: JSON.stringify({ subject, message: body }),
+      });
+
+      setMessage('Message sent to applicant by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateStatus(action: 'approve' | 'reject' | 'no-show') {
     setBusy(true);
     setMessage('');
@@ -85,20 +109,13 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
 
       const body =
         action === 'approve'
-          ? { facilityDocumentReviewConfirmed: true }
+          ? undefined
           : reason
             ? { reason }
             : undefined;
 
       if (action === 'approve') {
-        const confirmed = window.confirm(
-          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
-        );
-
-        if (!confirmed) {
-          setMessage('Approval cancelled. Please review worker documents first.');
-          return;
-        }
+        window.alert('Please review/download the worker documents before approving this applicant.');
       }
 
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
@@ -367,6 +384,15 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
             <p className="font-bold text-slate-950">{detail.shift.facilityName}</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={sendApplicantMessage}
+          disabled={busy}
+          className="mt-4 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+        >
+          {busy ? 'Working...' : 'Send Message'}
+        </button>
 
         {detail.status !== 'APPROVED' && detail.status !== 'REJECTED' && detail.status !== 'NO_SHOW' ? (
           <div className="mt-4 grid grid-cols-2 gap-3">

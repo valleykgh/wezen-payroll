@@ -75,6 +75,14 @@ export default function AdminWorkerDetailPage({
   const [regularPayRateDollars, setRegularPayRateDollars] = useState('');
   const [overtimePayRateDollars, setOvertimePayRateDollars] = useState('');
   const [doublePayRateDollars, setDoublePayRateDollars] = useState('');
+const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
+const [adminUploadCategory, setAdminUploadCategory] = useState('BACKGROUND_CHECK');
+const [adminUploadName, setAdminUploadName] = useState('');
+const [replaceExisting, setReplaceExisting] = useState(true);
+const [messageSubject, setMessageSubject] = useState('');
+const [messageBody, setMessageBody] = useState('');
+
+
   async function load(id: string) {
     const res = await apiFetch<{ data: WorkerDetail }>(`/api/admin/workers/${id}`);
     setWorker(res.data);
@@ -154,6 +162,51 @@ setDoublePayRateDollars(
       setBusy(false);
     }
   }
+
+async function uploadAdminDocument() {
+  try {
+    if (!adminUploadFile) {
+      throw new Error('Please select a file.');
+    }
+
+    setBusy(true);
+
+    const formData = new FormData();
+    formData.append('file', adminUploadFile);
+    formData.append('category', adminUploadCategory);
+    formData.append('name', adminUploadName || adminUploadFile.name);
+    formData.append('replaceExisting', String(replaceExisting));
+
+    const res = await fetch(
+      `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/documents/upload`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      }
+    );
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(text || 'Failed to upload document');
+    }
+
+    setAdminUploadFile(null);
+    setAdminUploadName('');
+    await load(professionalId);
+
+    setMessage('Admin document uploaded successfully.');
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : 'Failed to upload admin document'
+    );
+  } finally {
+    setBusy(false);
+  }
+}
 
   async function updateWorkerApproval(action: 'approve' | 'unapprove') {
     try {
@@ -358,6 +411,51 @@ async function downloadAllDocuments() {
     }
   }
 
+
+  async function sendWorkerMessage() {
+    try {
+      const subject = messageSubject.trim();
+      const body = messageBody.trim();
+
+      if (!subject) {
+        setMessage('Message subject is required.');
+        return;
+      }
+
+      if (!body) {
+        setMessage('Message body is required.');
+        return;
+      }
+
+      setBusy(true);
+      setMessage('');
+
+      const res = await fetch(
+        `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/message`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject, message: body }),
+        }
+      );
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(text || 'Failed to send message');
+      }
+
+      setMessageSubject('');
+      setMessageBody('');
+      setMessage('Message sent to worker by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteWorker() {
     try {
       const confirmed = window.confirm(
@@ -452,6 +550,43 @@ const icaSignedStepLabel = isIcaSigned
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
+
+          <section className="rounded-[1.75rem] border border-cyan-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-bold tracking-tight text-slate-950">
+              Send message to worker
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Sends both an email and an in-app/mobile notification.
+            </p>
+
+            <div className="mt-4 grid gap-3">
+              <input
+                type="text"
+                value={messageSubject}
+                onChange={(e) => setMessageSubject(e.target.value)}
+                placeholder="Subject"
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+              />
+
+              <textarea
+                value={messageBody}
+                onChange={(e) => setMessageBody(e.target.value)}
+                placeholder="Message"
+                rows={5}
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+              />
+
+              <button
+                type="button"
+                onClick={sendWorkerMessage}
+                disabled={busy || !messageSubject.trim() || !messageBody.trim()}
+                className="inline-flex items-center justify-center rounded-full bg-cyan-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Send Message
+              </button>
+            </div>
+          </section>
+
           <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold tracking-tight text-slate-950">
               Worker summary
@@ -520,6 +655,59 @@ const icaSignedStepLabel = isIcaSigned
   <h2 className="text-xl font-bold tracking-tight text-slate-950">
     Compliance documents
   </h2>
+
+<div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+  <h3 className="text-sm font-bold text-slate-950">
+    Upload / Replace Internal Documents
+  </h3>
+
+  <p className="mt-1 text-xs text-slate-600">
+    Use this for Background Check or internal compliance uploads.
+  </p>
+
+  <div className="mt-4 grid gap-3 md:grid-cols-4">
+    <select
+      value={adminUploadCategory}
+      onChange={(e) => setAdminUploadCategory(e.target.value)}
+      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+    >
+      <option value="BACKGROUND_CHECK">Background Check</option>
+      <option value="OTHER">Other</option>
+    </select>
+
+    <input
+      type="text"
+      value={adminUploadName}
+      onChange={(e) => setAdminUploadName(e.target.value)}
+      placeholder="Document name"
+      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+    />
+
+    <input
+      type="file"
+      onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)}
+      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+    />
+
+    <button
+      type="button"
+      onClick={uploadAdminDocument}
+      disabled={busy || !adminUploadFile}
+      className="rounded-full bg-cyan-700 px-4 py-3 text-sm font-semibold text-white"
+    >
+      Upload
+    </button>
+  </div>
+
+  <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+    <input
+      type="checkbox"
+      checked={replaceExisting}
+      onChange={(e) => setReplaceExisting(e.target.checked)}
+    />
+    Replace existing same-category document
+  </label>
+</div>
 
   <button
     type="button"

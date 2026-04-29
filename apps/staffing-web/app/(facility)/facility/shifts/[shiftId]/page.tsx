@@ -73,6 +73,7 @@ export default function FacilityShiftDetailPage({
         setShiftId(resolved.shiftId);
         await load(resolved.shiftId);
         setMessage('');
+
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Failed to load shift detail');
       }
@@ -84,14 +85,7 @@ export default function FacilityShiftDetailPage({
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
       if (action === 'approve') {
-        const confirmed = window.confirm(
-          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
-        );
-
-        if (!confirmed) {
-          setMessage('Approval cancelled. Please review worker documents first.');
-          return;
-        }
+        window.alert('Please review/download the worker documents before approving this applicant.');
       }
 
       setBusyId(requestId);
@@ -201,7 +195,13 @@ export default function FacilityShiftDetailPage({
   }
 
   if (!detail) {
-    return (
+    useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  return (
       <div className="space-y-8">
         <div className="page-gradient rounded-[2rem] p-6">
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
@@ -248,7 +248,7 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
       </div>
 
       {message ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-xl -translate-x-1/2 -translate-y-1/2 whitespace-pre-line rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -297,7 +297,7 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
 </div>
 
       <div className="flex flex-wrap gap-3">
-        {detail.status === 'OPEN' ? (
+        {['OPEN', 'FILLED'].includes(detail.status) ? (
           <>
             <button
               onClick={() => updateShift('close')}

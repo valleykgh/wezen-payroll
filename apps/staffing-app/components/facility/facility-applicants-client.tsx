@@ -48,6 +48,30 @@ export function FacilityApplicantsClient() {
     }
   }
 
+  async function sendApplicantMessage(id: string) {
+    const subject = window.prompt('Message subject?')?.trim();
+    if (!subject) return;
+
+    const body = window.prompt('Message to applicant?')?.trim();
+    if (!body) return;
+
+    setBusyId(id);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/facility/applicants/${id}/message`, {
+        method: 'POST',
+        body: JSON.stringify({ subject, message: body }),
+      });
+
+      setMessage('Message sent to applicant by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusyId('');
+    }
+  }
+
   async function updateRequest(id: string, action: 'approve' | 'reject') {
     setBusyId(id);
     setMessage('');
@@ -65,20 +89,13 @@ export function FacilityApplicantsClient() {
 
       const body =
         action === 'approve'
-          ? { facilityDocumentReviewConfirmed: true }
+          ? undefined
           : reason
             ? { reason }
             : undefined;
 
       if (action === 'approve') {
-        const confirmed = window.confirm(
-          'Before approving, confirm that you reviewed this worker\'s documents and accept them for this shift.'
-        );
-
-        if (!confirmed) {
-          setMessage('Approval cancelled. Please review worker documents first.');
-          return;
-        }
+        window.alert('Please review/download the worker documents before approving this applicant.');
       }
 
       await apiFetch(`/api/shift-requests/${id}/${action}`, {
@@ -226,6 +243,15 @@ export function FacilityApplicantsClient() {
                 </p>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => sendApplicantMessage(request.id)}
+              disabled={busyId === request.id}
+              className="mt-4 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {busyId === request.id ? 'Working...' : 'Send Message'}
+            </button>
 
             {request.status === 'CANCELLATION_REQUESTED' ? (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">

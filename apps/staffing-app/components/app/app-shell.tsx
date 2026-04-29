@@ -34,7 +34,7 @@ const navByRole = {
     { label: 'Home', href: '/app/admin/index.html' },
     { label: 'Alerts', href: '/app/admin/notifications/index.html' },
     { label: 'Workers', href: '/app/admin/workers/index.html' },
-    { label: 'Facilities', href: '/app/admin/facilities/index.html' },
+    { label: 'Sites', href: '/app/admin/facilities/index.html' },
     { label: 'Shifts', href: '/app/admin/shifts/index.html' },
     { label: 'Audit', href: '/app/admin/audit-logs/index.html' },
   ],
@@ -100,7 +100,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
 
       <section className="px-5 py-5">{children}</section>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-none">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-none">
         <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
           {nav.map((item) => {
             const active =
@@ -113,8 +113,8 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
                 href={item.href}
                 className={
                   active
-                    ? 'rounded-2xl bg-cyan-600 px-2 py-3 text-center text-xs font-bold text-white shadow-none'
-                    : 'rounded-2xl px-2 py-3 text-center text-xs font-semibold text-slate-600'
+                    ? 'rounded-2xl bg-cyan-600 px-1.5 py-2.5 text-center text-[11px] font-bold text-white shadow-none'
+                    : 'rounded-2xl px-1.5 py-2.5 text-center text-[11px] font-semibold text-slate-600'
                 }
               >
                 {item.label}

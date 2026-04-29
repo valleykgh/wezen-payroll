@@ -49,6 +49,7 @@ export function ApplicantsClient({ requests }: Props) {
     setBusyId(requestId);
     setMessage('');
 
+
     try {
       const reason =
         action === 'deny-cancellation'
@@ -94,10 +95,38 @@ export function ApplicantsClient({ requests }: Props) {
     }
   }
 
+  async function sendApplicantMessage(requestId: string) {
+    const subject = window.prompt('Message subject?')?.trim();
+    if (!subject) return;
+
+    const body = window.prompt('Message to applicant?')?.trim();
+    if (!body) return;
+
+    try {
+      setBusyId(requestId);
+      setMessage('');
+
+      await apiFetch(`/api/facility/applicants/${requestId}/message`, {
+        method: 'POST',
+        body: JSON.stringify({ subject, message: body }),
+      });
+
+      setMessage('Message sent to applicant by email and app notification.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
       setBusyId(requestId);
       setMessage('');
+
+      if (action === 'approve') {
+        window.alert('Please review/download the worker documents before approving this applicant.');
+      }
 
       const res = await fetch(
         `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
@@ -140,10 +169,16 @@ export function ApplicantsClient({ requests }: Props) {
     }
   }
 
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   return (
     <div className="space-y-4">
       {message ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+        <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-xl -translate-x-1/2 -translate-y-1/2 whitespace-pre-line rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
         </div>
       ) : null}
@@ -232,6 +267,15 @@ export function ApplicantsClient({ requests }: Props) {
                 >
                   Review Details
                 </Link>
+
+                <button
+                  type="button"
+                  onClick={() => sendApplicantMessage(request.id)}
+                  disabled={busyId === request.id}
+                  className="inline-flex items-center justify-center rounded-full bg-cyan-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busyId === request.id ? 'Working...' : 'Send Message'}
+                </button>
 
                 {request.status === 'CANCELLATION_REQUESTED' ? (
                   <>
