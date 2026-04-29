@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/api-client';
 
 const adminNav = [
   { href: '/admin/notifications', label: 'Alerts', badgeKey: 'alerts' },
+  { href: '/admin/audit-logs', label: 'Audit Logs' },
   { href: '/admin/workers', label: 'Workers' },
   { href: '/admin/facilities', label: 'Facilities' },
   { href: '/admin/facilities/new', label: 'Create Facility' },

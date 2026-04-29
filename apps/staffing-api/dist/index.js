@@ -1836,74 +1836,81 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
         const facilityId = await getFacilityIdForUser(userId);
+        if (!id) {
+            return res.status(400).json({ error: 'Request id is required' });
+        }
         if (!facilityId) {
             return res.status(404).json({ error: 'Facility admin not found' });
-        }
-        const facilityStatus = await ensureFacilityIsActive(facilityId);
-        if (!facilityStatus.ok) {
-            clearAuthCookie(res);
-            return res.status(403).json({ error: facilityStatus.error });
-        }
-        const requestRecord = await prisma.shiftRequest.findUnique({
-            where: { id },
-            include: {
-                shift: {
-                    select: {
-                        id: true,
-                        facilityId: true,
-                        workersNeeded: true,
-                        status: true,
-                    },
-                },
-            },
-        });
-        if (!requestRecord) {
-            return res.status(404).json({ error: 'Shift request not found' });
-        }
-        if (requestRecord.shift.facilityId !== facilityId) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        if (requestRecord.shift.status !== 'OPEN') {
-            return res.status(400).json({ error: 'This shift is not open for approvals' });
-        }
-        if (requestRecord.status === 'APPROVED') {
-            return res.json({ data: requestRecord });
         }
         if (req.body?.facilityDocumentReviewConfirmed !== true) {
             return res.status(400).json({
                 error: 'Facility document review confirmation is required before approving this applicant.',
             });
         }
-        const approvedCount = await prisma.shiftRequest.count({
-            where: {
-                shiftId: requestRecord.shift.id,
-                status: 'APPROVED',
-            },
-        });
-        if (approvedCount >= requestRecord.shift.workersNeeded) {
-            return res.status(400).json({ error: 'This shift is already fully assigned' });
+        const facilityStatus = await ensureFacilityIsActive(facilityId);
+        if (!facilityStatus.ok) {
+            clearAuthCookie(res);
+            return res.status(403).json({ error: facilityStatus.error });
         }
-        const updated = await prisma.shiftRequest.update({
-            where: { id },
-            data: {
-                status: 'APPROVED',
-                reviewedAt: new Date(),
-            },
+        const updated = await prisma.$transaction(async (tx) => {
+            const requestRecord = await tx.shiftRequest.findUnique({
+                where: { id },
+                include: {
+                    shift: {
+                        select: {
+                            id: true,
+                            facilityId: true,
+                            workersNeeded: true,
+                            status: true,
+                        },
+                    },
+                },
+            });
+            if (!requestRecord) {
+                throw new Error('SHIFT_REQUEST_NOT_FOUND');
+            }
+            if (requestRecord.shift.facilityId !== facilityId) {
+                throw new Error('FORBIDDEN');
+            }
+            if (requestRecord.status === 'APPROVED') {
+                return requestRecord;
+            }
+            if (requestRecord.shift.status !== 'OPEN') {
+                throw new Error('SHIFT_NOT_OPEN');
+            }
+            await tx.$queryRaw `SELECT id FROM "Shift" WHERE id = ${requestRecord.shift.id} FOR UPDATE`;
+            const approvedCount = await tx.shiftRequest.count({
+                where: {
+                    shiftId: requestRecord.shift.id,
+                    status: 'APPROVED',
+                },
+            });
+            if (approvedCount >= requestRecord.shift.workersNeeded) {
+                throw new Error('SHIFT_FULL');
+            }
+            const approved = await tx.shiftRequest.update({
+                where: { id },
+                data: {
+                    status: 'APPROVED',
+                    reviewedAt: new Date(),
+                },
+            });
+            const newApprovedCount = approvedCount + 1;
+            if (newApprovedCount >= requestRecord.shift.workersNeeded) {
+                await tx.shift.update({
+                    where: { id: requestRecord.shift.id },
+                    data: {
+                        status: 'FILLED',
+                    },
+                });
+            }
+            return approved;
         });
         try {
             await sendWorkerShiftApprovedEmail(updated.id);
         }
         catch (emailError) {
             console.error('Worker approved shift email failed:', emailError);
-        }
-        const newApprovedCount = approvedCount + 1;
-        if (newApprovedCount >= requestRecord.shift.workersNeeded) {
-            await prisma.shift.update({
-                where: { id: requestRecord.shift.id },
-                data: {
-                    status: 'FILLED',
-                },
-            });
         }
         await createWorkerNotification({
             professionalId: updated.professionalId,
@@ -1914,6 +1921,19 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         res.json({ data: updated });
     }
     catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (message === 'SHIFT_REQUEST_NOT_FOUND') {
+            return res.status(404).json({ error: 'Shift request not found' });
+        }
+        if (message === 'FORBIDDEN') {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (message === 'SHIFT_NOT_OPEN') {
+            return res.status(400).json({ error: 'This shift is not open for approvals' });
+        }
+        if (message === 'SHIFT_FULL') {
+            return res.status(400).json({ error: 'This shift is already fully assigned' });
+        }
         console.error('POST /api/shift-requests/:id/approve error:', error);
         res.status(500).json({ error: 'Failed to approve request' });
     }
@@ -4547,6 +4567,33 @@ app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMI
     catch (error) {
         console.error('POST /api/facility/notifications/mark-all-read error:', error);
         res.status(500).json({ error: 'Failed to mark facility notifications read' });
+    }
+});
+app.get('/api/admin/audit-logs', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    try {
+        const limitRaw = Number(req.query.limit || 100);
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 250) : 100;
+        const logs = await prisma.adminAuditLog.findMany({
+            orderBy: [{ createdAt: 'desc' }],
+            take: limit,
+        });
+        return res.json({
+            data: logs.map((log) => ({
+                id: log.id,
+                actorUserId: log.actorUserId,
+                actorEmail: log.actorEmail,
+                action: log.action,
+                entityType: log.entityType,
+                entityId: log.entityId,
+                summary: log.summary,
+                detailsJson: log.detailsJson,
+                createdAt: log.createdAt,
+            })),
+        });
+    }
+    catch (error) {
+        console.error('GET /api/admin/audit-logs error:', error);
+        return res.status(500).json({ error: 'Failed to fetch audit logs' });
     }
 });
 app.get('/api/admin/notifications', requireRole('INTERNAL_ADMIN'), async (req, res) => {

@@ -36,6 +36,7 @@ const navByRole = {
     { label: 'Workers', href: '/app/admin/workers/index.html' },
     { label: 'Facilities', href: '/app/admin/facilities/index.html' },
     { label: 'Shifts', href: '/app/admin/shifts/index.html' },
+    { label: 'Audit', href: '/app/admin/audit-logs/index.html' },
   ],
 };
 
