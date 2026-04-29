@@ -7613,6 +7613,50 @@ async function sendDocumentExpirationAlerts() {
   };
 }
 
+
+async function autoMarkExpiredDocuments() {
+  const now = new Date();
+
+  const result = await prisma.professionalDocument.updateMany({
+    where: {
+      expiresAt: {
+        lt: now,
+      },
+      status: {
+        in: ['PENDING', 'APPROVED'],
+      },
+    },
+    data: {
+      status: 'EXPIRED',
+    },
+  });
+
+  return {
+    expiredCount: result.count,
+  };
+}
+
+app.post('/api/internal/jobs/mark-expired-documents', async (req, res) => {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!process.env.REMINDER_JOB_TOKEN || token !== process.env.REMINDER_JOB_TOKEN) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await autoMarkExpiredDocuments();
+
+    return res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error('POST /api/internal/jobs/mark-expired-documents error:', error);
+    return res.status(500).json({ error: 'Failed to mark expired documents' });
+  }
+});
+
 app.post('/api/internal/jobs/send-document-expiration-alerts', async (req, res) => {
   try {
     const authHeader = String(req.headers.authorization || '');
