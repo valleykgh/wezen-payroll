@@ -4569,6 +4569,54 @@ app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMI
         res.status(500).json({ error: 'Failed to mark facility notifications read' });
     }
 });
+app.get('/api/admin/dashboard', requireRole('INTERNAL_ADMIN'), async (_req, res) => {
+    try {
+        const now = new Date();
+        const [totalWorkers, pendingWorkers, approvedWorkers, pendingDocuments, expiredDocuments, openShifts, pendingShiftRequests, cancellationRequests, unreadAdminNotifications, auditLogsToday,] = await Promise.all([
+            prisma.professionalProfile.count(),
+            prisma.professionalProfile.count({ where: { approvedByWezen: false } }),
+            prisma.professionalProfile.count({ where: { approvedByWezen: true } }),
+            prisma.professionalDocument.count({ where: { status: 'PENDING' } }),
+            prisma.professionalDocument.count({
+                where: {
+                    OR: [
+                        { status: 'EXPIRED' },
+                        { expiresAt: { lt: now } },
+                    ],
+                },
+            }),
+            prisma.shift.count({ where: { status: 'OPEN' } }),
+            prisma.shiftRequest.count({ where: { status: { in: ['REQUESTED', 'UNDER_REVIEW'] } } }),
+            prisma.shiftRequest.count({ where: { status: 'CANCELLATION_REQUESTED' } }),
+            prisma.adminNotification.count({ where: { isRead: false } }),
+            prisma.adminAuditLog.count({
+                where: {
+                    createdAt: {
+                        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+                    },
+                },
+            }),
+        ]);
+        return res.json({
+            data: {
+                totalWorkers,
+                pendingWorkers,
+                approvedWorkers,
+                pendingDocuments,
+                expiredDocuments,
+                openShifts,
+                pendingShiftRequests,
+                cancellationRequests,
+                unreadAdminNotifications,
+                auditLogsToday,
+            },
+        });
+    }
+    catch (error) {
+        console.error('GET /api/admin/dashboard error:', error);
+        return res.status(500).json({ error: 'Failed to fetch admin dashboard' });
+    }
+});
 app.get('/api/admin/audit-logs', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     try {
         const limitRaw = Number(req.query.limit || 100);
