@@ -615,6 +615,32 @@ async function createFacilityNotification(params) {
     });
     await sendPushToFacilityAdmins(params.facilityId, params.title, params.message);
 }
+async function createAdminAuditLog(params) {
+    try {
+        let actorEmail = null;
+        if (params.actorUserId) {
+            const actor = await prisma.user.findUnique({
+                where: { id: params.actorUserId },
+                select: { email: true },
+            });
+            actorEmail = actor?.email || null;
+        }
+        await prisma.adminAuditLog.create({
+            data: {
+                actorUserId: params.actorUserId || null,
+                actorEmail,
+                action: params.action,
+                entityType: params.entityType,
+                entityId: params.entityId || null,
+                summary: params.summary,
+                detailsJson: params.detailsJson,
+            },
+        });
+    }
+    catch (error) {
+        console.error('createAdminAuditLog error:', error);
+    }
+}
 async function createAdminNotification(params) {
     await prisma.adminNotification.create({
         data: {
@@ -3209,6 +3235,14 @@ app.post('/api/admin/workers/:professionalId/reset-password', requireRole('INTER
             where: { id: worker.userId },
             data: { passwordHash },
         });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'WORKER_PASSWORD_RESET',
+            entityType: 'ProfessionalProfile',
+            entityId: worker.id,
+            summary: `Admin reset password for worker ${worker.user.email}`,
+            detailsJson: { workerEmail: worker.user.email },
+        });
         return res.json({
             data: {
                 ok: true,
@@ -3284,6 +3318,14 @@ app.post('/api/admin/workers/:professionalId/ica-signed', requireRole('INTERNAL_
             title: 'ICA signed and approved',
             message: 'Your Independent Contractor Agreement has been completed. You can now begin requesting shifts.',
         });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'ICA_MARKED_SIGNED',
+            entityType: 'ProfessionalProfile',
+            entityId: professionalId,
+            summary: 'Admin marked worker ICA as signed',
+            detailsJson: { agreementId: updated.id },
+        });
         res.json({ data: updated });
     }
     catch (error) {
@@ -3328,6 +3370,14 @@ app.post('/api/admin/workers/:professionalId/ica-sent', requireRole('INTERNAL_AD
             type: 'GENERAL',
             title: 'ICA sent for signature',
             message: 'Your Independent Contractor Agreement has been sent by Wezen Staffing via Adobe eSign. Please complete it from your email before requesting shifts.',
+        });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'ICA_MARKED_SENT',
+            entityType: 'ProfessionalProfile',
+            entityId: professionalId,
+            summary: 'Admin marked worker ICA as sent',
+            detailsJson: { agreementId: agreement.id, status: agreement.status },
         });
         res.json({ data: agreement });
     }
@@ -3446,6 +3496,18 @@ app.post('/api/admin/documents/:documentId/approve', requireRole('INTERNAL_ADMIN
                 }
             }
         }
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'DOCUMENT_APPROVED',
+            entityType: 'ProfessionalDocument',
+            entityId: updated.id,
+            summary: `Admin approved document ${updated.name}`,
+            detailsJson: {
+                professionalId: updated.professionalId,
+                category: updated.category,
+                workerEmail: updated.professional.user.email,
+            },
+        });
         res.json({ data: updated });
     }
     catch (error) {
@@ -3475,6 +3537,18 @@ app.post('/api/admin/documents/:documentId/reject', requireRole('INTERNAL_ADMIN'
             type: 'DOCUMENT_REJECTED',
             title: 'Document rejected',
             message: `Your document "${updated.name}" was rejected. Please review the rejection reason and upload an updated file.`,
+        });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'DOCUMENT_REJECTED',
+            entityType: 'ProfessionalDocument',
+            entityId: updated.id,
+            summary: `Admin rejected document ${updated.name}`,
+            detailsJson: {
+                professionalId: updated.professionalId,
+                category: updated.category,
+                reason: parsed.data.notes,
+            },
         });
         res.json({ data: updated });
     }
@@ -3516,6 +3590,14 @@ app.post('/api/admin/workers/:professionalId/approve', requireRole('INTERNAL_ADM
             title: 'Profile approved by Wezen',
             message: 'Your profile has been approved by Wezen. You can now request available shifts.',
         });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'WORKER_APPROVED',
+            entityType: 'ProfessionalProfile',
+            entityId: professionalId,
+            summary: `Admin approved worker ${worker.user.email}`,
+            detailsJson: { workerEmail: worker.user.email },
+        });
         res.json({ data: updated });
     }
     catch (error) {
@@ -3549,6 +3631,14 @@ app.post('/api/admin/workers/:professionalId/unapprove', requireRole('INTERNAL_A
                 approvedByWezen: false,
                 onboardingStatus: 'UNDER_REVIEW',
             },
+        });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'WORKER_UNAPPROVED',
+            entityType: 'ProfessionalProfile',
+            entityId: professionalId,
+            summary: `Admin moved worker ${worker.user.email} under review`,
+            detailsJson: { workerEmail: worker.user.email },
         });
         res.json({ data: updated });
     }
@@ -3596,6 +3686,14 @@ app.post('/api/admin/workers/:professionalId/reject', requireRole('INTERNAL_ADMI
             type: 'GENERAL',
             title: 'Profile rejected',
             message: `Your profile was rejected by Wezen Staffing. Reason: ${parsed.data.reason}`,
+        });
+        await createAdminAuditLog({
+            actorUserId: req.authUser?.userId,
+            action: 'WORKER_REJECTED',
+            entityType: 'ProfessionalProfile',
+            entityId: professionalId,
+            summary: `Admin rejected worker ${worker.user.email}`,
+            detailsJson: { workerEmail: worker.user.email, reason: parsed.data.reason },
         });
         res.json({
             data: {
