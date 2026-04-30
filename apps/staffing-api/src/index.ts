@@ -2586,6 +2586,12 @@ if (shiftStart.getTime() - now.getTime() < fourHoursMs) {
   });
 }
 
+if (String(existing.reviewNotes || '').includes('Cancellation denied by facility')) {
+  return res.status(400).json({
+    error: 'You have already submitted a cancellation request for this shift. Please contact Wezen Staffing support if you need further help.',
+  });
+}
+
     const updated = await prisma.shiftRequest.update({
       where: { id },
       data: {
