@@ -605,7 +605,7 @@ async function getWorkerEligibility(professionalId: string) {
     { label: 'LICENSE', categories: ['LICENSE'] },
     { label: 'CPR', categories: ['CPR'] },
     { label: 'PHYSICAL', categories: ['PHYSICAL'] },
-    { label: 'TB_REPORT', categories: ['TB_REPORT', 'TB_TEST'] },
+    { label: 'TB_REPORT', categories: ['TB_REPORT'] },
     { label: 'ID', categories: ['ID', 'STATE_ID'] },
   ];
 

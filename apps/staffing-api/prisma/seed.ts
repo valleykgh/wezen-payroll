@@ -82,11 +82,11 @@ async function main() {
         },
         {
           professionalId: professionalProfile.id,
-          category: 'TB_TEST',
-          name: 'TB Test',
+          category: 'TB_REPORT',
+          name: 'TB Report',
           fileUrl: 'https://example.com/tb-test.pdf',
           status: 'REJECTED',
-          notes: 'Please upload a more recent TB test.',
+          notes: 'Please upload a more recent TB report.',
         },
       ],
     });

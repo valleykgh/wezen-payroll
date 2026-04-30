@@ -665,12 +665,19 @@ const icaSignedStepLabel = isIcaSigned
     Use this for Background Check or internal compliance uploads.
   </p>
 
-  <div className="mt-4 grid gap-3 md:grid-cols-4">
+  <div className="mt-4 grid w-full max-w-full grid-cols-1 gap-3 md:grid-cols-[220px_minmax(260px,1fr)_minmax(220px,1fr)_auto] md:items-center">
     <select
       value={adminUploadCategory}
       onChange={(e) => setAdminUploadCategory(e.target.value)}
-      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+      className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
     >
+      <option value="LICENSE">License</option>
+      <option value="CPR">CPR</option>
+      <option value="PHYSICAL">Physical</option>
+      <option value="TB_REPORT">TB Report</option>
+      <option value="ID">ID</option>
+      <option value="STATE_ID">State ID</option>
+      <option value="VACCINATION">Vaccination</option>
       <option value="BACKGROUND_CHECK">Background Check</option>
       <option value="OTHER">Other</option>
     </select>
@@ -679,21 +686,21 @@ const icaSignedStepLabel = isIcaSigned
       type="text"
       value={adminUploadName}
       onChange={(e) => setAdminUploadName(e.target.value)}
-      placeholder="Document name"
-      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+      placeholder="Document Name"
+      className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
     />
 
     <input
       type="file"
       onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)}
-      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+      className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
     />
 
     <button
       type="button"
       onClick={uploadAdminDocument}
       disabled={busy || !adminUploadFile}
-      className="rounded-full bg-cyan-700 px-4 py-3 text-sm font-semibold text-white"
+      className="w-full rounded-full bg-cyan-700 px-4 py-3 text-sm font-semibold text-white md:w-auto md:whitespace-nowrap"
     >
       Upload
     </button>
