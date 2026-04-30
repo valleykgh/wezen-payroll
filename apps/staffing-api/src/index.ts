@@ -5348,11 +5348,48 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
       },
     });
 
+    const approvedRequests = await prisma.shiftRequest.findMany({
+      where: {
+        shiftId: id,
+        status: {
+          in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+        },
+      },
+      select: {
+        professionalId: true,
+      },
+    });
+
+    await Promise.all(
+      approvedRequests.map((request) =>
+        createWorkerNotification({
+          professionalId: request.professionalId,
+          type: 'GENERAL',
+          title: 'Shift cancelled',
+          message: 'A facility cancelled one of your approved shifts. Please check your schedule.',
+        })
+      )
+    );
+
+    await prisma.shiftRequest.updateMany({
+      where: {
+        shiftId: id,
+        status: {
+          in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+        },
+      },
+      data: {
+        status: 'CANCELLED',
+        reviewedAt: new Date(),
+        reviewNotes: 'Shift cancelled by facility.',
+      },
+    });
+
     try {
-  await sendFacilityShiftCancelledEmail(updated.id);
-} catch (emailError) {
-  console.error('Facility shift cancelled email failed:', emailError);
-}
+      await sendFacilityShiftCancelledEmail(updated.id);
+    } catch (emailError) {
+      console.error('Facility shift cancelled email failed:', emailError);
+    }
 
     res.json({ data: updated });
   } catch (error) {
@@ -6266,6 +6303,43 @@ app.post('/api/admin/shifts/:shiftId/cancel', requireRole('INTERNAL_ADMIN'), asy
       },
       include: {
         facility: true,
+      },
+    });
+
+    const approvedRequests = await prisma.shiftRequest.findMany({
+      where: {
+        shiftId,
+        status: {
+          in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+        },
+      },
+      select: {
+        professionalId: true,
+      },
+    });
+
+    await Promise.all(
+      approvedRequests.map((request) =>
+        createWorkerNotification({
+          professionalId: request.professionalId,
+          type: 'GENERAL',
+          title: 'Shift cancelled',
+          message: 'Wezen Staffing cancelled one of your approved shifts. Please check your schedule.',
+        })
+      )
+    );
+
+    await prisma.shiftRequest.updateMany({
+      where: {
+        shiftId,
+        status: {
+          in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+        },
+      },
+      data: {
+        status: 'CANCELLED',
+        reviewedAt: new Date(),
+        reviewNotes: 'Shift cancelled by internal admin.',
       },
     });
 
