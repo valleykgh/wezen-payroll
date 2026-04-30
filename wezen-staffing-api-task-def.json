@@ -56,6 +56,10 @@
         {
           "name": "APNS_BUNDLE_ID",
           "value": "com.wezenstaffing.app"
+        },
+        {
+          "name": "APNS_ENV",
+          "value": "sandbox"
         }
       ],
       "secrets": [

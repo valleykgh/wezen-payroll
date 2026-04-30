@@ -714,7 +714,12 @@ async function sendPushToUser(userId: string, title: string, body: string) {
     await Promise.all(
       iosTokens.map(async ({ id, token }) => {
         const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-          const client = http2.connect('https://api.push.apple.com');
+          const apnsHost =
+            process.env.APNS_ENV === 'production'
+              ? 'https://api.push.apple.com'
+              : 'https://api.sandbox.push.apple.com';
+
+          const client = http2.connect(apnsHost);
 
           client.on('error', reject);
 
