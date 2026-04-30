@@ -16,6 +16,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import http2 from 'http2';
 import { fileURLToPath } from 'url';
 
 import {
@@ -712,16 +713,44 @@ async function sendPushToUser(userId: string, title: string, body: string) {
 
     await Promise.all(
       iosTokens.map(async ({ id, token }) => {
-        const response = await fetch(`https://api.push.apple.com/3/device/${token}`, {
-          method: 'POST',
-          headers: {
+        const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+          const client = http2.connect('https://api.push.apple.com');
+
+          client.on('error', reject);
+
+          const req = client.request({
+            ':method': 'POST',
+            ':path': `/3/device/${token}`,
             authorization: `bearer ${jwt}`,
             'apns-topic': bundleId,
-            'content-type': 'application/json',
             'apns-push-type': 'alert',
             'apns-priority': '10',
-          },
-          body: JSON.stringify({
+            'content-type': 'application/json',
+          });
+
+          let responseBody = '';
+          let status = 0;
+
+          req.on('response', (headers) => {
+            status = Number(headers[':status'] || 0);
+          });
+
+          req.setEncoding('utf8');
+          req.on('data', (chunk) => {
+            responseBody += chunk;
+          });
+
+          req.on('end', () => {
+            client.close();
+            resolve({ status, body: responseBody });
+          });
+
+          req.on('error', (error) => {
+            client.close();
+            reject(error);
+          });
+
+          req.end(JSON.stringify({
             aps: {
               alert: {
                 title,
@@ -729,25 +758,29 @@ async function sendPushToUser(userId: string, title: string, body: string) {
               },
               sound: 'default',
             },
-          }),
+          }));
         });
 
-        if (!response.ok) {
-          const responseText = await response.text();
-
+        if (result.status < 200 || result.status >= 300) {
           console.error('APNs send failed', {
             userId,
             tokenId: id,
-            status: response.status,
-            responseText,
+            status: result.status,
+            responseText: result.body,
           });
 
-          if (response.status === 400 || response.status === 410) {
+          if (result.status === 400 || result.status === 410) {
             await prisma.userDeviceToken.update({
               where: { id },
               data: { isActive: false },
             });
           }
+        } else {
+          console.log('APNs send succeeded', {
+            userId,
+            tokenId: id,
+            status: result.status,
+          });
         }
       })
     );
