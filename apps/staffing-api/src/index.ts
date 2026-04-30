@@ -29,6 +29,7 @@ import {
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
 import { sendEmail } from './services/email.js';
 import { createHash, randomBytes } from 'crypto';
+import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren,downloadOneDriveFileBuffer } from './services/onedrive.js';
 import { uploadFileToCandidateFolder } from './services/onedrive.js';
@@ -670,19 +671,86 @@ async function sendPushToUser(userId: string, title: string, body: string) {
         isActive: true,
       },
       select: {
+        id: true,
         token: true,
         platform: true,
       },
     });
 
-    if (tokens.length === 0) return;
+    const iosTokens = tokens.filter((item) => item.platform === 'ios' || item.platform === 'iphone' || !item.platform);
 
-    // APNs send will be implemented here after Apple push credentials are configured.
-    console.log('Push notification queued', {
-      userId,
-      title,
-      tokenCount: tokens.length,
-    });
+    if (iosTokens.length === 0) return;
+
+    const keyId = process.env.APNS_KEY_ID;
+    const teamId = process.env.APNS_TEAM_ID;
+    const bundleId = process.env.APNS_BUNDLE_ID;
+    const privateKeyValue = process.env.APNS_PRIVATE_KEY;
+    const keyPath = process.env.APNS_KEY_PATH;
+
+    if (!keyId || !teamId || !bundleId || (!privateKeyValue && !keyPath)) {
+      console.warn('APNs is not configured. Push notification skipped.', {
+        userId,
+        title,
+      });
+      return;
+    }
+
+    const privateKeyPem = privateKeyValue
+      ? privateKeyValue.replace(/\\n/g, '\n')
+      : fs.readFileSync(keyPath!, 'utf8');
+
+    const privateKey = await importPKCS8(privateKeyPem, 'ES256');
+
+    const jwt = await new SignJWT({})
+      .setProtectedHeader({
+        alg: 'ES256',
+        kid: keyId,
+      })
+      .setIssuer(teamId)
+      .setIssuedAt()
+      .sign(privateKey);
+
+    await Promise.all(
+      iosTokens.map(async ({ id, token }) => {
+        const response = await fetch(`https://api.push.apple.com/3/device/${token}`, {
+          method: 'POST',
+          headers: {
+            authorization: `bearer ${jwt}`,
+            'apns-topic': bundleId,
+            'content-type': 'application/json',
+            'apns-push-type': 'alert',
+            'apns-priority': '10',
+          },
+          body: JSON.stringify({
+            aps: {
+              alert: {
+                title,
+                body,
+              },
+              sound: 'default',
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const responseText = await response.text();
+
+          console.error('APNs send failed', {
+            userId,
+            tokenId: id,
+            status: response.status,
+            responseText,
+          });
+
+          if (response.status === 400 || response.status === 410) {
+            await prisma.userDeviceToken.update({
+              where: { id },
+              data: { isActive: false },
+            });
+          }
+        }
+      })
+    );
   } catch (error) {
     console.error('sendPushToUser error:', error);
   }
