@@ -548,8 +548,8 @@ const icaSignedStepLabel = isIcaSigned
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6">
+      <div className="grid w-full max-w-full gap-6 xl:grid-cols-[minmax(0,760px)_300px] xl:justify-center">
+        <div className="min-w-0 space-y-6">
 
           <section className="rounded-[1.75rem] border border-cyan-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold tracking-tight text-slate-950">
@@ -580,7 +580,7 @@ const icaSignedStepLabel = isIcaSigned
                 type="button"
                 onClick={sendWorkerMessage}
                 disabled={busy || !messageSubject.trim() || !messageBody.trim()}
-                className="inline-flex items-center justify-center rounded-full bg-cyan-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full max-w-[240px] items-center justify-center rounded-full bg-cyan-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Send Message
               </button>
@@ -631,7 +631,7 @@ const icaSignedStepLabel = isIcaSigned
               Username/email: <span className="font-semibold text-slate-950">{worker.email}</span>
             </p>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-4 flex max-w-[620px] flex-col gap-3 sm:flex-row">
               <input
                 type="text"
                 value={resetPassword}
@@ -665,7 +665,7 @@ const icaSignedStepLabel = isIcaSigned
     Use this for Background Check or internal compliance uploads.
   </p>
 
-  <div className="mt-4 grid w-full max-w-full grid-cols-1 gap-3 md:grid-cols-[220px_minmax(260px,1fr)_minmax(220px,1fr)_auto] md:items-center">
+  <div className="mt-4 grid w-full max-w-full grid-cols-1 gap-3 md:grid-cols-[260px_minmax(280px,1fr)]">
     <select
       value={adminUploadCategory}
       onChange={(e) => setAdminUploadCategory(e.target.value)}
@@ -690,20 +690,22 @@ const icaSignedStepLabel = isIcaSigned
       className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
     />
 
-    <input
-      type="file"
-      onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)}
-      className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
-    />
+    <div className="grid w-full max-w-full grid-cols-1 gap-3 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <input
+        type="file"
+        onChange={(e) => setAdminUploadFile(e.target.files?.[0] || null)}
+        className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+      />
 
-    <button
-      type="button"
-      onClick={uploadAdminDocument}
-      disabled={busy || !adminUploadFile}
-      className="w-full rounded-full bg-cyan-700 px-4 py-3 text-sm font-semibold text-white md:w-auto md:whitespace-nowrap"
-    >
-      Upload
-    </button>
+      <button
+        type="button"
+        onClick={uploadAdminDocument}
+        disabled={busy || !adminUploadFile}
+        className="w-full rounded-full bg-cyan-700 px-4 py-3 text-sm font-semibold text-white md:w-auto md:whitespace-nowrap"
+      >
+        Upload
+      </button>
+    </div>
   </div>
 
   <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
@@ -839,7 +841,7 @@ const icaSignedStepLabel = isIcaSigned
 	  </section>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section className="rounded-[1.75rem] bg-gradient-to-br from-slate-900 to-cyan-700 p-6 text-white shadow-sm">
             <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
               Marketplace readiness

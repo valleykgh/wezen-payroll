@@ -350,7 +350,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
             type="text"
             value={adminUploadName}
             onChange={(e) => setAdminUploadName(e.target.value)}
-            placeholder="Document name"
+            placeholder="Document Name"
             className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
           />
 

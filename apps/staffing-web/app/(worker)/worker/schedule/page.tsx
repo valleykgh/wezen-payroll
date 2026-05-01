@@ -258,10 +258,10 @@ async function requestCancellation(requestId: string) {
   <button
     type="button"
     onClick={() => requestCancellation(request.id)}
-    disabled={busyId === request.id}
+    disabled={busyId === request.id || String(request.reviewNotes || '').includes('Cancellation denied by facility')}
     className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
   >
-    {busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
+    {String(request.reviewNotes || '').includes('Cancellation denied by facility') ? 'Cancellation Denied' : busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
   </button>
 </div>
               </div>

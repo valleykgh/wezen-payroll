@@ -368,7 +368,7 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
   tone={
     request.status === 'APPROVED'
       ? 'success'
-      : request.status === 'REJECTED' || request.status === 'CANCELLED'
+      : request.status === 'REJECTED' || request.status === 'CANCELLED' || request.status === 'CANCELLED'
         ? 'danger'
         : 'warning'
   }
@@ -436,7 +436,7 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
         disabled={
           busyId === request.id ||
           request.status === 'APPROVED' ||
-          request.status === 'REJECTED' ||
+          request.status === 'REJECTED' || request.status === 'CANCELLED' ||
           request.status === 'CANCELLED' ||
           request.status === 'CANCELLATION_REQUESTED' ||
           detail.status !== 'OPEN' ||
@@ -457,7 +457,7 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
         onClick={() => updateRequest(request.id, 'reject')}
         disabled={
           busyId === request.id ||
-          request.status === 'REJECTED' ||
+          request.status === 'REJECTED' || request.status === 'CANCELLED' ||
           request.status === 'CANCELLED' ||
           request.status === 'CANCELLATION_REQUESTED' ||
           detail.status !== 'OPEN'

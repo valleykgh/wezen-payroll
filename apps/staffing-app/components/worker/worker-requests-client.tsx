@@ -121,7 +121,9 @@ export function WorkerRequestsClient() {
         </div>
       ) : null}
 
-      {requests.map((request) => (
+      {requests.map((request) => {
+          const cancellationDenied = String(request.reviewNotes || '').includes('Cancellation denied by facility');
+          return (
         <div key={request.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -151,11 +153,17 @@ export function WorkerRequestsClient() {
             <button
               type="button"
               onClick={() => requestCancellation(request.id)}
-              disabled={busyId === request.id}
+              disabled={busyId === request.id || cancellationDenied}
               className="mt-4 w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
             >
-              {busyId === request.id ? 'Sending...' : 'Request Cancellation'}
+              {cancellationDenied ? 'Cancellation Denied' : busyId === request.id ? 'Sending...' : 'Request Cancellation'}
             </button>
+          ) : null}
+
+          {cancellationDenied ? (
+            <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              Facility denied this cancellation request. Please contact Wezen Staffing support if you need further help.
+            </div>
           ) : null}
 
           {request.status === 'CANCELLATION_REQUESTED' ? (
@@ -170,7 +178,8 @@ export function WorkerRequestsClient() {
             </div>
           ) : null}
         </div>
-      ))}
+      );
+        })}
     </div>
   );
 }

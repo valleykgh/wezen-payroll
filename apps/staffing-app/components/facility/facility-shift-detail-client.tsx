@@ -246,7 +246,7 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
                       </button>
                     </div>
                   </div>
-                ) : request.status !== 'APPROVED' && request.status !== 'REJECTED' && request.status !== 'NO_SHOW' ? (
+                ) : request.status !== 'APPROVED' && request.status !== 'REJECTED' && request.status !== 'CANCELLED' && request.status !== 'NO_SHOW' ? (
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <button
                       type="button"

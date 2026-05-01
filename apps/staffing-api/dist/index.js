@@ -9,11 +9,13 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import http2 from 'http2';
 import { fileURLToPath } from 'url';
 import { hashPassword, verifyPassword, signAuthToken, setAuthCookie, clearAuthCookie, } from './auth.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sendEmail } from './services/email.js';
 import { createHash, randomBytes } from 'crypto';
+import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer } from './services/onedrive.js';
 import { uploadFileToCandidateFolder } from './services/onedrive.js';
@@ -516,7 +518,7 @@ async function getWorkerEligibility(professionalId) {
         { label: 'LICENSE', categories: ['LICENSE'] },
         { label: 'CPR', categories: ['CPR'] },
         { label: 'PHYSICAL', categories: ['PHYSICAL'] },
-        { label: 'TB_REPORT', categories: ['TB_REPORT', 'TB_TEST'] },
+        { label: 'TB_REPORT', categories: ['TB_REPORT'] },
         { label: 'ID', categories: ['ID', 'STATE_ID'] },
     ];
     for (const group of requiredDocumentGroups) {
@@ -563,18 +565,103 @@ async function sendPushToUser(userId, title, body) {
                 isActive: true,
             },
             select: {
+                id: true,
                 token: true,
                 platform: true,
             },
         });
-        if (tokens.length === 0)
+        const iosTokens = tokens.filter((item) => item.platform === 'ios' || item.platform === 'iphone' || !item.platform);
+        if (iosTokens.length === 0)
             return;
-        // APNs send will be implemented here after Apple push credentials are configured.
-        console.log('Push notification queued', {
-            userId,
-            title,
-            tokenCount: tokens.length,
-        });
+        const keyId = process.env.APNS_KEY_ID;
+        const teamId = process.env.APNS_TEAM_ID;
+        const bundleId = process.env.APNS_BUNDLE_ID;
+        const privateKeyValue = process.env.APNS_PRIVATE_KEY;
+        const keyPath = process.env.APNS_KEY_PATH;
+        if (!keyId || !teamId || !bundleId || (!privateKeyValue && !keyPath)) {
+            console.warn('APNs is not configured. Push notification skipped.', {
+                userId,
+                title,
+            });
+            return;
+        }
+        const privateKeyPem = privateKeyValue
+            ? privateKeyValue.replace(/\\n/g, '\n')
+            : fs.readFileSync(keyPath, 'utf8');
+        const privateKey = await importPKCS8(privateKeyPem, 'ES256');
+        const jwt = await new SignJWT({})
+            .setProtectedHeader({
+            alg: 'ES256',
+            kid: keyId,
+        })
+            .setIssuer(teamId)
+            .setIssuedAt()
+            .sign(privateKey);
+        await Promise.all(iosTokens.map(async ({ id, token }) => {
+            const result = await new Promise((resolve, reject) => {
+                const apnsHost = process.env.APNS_ENV === 'production'
+                    ? 'https://api.push.apple.com'
+                    : 'https://api.sandbox.push.apple.com';
+                const client = http2.connect(apnsHost);
+                client.on('error', reject);
+                const req = client.request({
+                    ':method': 'POST',
+                    ':path': `/3/device/${token}`,
+                    authorization: `bearer ${jwt}`,
+                    'apns-topic': bundleId,
+                    'apns-push-type': 'alert',
+                    'apns-priority': '10',
+                    'content-type': 'application/json',
+                });
+                let responseBody = '';
+                let status = 0;
+                req.on('response', (headers) => {
+                    status = Number(headers[':status'] || 0);
+                });
+                req.setEncoding('utf8');
+                req.on('data', (chunk) => {
+                    responseBody += chunk;
+                });
+                req.on('end', () => {
+                    client.close();
+                    resolve({ status, body: responseBody });
+                });
+                req.on('error', (error) => {
+                    client.close();
+                    reject(error);
+                });
+                req.end(JSON.stringify({
+                    aps: {
+                        alert: {
+                            title,
+                            body,
+                        },
+                        sound: 'default',
+                    },
+                }));
+            });
+            if (result.status < 200 || result.status >= 300) {
+                console.error('APNs send failed', {
+                    userId,
+                    tokenId: id,
+                    status: result.status,
+                    responseText: result.body,
+                });
+                if (result.status === 400 || result.status === 410) {
+                    await prisma.userDeviceToken.update({
+                        where: { id },
+                        data: { isActive: false },
+                    });
+                }
+            }
+            else {
+                console.log('APNs send succeeded', {
+                    userId,
+                    tokenId: id,
+                    status: result.status,
+                });
+            }
+        }));
     }
     catch (error) {
         console.error('sendPushToUser error:', error);
@@ -2076,6 +2163,11 @@ app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSION
         if (shiftStart.getTime() - now.getTime() < fourHoursMs) {
             return res.status(400).json({
                 error: 'Cancellation requests are not allowed within 4 hours of shift start time. Please contact Wezen Staffing support.',
+            });
+        }
+        if (String(existing.reviewNotes || '').includes('Cancellation denied by facility')) {
+            return res.status(400).json({
+                error: 'You have already submitted a cancellation request for this shift. Please contact Wezen Staffing support if you need further help.',
             });
         }
         const updated = await prisma.shiftRequest.update({
@@ -4489,6 +4581,36 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req, re
                 status: 'CANCELLED',
             },
         });
+        const approvedRequests = await prisma.shiftRequest.findMany({
+            where: {
+                shiftId: id,
+                status: {
+                    in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+                },
+            },
+            select: {
+                professionalId: true,
+            },
+        });
+        await Promise.all(approvedRequests.map((request) => createWorkerNotification({
+            professionalId: request.professionalId,
+            type: 'GENERAL',
+            title: 'Shift cancelled',
+            message: 'A facility cancelled one of your approved shifts. Please check your schedule.',
+        })));
+        await prisma.shiftRequest.updateMany({
+            where: {
+                shiftId: id,
+                status: {
+                    in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+                },
+            },
+            data: {
+                status: 'CANCELLED',
+                reviewedAt: new Date(),
+                reviewNotes: 'Shift cancelled by facility.',
+            },
+        });
         try {
             await sendFacilityShiftCancelledEmail(updated.id);
         }
@@ -5267,6 +5389,36 @@ app.post('/api/admin/shifts/:shiftId/cancel', requireRole('INTERNAL_ADMIN'), asy
             },
             include: {
                 facility: true,
+            },
+        });
+        const approvedRequests = await prisma.shiftRequest.findMany({
+            where: {
+                shiftId,
+                status: {
+                    in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+                },
+            },
+            select: {
+                professionalId: true,
+            },
+        });
+        await Promise.all(approvedRequests.map((request) => createWorkerNotification({
+            professionalId: request.professionalId,
+            type: 'GENERAL',
+            title: 'Shift cancelled',
+            message: 'Wezen Staffing cancelled one of your approved shifts. Please check your schedule.',
+        })));
+        await prisma.shiftRequest.updateMany({
+            where: {
+                shiftId,
+                status: {
+                    in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'],
+                },
+            },
+            data: {
+                status: 'CANCELLED',
+                reviewedAt: new Date(),
+                reviewNotes: 'Shift cancelled by internal admin.',
             },
         });
         res.json({

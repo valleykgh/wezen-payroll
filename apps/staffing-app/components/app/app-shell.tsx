@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { logoutRequest } from '@/lib/auth-client';
 import { PushRegistration } from '@/components/app/push-registration';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { Badge } from '@capawesome/capacitor-badge';
 
 type AppShellProps = {
   title: string;
@@ -58,13 +61,38 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
               : '/api/admin/notifications/unread-count';
 
         const res = await apiFetch<{ data: { count?: number; unreadCount?: number } }>(endpoint);
-        setUnreadCount(res.data.count || res.data.unreadCount || 0);
+        const nextCount = res.data.count || res.data.unreadCount || 0;
+        setUnreadCount(nextCount);
+
+        if (Capacitor.isNativePlatform()) {
+          await Badge.set({ count: nextCount });
+        }
       } catch {
         setUnreadCount(0);
+        if (Capacitor.isNativePlatform()) {
+          await Badge.clear();
+        }
       }
     }
 
     loadUnreadCount();
+
+    const interval = window.setInterval(loadUnreadCount, 25000);
+
+    let removeListener: (() => void) | undefined;
+
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) loadUnreadCount();
+      }).then((listener) => {
+        removeListener = () => listener.remove();
+      });
+    }
+
+    return () => {
+      window.clearInterval(interval);
+      removeListener?.();
+    };
   }, [role]);
 
   async function handleLogout() {

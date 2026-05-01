@@ -394,7 +394,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
           {busy ? 'Working...' : 'Send Message'}
         </button>
 
-        {detail.status !== 'APPROVED' && detail.status !== 'REJECTED' && detail.status !== 'NO_SHOW' ? (
+        {detail.status !== 'APPROVED' && detail.status !== 'REJECTED' && detail.status !== 'CANCELLED' && detail.status !== 'NO_SHOW' ? (
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
               type="button"

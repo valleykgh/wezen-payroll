@@ -54,6 +54,7 @@ type Props = {
 
 export function ShiftResultsClient({ shifts }: Props) {
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [requestedShiftIds, setRequestedShiftIds] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [eligible, setEligible] = useState<boolean>(false);
@@ -166,17 +167,6 @@ export function ShiftResultsClient({ shifts }: Props) {
     }
   }
 
-  useEffect(() => {
-    if (!successMessage && !errorMessage) return;
-
-    const timer = setTimeout(() => {
-      setSuccessMessage('');
-      setErrorMessage('');
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [successMessage, errorMessage]);
-
   async function requestShift(shiftId: string) {
     try {
       setSubmittingId(shiftId);
@@ -201,9 +191,18 @@ export function ShiftResultsClient({ shifts }: Props) {
         throw new Error(normalizeRequestError(text));
       }
 
+      setRequestedShiftIds((current) =>
+        current.includes(shiftId) ? current : [...current, shiftId]
+      );
       setSuccessMessage('Shift request sent. The facility will review and approve/reject it.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Request failed.');
+      const normalized = error instanceof Error ? error.message : 'Request failed.';
+      if (normalized.toLowerCase().includes('already')) {
+        setRequestedShiftIds((current) =>
+          current.includes(shiftId) ? current : [...current, shiftId]
+        );
+      }
+      setErrorMessage(normalized);
     } finally {
       setSubmittingId(null);
     }
@@ -212,6 +211,22 @@ export function ShiftResultsClient({ shifts }: Props) {
   return (
     <>
       <div className="space-y-4">
+        {successMessage || errorMessage ? (
+          <div className="fixed left-1/2 top-1/2 z-50 w-[92%] max-w-xl -translate-x-1/2 -translate-y-1/2 whitespace-pre-line rounded-3xl border-2 border-red-700 bg-red-600 px-8 py-7 text-center text-xl font-extrabold text-white shadow-2xl">
+            {successMessage || errorMessage}
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessMessage('');
+                setErrorMessage('');
+              }}
+              className="mt-5 block w-full rounded-full bg-white px-5 py-3 text-sm font-bold text-red-700"
+            >
+              OK
+            </button>
+          </div>
+        ) : null}
+
         {!eligible && eligibilityReasons.length > 0 ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
             <div className="font-semibold">You are not yet eligible to request shifts.</div>
@@ -320,10 +335,10 @@ export function ShiftResultsClient({ shifts }: Props) {
                   <div className="flex w-full shrink-0 flex-col gap-3 lg:w-56">
                     <button
                       onClick={() => requestShift(shift.id)}
-                      disabled={submittingId === shift.id || !eligible || blocked}
+                      disabled={submittingId === shift.id || requestedShiftIds.includes(shift.id) || !eligible || blocked}
                       className="rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {submittingId === shift.id ? 'Submitting...' : 'Request Shift'}
+                      {requestedShiftIds.includes(shift.id) ? 'Requested — Pending Approval' : submittingId === shift.id ? 'Submitting...' : 'Request Shift'}
                     </button>
 
                     <button
@@ -489,13 +504,16 @@ export function ShiftResultsClient({ shifts }: Props) {
                   disabled={
                     !shiftDetail ||
                     submittingId === (shiftDetail?.id || selectedShift?.id || '') ||
+                    requestedShiftIds.includes(shiftDetail?.id || selectedShift?.id || '') ||
                     !eligible
                   }
                   className="rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submittingId === (shiftDetail?.id || selectedShift?.id || '')
                     ? 'Submitting...'
-                    : 'Request Shift'}
+                    : requestedShiftIds.includes(shiftDetail?.id || selectedShift?.id || '')
+                      ? 'Requested — Pending Approval'
+                      : 'Request Shift'}
                 </button>
               </div>
             </div>

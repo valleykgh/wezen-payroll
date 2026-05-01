@@ -377,7 +377,7 @@ async function downloadAllApplicantDocuments() {
   tone={
     detail.status === 'APPROVED'
       ? 'success'
-      : detail.status === 'REJECTED' || detail.status === 'CANCELLED'
+      : detail.status === 'REJECTED' || detail.status === 'CANCELLED' || detail.status === 'CANCELLED'
         ? 'danger'
         : 'warning'
   }
@@ -447,7 +447,7 @@ async function downloadAllApplicantDocuments() {
         disabled={
           busy ||
           detail.status === 'APPROVED' ||
-          detail.status === 'REJECTED' ||
+          detail.status === 'REJECTED' || detail.status === 'CANCELLED' ||
           detail.status === 'CANCELLED'
         }
         className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
@@ -459,7 +459,7 @@ async function downloadAllApplicantDocuments() {
         onClick={() => updateStatus('reject')}
         disabled={
           busy ||
-          detail.status === 'REJECTED' ||
+          detail.status === 'REJECTED' || detail.status === 'CANCELLED' ||
           detail.status === 'CANCELLED'
         }
         className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"

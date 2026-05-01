@@ -239,11 +239,16 @@ async function requestCancellation(requestId: string) {
             <button
               type="button"
               onClick={() => requestCancellation(request.id)}
-              disabled={busyId === request.id}
+              disabled={busyId === request.id || String(request.reviewNotes || '').includes('Cancellation denied by facility')}
               className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
+              {String(request.reviewNotes || '').includes('Cancellation denied by facility') ? 'Cancellation Denied' : busyId === request.id ? 'Submitting...' : 'Request Cancellation'}
             </button>
+            {String(request.reviewNotes || '').includes('Cancellation denied by facility') ? (
+              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                Facility denied this cancellation request. Please contact Wezen Staffing support if you need further help.
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

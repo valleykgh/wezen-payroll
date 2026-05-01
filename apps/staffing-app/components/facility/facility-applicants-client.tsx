@@ -279,7 +279,7 @@ export function FacilityApplicantsClient() {
                   </button>
                 </div>
               </div>
-            ) : request.status !== 'APPROVED' && request.status !== 'REJECTED' ? (
+            ) : request.status !== 'APPROVED' && request.status !== 'REJECTED' && request.status !== 'CANCELLED' ? (
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button
                   type="button"

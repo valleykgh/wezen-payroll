@@ -15,7 +15,7 @@ const EXPIRING_CATEGORIES = new Set([
   'LICENSE',
   'CPR',
   'PHYSICAL',
-  'TB_TEST',
+  'TB_REPORT',
   'ID',
 ]);
 
@@ -121,7 +121,7 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
             <option value="LICENSE">License</option>
             <option value="CPR">CPR / BLS</option>
             <option value="PHYSICAL">Physical Report</option>
-            <option value="TB_TEST">TB Report</option>
+            <option value="TB_REPORT">TB Report</option>
             <option value="ID">State ID</option>
             <option value="VACCINATION">Vaccination Record</option>
             <option value="OTHER">Other</option>
