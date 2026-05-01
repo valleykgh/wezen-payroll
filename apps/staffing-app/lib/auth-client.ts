@@ -1,4 +1,5 @@
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+import { Preferences } from '@capacitor/preferences';
 
 export type StaffingUserRole =
   | 'PROFESSIONAL'
@@ -42,9 +43,44 @@ export function getAuthToken() {
   return window.localStorage.getItem('wezen_auth_token');
 }
 
-export function clearAuthToken() {
+async function getStoredAuthToken() {
+  if (typeof window === 'undefined') return null;
+
+  const localToken = window.localStorage.getItem('wezen_auth_token');
+  if (localToken) return localToken;
+
+  try {
+    const pref = await Preferences.get({ key: 'wezen_auth_token' });
+    if (pref.value) {
+      window.localStorage.setItem('wezen_auth_token', pref.value);
+      return pref.value;
+    }
+  } catch {
+    // Ignore preference read failures.
+  }
+
+  return null;
+}
+
+async function setStoredAuthToken(token: string) {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem('wezen_auth_token');
+  window.localStorage.setItem('wezen_auth_token', token);
+  try {
+    await Preferences.set({ key: 'wezen_auth_token', value: token });
+  } catch {
+    // Ignore preference write failures.
+  }
+}
+
+export async function clearAuthToken() {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem('wezen_auth_token');
+  }
+  try {
+    await Preferences.remove({ key: 'wezen_auth_token' });
+  } catch {
+    // Ignore preference remove failures.
+  }
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -70,14 +106,14 @@ export async function loginRequest(email: string, password: string) {
   const parsed = await parseResponse<LoginResponse>(res);
 
   if (parsed.data.token && typeof window !== 'undefined') {
-    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+    await setStoredAuthToken(parsed.data.token);
   }
 
   return parsed;
 }
 
 export async function logoutRequest() {
-  const token = getAuthToken();
+  const token = await getStoredAuthToken();
 
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/logout`, {
     method: 'POST',
@@ -87,7 +123,7 @@ export async function logoutRequest() {
     },
   });
 
-  clearAuthToken();
+  await clearAuthToken();
 
   if (!res.ok) {
     throw new Error('Logout failed');
@@ -95,7 +131,7 @@ export async function logoutRequest() {
 }
 
 export async function meRequest(): Promise<AuthMeResponse> {
-  const token = getAuthToken();
+  const token = await getStoredAuthToken();
 
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/me`, {
     method: 'GET',
@@ -136,7 +172,7 @@ export async function registerProfessionalRequest(payload: {
   const parsed = await parseResponse<any>(res);
 
   if (parsed?.data?.token && typeof window !== 'undefined') {
-    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+    await setStoredAuthToken(parsed.data.token);
   }
 
   return parsed;
@@ -161,7 +197,7 @@ export async function registerFacilityRequest(payload: {
   const parsed = await parseResponse<any>(res);
 
   if (parsed?.data?.token && typeof window !== 'undefined') {
-    window.localStorage.setItem('wezen_auth_token', parsed.data.token);
+    await setStoredAuthToken(parsed.data.token);
   }
 
   return parsed;
