@@ -124,10 +124,6 @@ export function ApplicantsClient({ requests }: Props) {
       setBusyId(requestId);
       setMessage('');
 
-      if (action === 'approve') {
-        window.alert('Please review/download the worker documents before approving this applicant.');
-      }
-
       const res = await fetch(
         `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
         {
@@ -266,6 +262,13 @@ export function ApplicantsClient({ requests }: Props) {
                   className="rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
                 >
                   Review Details
+                </Link>
+
+                <Link
+                  href={`/facility/applicants/${request.id}#applicant-documents`}
+                  className="rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-center text-sm font-semibold text-cyan-800 transition hover:bg-cyan-100"
+                >
+                  View / Download Documents
                 </Link>
 
                 <button

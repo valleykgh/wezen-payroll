@@ -8,6 +8,8 @@ type FacilitySettings = {
   id: string;
   name: string;
   facilityType?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
@@ -31,6 +33,8 @@ export default function FacilitySettingsPage() {
 
   const [name, setName] = useState('');
   const [facilityType, setFacilityType] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -55,6 +59,8 @@ export default function FacilitySettingsPage() {
     setSettings(data);
     setName(data.name || '');
     setFacilityType(data.facilityType || '');
+    setAddressLine1(data.addressLine1 || '');
+    setAddressLine2(data.addressLine2 || '');
     setCity(data.city || '');
     setState(data.state || '');
     setZipCode(data.zipCode || '');
@@ -103,6 +109,8 @@ export default function FacilitySettingsPage() {
         body: JSON.stringify({
           name,
           facilityType,
+          addressLine1: addressLine1 || null,
+          addressLine2: addressLine2 || null,
           city,
           state,
           zipCode,
@@ -321,6 +329,30 @@ async function changePassword() {
             <input
               value={state}
               onChange={(e) => setState(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Address Line 1
+            </label>
+            <input
+              value={addressLine1}
+              onChange={(e) => setAddressLine1(e.target.value)}
+              placeholder="Street address"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Address Line 2
+            </label>
+            <input
+              value={addressLine2}
+              onChange={(e) => setAddressLine2(e.target.value)}
+              placeholder="Suite, unit, floor, etc."
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
             />
           </div>

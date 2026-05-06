@@ -30,6 +30,7 @@ export function AdminNotificationsClient() {
     try {
       await apiFetch(`/api/admin/notifications/${id}/read`, { method: 'POST' });
       setItems((prev) => prev.map((item) => item.id === id ? { ...item, isRead: true } : item));
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } finally {
       setBusy('');
     }
@@ -40,6 +41,7 @@ export function AdminNotificationsClient() {
     try {
       await apiFetch('/api/admin/notifications/mark-all-read', { method: 'POST' });
       setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } finally {
       setBusy('');
     }

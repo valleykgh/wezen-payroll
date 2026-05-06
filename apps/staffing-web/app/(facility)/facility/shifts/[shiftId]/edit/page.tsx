@@ -48,51 +48,48 @@ function toTimeInput(label?: string) {
 }
 
 
+
 function normalizeTimeInput(value: string) {
   const raw = value.trim().toLowerCase();
   if (!raw) return '';
 
-  const hasPm = raw.includes('pm') || raw.includes('p.m.');
-  const hasAm = raw.includes('am') || raw.includes('a.m.');
-  const clean = raw.replace(/a\.?m\.?|p\.?m\.?/g, '').trim();
+  const ampmMatch = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)$/i);
+  if (ampmMatch) {
+    const hour = Number(ampmMatch[1]);
+    const minute = Number(ampmMatch[2] || 0);
+    const suffix = ampmMatch[3].toUpperCase();
+
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
+    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return value;
+
+    return `${hour}:${String(minute).padStart(2, '0')} ${suffix}`;
+  }
 
   let hour = 0;
   let minute = 0;
 
-  if (clean.includes(':')) {
-    const [h, m] = clean.split(':');
+  if (raw.includes(':')) {
+    const [h, m] = raw.split(':');
     hour = Number(h);
-    minute = Number(m || '0');
-  } else if (/^\d{3,4}$/.test(clean)) {
-    hour = Number(clean.slice(0, -2));
-    minute = Number(clean.slice(-2));
+    minute = Number(m || 0);
+  } else if (/^\d{3,4}$/.test(raw)) {
+    hour = Number(raw.slice(0, -2));
+    minute = Number(raw.slice(-2));
   } else {
-    hour = Number(clean);
-    minute = 0;
+    hour = Number(raw);
   }
 
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
-  if (minute < 0 || minute > 59) return value;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return value;
 
-  if (hasPm && hour < 12) hour += 12;
-  if (hasAm && hour === 12) hour = 0;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
 
-  if (!hasAm && !hasPm && hour >= 1 && hour <= 7) {
-    // Facility shorthand: 7 means 7 AM.
-  }
-
-  if (hour < 0 || hour > 23) return value;
-
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${suffix}`;
 }
 
 function formatTimeLabel(value: string) {
-  if (!value) return '';
-  const [hourString, minute] = value.split(':');
-  const hour = Number(hourString);
-  const suffix = hour >= 12 ? 'PM' : 'AM';
-  const normalizedHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${normalizedHour}:${minute} ${suffix}`;
+  return normalizeTimeInput(value);
 }
 
 export default function EditShiftPage({

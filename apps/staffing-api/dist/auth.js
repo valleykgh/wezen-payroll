@@ -15,9 +15,11 @@ export async function verifyPassword(password, hash) {
     return bcrypt.compare(password, hash);
 }
 export function signAuthToken(payload) {
-    return jwt.sign(payload, getJwtSecret(), {
+    const secret = getJwtSecret();
+    const options = {
         expiresIn: '7d',
-    });
+    };
+    return jwt.sign(payload, secret, options);
 }
 export function setAuthCookie(res, token) {
     const isProduction = process.env.NODE_ENV === 'production';

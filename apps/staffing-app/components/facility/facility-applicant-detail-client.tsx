@@ -114,10 +114,6 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
             ? { reason }
             : undefined;
 
-      if (action === 'approve') {
-        window.alert('Please review/download the worker documents before approving this applicant.');
-      }
-
       await apiFetch(`/api/shift-requests/${requestId}/${action}`, {
         method: 'POST',
         ...(body ? { body: JSON.stringify(body) } : {}),

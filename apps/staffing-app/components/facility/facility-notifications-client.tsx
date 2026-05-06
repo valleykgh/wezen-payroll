@@ -30,6 +30,7 @@ export function FacilityNotificationsClient() {
     try {
       await apiFetch(`/api/facility/notifications/${id}/read`, { method: 'POST' });
       setItems((prev) => prev.map((item) => item.id === id ? { ...item, isRead: true } : item));
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } finally {
       setBusy('');
     }
@@ -40,6 +41,7 @@ export function FacilityNotificationsClient() {
     try {
       await apiFetch('/api/facility/notifications/mark-all-read', { method: 'POST' });
       setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } finally {
       setBusy('');
     }

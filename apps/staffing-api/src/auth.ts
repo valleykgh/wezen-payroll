@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -27,9 +27,12 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export function signAuthToken(payload: AuthTokenPayload) {
-  return jwt.sign(payload, getJwtSecret(), {
-    expiresIn: '7d',
-  });
+  const secret: Secret = getJwtSecret();
+  const options: SignOptions = {
+    expiresIn: '7d' as SignOptions['expiresIn'],
+  };
+
+  return jwt.sign(payload, secret, options);
 }
 
 export function setAuthCookie(res: Response, token: string) {

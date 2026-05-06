@@ -1,8 +1,52 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/shared/navbar';
 import { Footer } from '@/components/shared/footer';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 export default function ContactPage() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('');
+  const [body, setBody] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submitContact(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+
+    try {
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, role, message: body }),
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || 'Failed to send message');
+
+      setName('');
+      setEmail('');
+      setRole('');
+      setBody('');
+      setMessage('Message sent successfully. Wezen Staffing will contact you soon.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   return (
     <div className="bg-slate-50">
       <Navbar />
@@ -23,111 +67,86 @@ export default function ContactPage() {
               partnership conversations, or general platform support.
             </p>
 
-            <div className="mt-10 space-y-4">
-              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Support
-                </div>
-                <div className="mt-3 text-xl font-bold tracking-tight text-slate-950">
-                  support@wezenstaffing.com
-                </div>
-                <div className="mt-2 text-sm leading-7 text-slate-600">
-                  Use this email for facility access, worker onboarding, platform questions,
-                  compliance support, and general support requests.
-                </div>
+            <div className="mt-10 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Support
               </div>
-
-              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  What we can help with
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-sm font-semibold text-slate-950">
-                      Facility questions
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Shift operations, applicant review, and account access.
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-sm font-semibold text-slate-950">
-                      Professional questions
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Onboarding, documents, agreements, and shift requests.
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4 sm:col-span-2">
-                    <div className="text-sm font-semibold text-slate-950">
-                      Platform support
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Compliance, approvals, workflow issues, and general platform help.
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-3 text-xl font-bold tracking-tight text-slate-950">
+                support@wezenstaffing.com
+              </div>
+              <div className="mt-2 text-sm leading-7 text-slate-600">
+                Use this email for facility access, worker onboarding, platform questions,
+                compliance support, and general support requests.
               </div>
             </div>
           </div>
 
-          <div className="rounded-[2rem] bg-gradient-to-br from-slate-900 to-cyan-700 p-8 text-white shadow-xl">
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
-              Reach Out
-            </div>
-
-            <h2 className="mt-4 text-3xl font-bold tracking-tight">
-              Let’s make staffing operations easier
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+              Send us a message
             </h2>
-
-            <p className="mt-4 text-base leading-7 text-cyan-50/90">
-              Whether you’re a healthcare facility looking for coverage support or a
-              professional trying to get onboarded, we’ll help you get to the right workflow.
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Professionals and facilities can contact Wezen Staffing directly from this form.
             </p>
 
-            <div className="mt-8 grid gap-4">
-              <div className="rounded-2xl bg-white/10 px-5 py-5">
-                <div className="text-sm font-semibold uppercase tracking-wide text-cyan-100">
-                  Facility Access
-                </div>
-                <div className="mt-2 text-lg font-bold text-white">
-                  Post shifts and manage applicants
-                </div>
+            {message ? (
+              <div className="mt-5 rounded-2xl bg-red-600 px-4 py-3 text-center text-sm font-extrabold text-white">
+                {message}
               </div>
+            ) : null}
 
-              <div className="rounded-2xl bg-white/10 px-5 py-5">
-                <div className="text-sm font-semibold uppercase tracking-wide text-cyan-100">
-                  Professional Access
-                </div>
-                <div className="mt-2 text-lg font-bold text-white">
-                  Complete onboarding and browse shifts
-                </div>
-              </div>
+            <form onSubmit={submitContact} className="mt-6 grid gap-4">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                required
+                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              />
 
-              <div className="rounded-2xl bg-white/10 px-5 py-5">
-                <div className="text-sm font-semibold uppercase tracking-wide text-cyan-100">
-                  Platform Questions
-                </div>
-                <div className="mt-2 text-lg font-bold text-white">
-                  Compliance, approvals, and workflow support
-                </div>
-              </div>
-            </div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Your email"
+                required
+                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              />
 
-            <div className="mt-10 flex flex-wrap gap-4">
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
               >
+                <option value="">I am contacting as...</option>
+                <option value="Professional">Professional</option>
+                <option value="Facility">Facility</option>
+                <option value="General">General</option>
+              </select>
+
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="How can we help?"
+                rows={7}
+                required
+                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              />
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
+              >
+                {busy ? 'Sending...' : 'Send Email'}
+              </button>
+            </form>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link href="/login" className="text-sm font-semibold text-cyan-700 underline">
                 Go to Login
               </Link>
-
-              <Link
-                href="/how-it-works"
-                className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-              >
+              <Link href="/how-it-works" className="text-sm font-semibold text-cyan-700 underline">
                 See How It Works
               </Link>
             </div>

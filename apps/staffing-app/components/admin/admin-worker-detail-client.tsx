@@ -3,6 +3,14 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
+function formatDateOnly(value?: string | null) {
+  if (!value) return '';
+  const isoDate = value.split('T')[0];
+  const [year, month, day] = isoDate.split('-');
+  if (!year || !month || !day) return new Date(value).toLocaleDateString();
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 type WorkerDetail = {
   id: string;
   role: string;
@@ -40,9 +48,11 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
   const [resetPassword, setResetPassword] = useState('');
   const [messageSubject, setMessageSubject] = useState('');
   const [messageBody, setMessageBody] = useState('');
+  const [uploadMessage, setUploadMessage] = useState('');
   const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
   const [adminUploadCategory, setAdminUploadCategory] = useState('BACKGROUND_CHECK');
   const [adminUploadName, setAdminUploadName] = useState('');
+  const [adminUploadExpiresAt, setAdminUploadExpiresAt] = useState('');
   const [replaceExisting, setReplaceExisting] = useState(true);
 
   async function loadWorker() {
@@ -89,7 +99,8 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
 
   async function uploadAdminDocument() {
     if (!adminUploadFile) {
-      setMessage('Please select a file.');
+      setUploadMessage('Please select a file.');
+      setTimeout(() => setUploadMessage(''), 2500);
       return;
     }
 
@@ -104,6 +115,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
       formData.append('category', adminUploadCategory);
       formData.append('name', adminUploadName || adminUploadFile.name);
       formData.append('replaceExisting', String(replaceExisting));
+      if (adminUploadExpiresAt) formData.append('expiresAt', adminUploadExpiresAt);
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_STAFFING_API_BASE_URL || 'https://api.wezenstaffing.com'}/api/admin/workers/${professionalId}/documents/upload`, {
         method: 'POST',
@@ -122,10 +134,13 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
 
       setAdminUploadFile(null);
       setAdminUploadName('');
-      setMessage('Admin document uploaded successfully.');
+      setAdminUploadExpiresAt('');
+      setUploadMessage('Admin document uploaded successfully.');
+      setTimeout(() => setUploadMessage(''), 2500);
       await loadWorker();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to upload document');
+      setUploadMessage(error instanceof Error ? error.message : 'Failed to upload document');
+      setTimeout(() => setUploadMessage(''), 2500);
     } finally {
       setBusy('');
     }
@@ -337,6 +352,12 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
           <h4 className="text-sm font-extrabold text-slate-950">Upload / Replace Internal Documents</h4>
           <p className="mt-1 text-xs text-slate-600">Use this for Background Check or internal compliance uploads.</p>
 
+          {uploadMessage ? (
+            <div className="mt-3 rounded-2xl bg-red-600 px-4 py-3 text-center text-sm font-extrabold text-white">
+              {uploadMessage}
+            </div>
+          ) : null}
+
           <select
             value={adminUploadCategory}
             onChange={(e) => setAdminUploadCategory(e.target.value)}
@@ -353,6 +374,19 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
             placeholder="Document Name"
             className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
           />
+
+          <label className="mt-3 block">
+            <span className="mb-1 block text-xs font-extrabold uppercase tracking-wide text-slate-600">
+              Expiry Date
+            </span>
+            <input
+              type="date"
+              value={adminUploadExpiresAt}
+              onChange={(e) => setAdminUploadExpiresAt(e.target.value)}
+              aria-label="Expiry Date"
+              className="block w-full max-w-full appearance-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950"
+            />
+          </label>
 
           <input
             type="file"
@@ -394,7 +428,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
                     ? "mt-1 text-xs font-bold text-red-600"
                     : "mt-1 text-xs font-semibold text-slate-500"
                 }>
-                  Expires {new Date(doc.expiresAt).toLocaleDateString()}
+                  Expires {formatDateOnly(doc.expiresAt)}
                 </p>
               ) : (
                 <p className="mt-1 text-xs font-semibold text-amber-600">

@@ -66,7 +66,7 @@ await apiFetch('/api/shifts', {
   }),
 });
 	
-      setMessage('Success! Shift posted successfully.');
+      setMessage('✅ Success! Shift posted successfully. Nearby eligible workers are being notified.');
       setDate('');
       setStartTimeLabel('');
       setEndTimeLabel('');

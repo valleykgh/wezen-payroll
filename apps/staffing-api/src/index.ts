@@ -1148,11 +1148,43 @@ async function canUserAccessDocument(userId: string, role: string, documentId: s
   return { ok: false as const, error: 'Forbidden', document: null };
 }
 
+function getTimeZoneOffsetMs(timeZone: string, date: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+  }).formatToParts(date);
+
+  const value = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT';
+  const match = value.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+
+  if (!match) return 0;
+
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2] || 0);
+  const minutes = Number(match[3] || 0);
+
+  return sign * ((hours * 60 + minutes) * 60 * 1000);
+}
+
 function buildShiftStartDate(shiftDate: Date, startTimeLabel: string): Date {
+  const timeZone = process.env.SHIFT_TIMEZONE || 'America/Los_Angeles';
   const base = new Date(shiftDate);
+
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(base);
+
+  const year = Number(dateParts.find((part) => part.type === 'year')?.value);
+  const month = Number(dateParts.find((part) => part.type === 'month')?.value);
+  const day = Number(dateParts.find((part) => part.type === 'day')?.value);
+
   const match = startTimeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
 
-  if (!match) {
+  if (!match || !year || !month || !day) {
     return base;
   }
 
@@ -1166,9 +1198,10 @@ function buildShiftStartDate(shiftDate: Date, startTimeLabel: string): Date {
     hours += 12;
   }
 
-  const start = new Date(base);
-  start.setHours(hours, minutes, 0, 0);
-  return start;
+  const wallClockAsUtc = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
+  const offsetMs = getTimeZoneOffsetMs(timeZone, wallClockAsUtc);
+
+  return new Date(wallClockAsUtc.getTime() - offsetMs);
 }
 
 const allowedOrigins = [
@@ -1213,6 +1246,53 @@ app.get('/health', async (_req, res) => {
   res.json({ status: 'ok', service: 'staffing-api' });
 });
 
+const contactMessageSchema = z.object({
+  name: z.string().trim().min(1),
+  email: z.string().trim().email(),
+  role: z.string().trim().optional(),
+  message: z.string().trim().min(5),
+});
+
+app.post('/api/contact', async (req, res) => {
+  const parsed = contactMessageSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const supportEmail = process.env.SUPPORT_EMAIL || 'support@wezenstaffing.com';
+    const roleLabel = parsed.data.role || 'Not specified';
+
+    await sendEmail({
+      to: supportEmail,
+      subject: `Website contact message from ${parsed.data.name}`,
+      html: `
+        <h2>New Wezen Staffing contact message</h2>
+        <p><strong>Name:</strong> ${parsed.data.name}</p>
+        <p><strong>Email:</strong> ${parsed.data.email}</p>
+        <p><strong>Role:</strong> ${roleLabel}</p>
+        <p><strong>Message:</strong></p>
+        <p>${parsed.data.message.replace(/\n/g, '<br />')}</p>
+      `,
+      text: [
+        'New Wezen Staffing contact message',
+        `Name: ${parsed.data.name}`,
+        `Email: ${parsed.data.email}`,
+        `Role: ${roleLabel}`,
+        '',
+        parsed.data.message,
+      ].join('\n'),
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('POST /api/contact error:', error);
+    res.status(500).json({ error: 'Failed to send contact message' });
+  }
+});
+
+
 const registerProfessionalSchema = z.object({
   email: z.email(),
   password: z.string().min(6),
@@ -1256,6 +1336,8 @@ const updateFacilitySchema = z.object({
 const updateFacilitySettingsSchema = z.object({
   name: z.string().min(1),
   facilityType: z.string().optional(),
+  addressLine1: z.string().trim().optional().nullable(),
+  addressLine2: z.string().trim().optional().nullable(),
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
@@ -1956,51 +2038,141 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
           name: true,
           city: true,
           state: true,
+          zipCode: true,
           latitude: true,
           longitude: true,
         },
       });
 
-      if (facilityForAlerts?.latitude != null && facilityForAlerts?.longitude != null) {
+      if (facilityForAlerts) {
         const workers = await prisma.professionalProfile.findMany({
           where: {
             approvedByWezen: true,
             role: parsed.data.role,
             openShiftAlertsEnabled: true,
-            latitude: { not: null },
-            longitude: { not: null },
           },
           select: {
             id: true,
+            city: true,
+            state: true,
+            zipCode: true,
             latitude: true,
             longitude: true,
             openShiftAlertRadiusMiles: true,
+            user: {
+              select: {
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
           },
         });
 
+        const zipCoordinates: Record<string, { latitude: number; longitude: number }> = {
+          '94550': { latitude: 37.6819, longitude: -121.7680 },
+          '95128': { latitude: 37.3169, longitude: -121.9364 },
+          '95126': { latitude: 37.3305, longitude: -121.9168 },
+          '95125': { latitude: 37.2958, longitude: -121.8950 },
+          '95129': { latitude: 37.3058, longitude: -122.0007 },
+          '94551': { latitude: 37.7397, longitude: -121.7403 },
+          '94566': { latitude: 37.6506, longitude: -121.8747 },
+          '94568': { latitude: 37.7161, longitude: -121.9107 },
+          '94588': { latitude: 37.6879, longitude: -121.8916 },
+        };
+
+        function zip5(value?: string | null) {
+          return String(value || '').trim().slice(0, 5);
+        }
+
         const matchingWorkers = workers.filter((worker) => {
-          if (worker.latitude == null || worker.longitude == null) return false;
-
           const radius = worker.openShiftAlertRadiusMiles ?? 50;
-          const distance = calculateDistanceMiles(
-            worker.latitude,
-            worker.longitude,
-            facilityForAlerts.latitude!,
-            facilityForAlerts.longitude!
-          );
 
-          return distance <= radius;
+          if (
+            worker.latitude != null &&
+            worker.longitude != null &&
+            facilityForAlerts.latitude != null &&
+            facilityForAlerts.longitude != null
+          ) {
+            const distance = calculateDistanceMiles(
+              worker.latitude,
+              worker.longitude,
+              facilityForAlerts.latitude,
+              facilityForAlerts.longitude
+            );
+
+            return distance <= radius;
+          }
+
+          const workerZip = zip5(worker.zipCode);
+          const facilityZip = zip5(facilityForAlerts.zipCode);
+
+          if (workerZip && facilityZip && workerZip === facilityZip) {
+            return true;
+          }
+
+          const workerZipCoord = zipCoordinates[workerZip];
+          const facilityZipCoord = zipCoordinates[facilityZip];
+
+          if (workerZipCoord && facilityZipCoord) {
+            const distance = calculateDistanceMiles(
+              workerZipCoord.latitude,
+              workerZipCoord.longitude,
+              facilityZipCoord.latitude,
+              facilityZipCoord.longitude
+            );
+
+            return distance <= radius;
+          }
+
+          const workerCity = String(worker.city || '').trim().toLowerCase();
+          const facilityCity = String(facilityForAlerts.city || '').trim().toLowerCase();
+          const workerState = String(worker.state || '').trim().toLowerCase();
+          const facilityState = String(facilityForAlerts.state || '').trim().toLowerCase();
+
+          return Boolean(workerCity && facilityCity && workerState && facilityState &&
+            workerCity === facilityCity && workerState === facilityState);
+        });
+
+        const alertMessage = `${facilityForAlerts.name} posted a ${parsed.data.role} ${parsed.data.shiftType} shift on ${parsed.data.date} from ${parsed.data.startTimeLabel} to ${parsed.data.endTimeLabel}.`;
+
+        console.log('Open shift alert matching workers:', {
+          shiftId: shift.id,
+          facilityName: facilityForAlerts.name,
+          role: parsed.data.role,
+          matchingWorkerCount: matchingWorkers.length,
         });
 
         await Promise.all(
-          matchingWorkers.map((worker) =>
-            createWorkerNotification({
+          matchingWorkers.map(async (worker) => {
+            await createWorkerNotification({
               professionalId: worker.id,
               type: 'GENERAL',
               title: 'New shift opened near you',
-              message: `${facilityForAlerts.name} posted a ${parsed.data.role} ${parsed.data.shiftType} shift on ${parsed.data.date} from ${parsed.data.startTimeLabel} to ${parsed.data.endTimeLabel}.`,
-            })
-          )
+              message: alertMessage,
+            });
+
+            if (worker.user.email) {
+              try {
+                await sendEmail({
+                  to: worker.user.email,
+                  subject: `New ${parsed.data.role} shift near you`,
+                  html: `
+                    <h2>New shift opened near you</h2>
+                    <p>${alertMessage}</p>
+                    <p>Please log in to Wezen Staffing to review and request this shift.</p>
+                  `,
+                  text: [
+                    'New shift opened near you',
+                    alertMessage,
+                    'Please log in to Wezen Staffing to review and request this shift.',
+                  ].join('\n'),
+                });
+              } catch (emailError) {
+                console.error('Open shift worker email failed:', emailError);
+              }
+            }
+          })
         );
       }
     } catch (notificationError) {
@@ -2560,7 +2732,16 @@ app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSION
     const existing = await prisma.shiftRequest.findUnique({
       where: { id },
       include: {
-        shift: true,
+        shift: {
+          include: {
+            facility: true,
+          },
+        },
+        professional: {
+          include: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -2608,11 +2789,18 @@ if (String(existing.reviewNotes || '').includes('Cancellation denied by facility
       message: 'Your cancellation request has been sent to the facility for review.',
     });
 
+    const workerName =
+      `${existing.professional.user.firstName || ''} ${existing.professional.user.lastName || ''}`.trim() ||
+      existing.professional.user.email ||
+      'A worker';
+
+    const shiftDateLabel = new Date(existing.shift.date).toLocaleDateString('en-US');
+
     await createFacilityNotification({
       facilityId: existing.shift.facilityId,
       type: 'GENERAL',
       title: 'Cancellation requested',
-      message: 'A worker requested cancellation for an approved shift. Please review urgently.',
+      message: `${workerName} requested cancellation for ${existing.shift.role} ${existing.shift.shiftType} on ${shiftDateLabel} from ${existing.shift.startTimeLabel} to ${existing.shift.endTimeLabel}. Reason: ${cancellationReason}`,
     });
 
     try {
@@ -3287,7 +3475,7 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
     let expiresAt: Date | null = null;
 
     if (expiresAtRaw) {
-      const parsedDate = new Date(expiresAtRaw);
+      const parsedDate = new Date(`${expiresAtRaw}T12:00:00.000Z`);
 
       if (Number.isNaN(parsedDate.getTime())) {
         return res.status(400).json({ error: 'expiresAt must be a valid date' });
@@ -3307,7 +3495,12 @@ app.post('/api/worker/documents/upload', upload.single('file'), requireRole('PRO
       return res.status(404).json({ error: 'Professional profile not found' });
     }
 
-    const uploadedName = name || req.file.originalname;
+    const originalExt = path.extname(req.file.originalname || '');
+    const rawUploadedName = name || req.file.originalname;
+    const uploadedName =
+      originalExt && !path.extname(rawUploadedName)
+        ? `${rawUploadedName}${originalExt}`
+        : rawUploadedName;
 
     const uploaded = await uploadFileToCandidateFolder({
       firstName: professional.user.firstName,
@@ -4144,7 +4337,7 @@ app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('f
     let expiresAt: Date | null = null;
 
     if (expiresAtRaw) {
-      const parsedDate = new Date(expiresAtRaw);
+      const parsedDate = new Date(`${expiresAtRaw}T12:00:00.000Z`);
       if (Number.isNaN(parsedDate.getTime())) {
         return res.status(400).json({ error: 'expiresAt must be a valid date' });
       }
@@ -4160,7 +4353,12 @@ app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('f
       return res.status(404).json({ error: 'Worker not found' });
     }
 
-    const uploadedName = name || req.file.originalname;
+    const originalExt = path.extname(req.file.originalname || '');
+    const rawUploadedName = name || req.file.originalname;
+    const uploadedName =
+      originalExt && !path.extname(rawUploadedName)
+        ? `${rawUploadedName}${originalExt}`
+        : rawUploadedName;
 
     const uploaded = await uploadFileToCandidateFolder({
       firstName: professional.user.firstName,
@@ -4172,10 +4370,15 @@ app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('f
     });
 
     if (replaceExisting) {
-      await prisma.professionalDocument.deleteMany({
+      await prisma.professionalDocument.updateMany({
         where: {
           professionalId,
           category: category as any,
+          status: { notIn: ['REJECTED', 'EXPIRED'] },
+        },
+        data: {
+          status: 'EXPIRED',
+          notes: `Superseded by newer upload on ${new Date().toLocaleDateString('en-US')}.`,
         },
       });
     }
@@ -4416,11 +4619,25 @@ if (worker.user.isSystemUser) {
     });
 
     await createWorkerNotification({
-  professionalId,
-  type: 'SHIFT_APPROVED',
-  title: 'Profile approved by Wezen',
-  message: 'Your profile has been approved by Wezen. You can now request available shifts.',
-});
+      professionalId,
+      type: 'SHIFT_APPROVED',
+      title: 'Profile approved by Wezen',
+      message: 'Your profile has been approved by Wezen. You can now request available shifts.',
+    });
+
+    try {
+      await sendEmail({
+        to: worker.user.email,
+        subject: 'Your Wezen Staffing profile is approved',
+        html: `
+          <h2>Your profile is approved</h2>
+          <p>Your Wezen Staffing profile has been approved. You can now request available shifts.</p>
+        `,
+        text: 'Your Wezen Staffing profile has been approved. You can now request available shifts.',
+      });
+    } catch (emailError) {
+      console.error('Worker approved by Wezen email failed:', emailError);
+    }
 
     await createAdminAuditLog({
       actorUserId: (req as AuthedRequest).authUser?.userId,
@@ -4470,6 +4687,31 @@ if (worker.user.isSystemUser) {
         onboardingStatus: 'UNDER_REVIEW',
       },
     });
+
+    await createWorkerNotification({
+      professionalId,
+      type: 'GENERAL',
+      title: 'Profile moved under review',
+      message: 'Your Wezen Staffing profile has been moved back under review. Wezen Staffing will follow up if anything else is needed.',
+    });
+
+    try {
+      await sendEmail({
+        to: worker.user.email,
+        subject: 'Your Wezen Staffing profile is under review',
+        html: `
+          <h2>Profile moved under review</h2>
+          <p>Your Wezen Staffing profile has been moved back under review.</p>
+          <p>Wezen Staffing will follow up if anything else is needed.</p>
+        `,
+        text: [
+          'Your Wezen Staffing profile has been moved back under review.',
+          'Wezen Staffing will follow up if anything else is needed.',
+        ].join('\n'),
+      });
+    } catch (emailError) {
+      console.error('Worker moved under review email failed:', emailError);
+    }
 
     await createAdminAuditLog({
       actorUserId: (req as AuthedRequest).authUser?.userId,
@@ -5401,18 +5643,39 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
       },
       select: {
         professionalId: true,
+        professional: {
+          select: {
+            user: {
+              select: {
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
       },
     });
 
     await Promise.all(
-      approvedRequests.map((request) =>
-        createWorkerNotification({
+      approvedRequests.map(async (request) => {
+        await createWorkerNotification({
           professionalId: request.professionalId,
           type: 'GENERAL',
           title: 'Shift cancelled',
           message: 'A facility cancelled one of your approved shifts. Please check your schedule.',
-        })
-      )
+        });
+
+        const workerEmail = request.professional?.user?.email;
+        if (workerEmail) {
+          await sendEmail({
+            to: workerEmail,
+            subject: 'Shift cancelled by facility',
+            html: '<h2>Shift cancelled</h2><p>A facility cancelled one of your shifts. Please check your Wezen Staffing schedule.</p>',
+            text: 'Shift cancelled\nA facility cancelled one of your shifts. Please check your Wezen Staffing schedule.',
+          });
+        }
+      })
     );
 
     await prisma.shiftRequest.updateMany({
@@ -6359,18 +6622,39 @@ app.post('/api/admin/shifts/:shiftId/cancel', requireRole('INTERNAL_ADMIN'), asy
       },
       select: {
         professionalId: true,
+        professional: {
+          select: {
+            user: {
+              select: {
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
       },
     });
 
     await Promise.all(
-      approvedRequests.map((request) =>
-        createWorkerNotification({
+      approvedRequests.map(async (request) => {
+        await createWorkerNotification({
           professionalId: request.professionalId,
           type: 'GENERAL',
           title: 'Shift cancelled',
           message: 'Wezen Staffing cancelled one of your approved shifts. Please check your schedule.',
-        })
-      )
+        });
+
+        const workerEmail = request.professional?.user?.email;
+        if (workerEmail) {
+          await sendEmail({
+            to: workerEmail,
+            subject: 'Shift cancelled by Wezen Staffing',
+            html: '<h2>Shift cancelled</h2><p>Wezen Staffing cancelled one of your shifts. Please check your schedule.</p>',
+            text: 'Shift cancelled\nWezen Staffing cancelled one of your shifts. Please check your schedule.',
+          });
+        }
+      })
     );
 
     await prisma.shiftRequest.updateMany({
@@ -7314,6 +7598,8 @@ app.get('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         id: true,
         name: true,
         facilityType: true,
+        addressLine1: true,
+        addressLine2: true,
         city: true,
         state: true,
         zipCode: true,
@@ -7372,6 +7658,8 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
       data: {
         name: parsed.data.name,
         facilityType: parsed.data.facilityType,
+        addressLine1: parsed.data.addressLine1 ?? null,
+        addressLine2: parsed.data.addressLine2 ?? null,
         city: parsed.data.city,
         state: parsed.data.state,
         zipCode: parsed.data.zipCode,
@@ -7399,6 +7687,8 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         id: facility.id,
         name: facility.name,
         facilityType: facility.facilityType,
+        addressLine1: facility.addressLine1,
+        addressLine2: facility.addressLine2,
         city: facility.city,
         state: facility.state,
         zipCode: facility.zipCode,

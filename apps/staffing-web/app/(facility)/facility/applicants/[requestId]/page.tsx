@@ -138,10 +138,6 @@ export default function ApplicantDetailPage({
       setBusy(true);
       setMessage('');
 
-      if (action === 'approve') {
-        window.alert('Please review/download the worker documents before approving this applicant.');
-      }
-
       const res = await fetch(
         `${STAFFING_API_BASE_URL}/api/shift-requests/${requestId}/${action}`,
         {
@@ -282,6 +278,12 @@ export default function ApplicantDetailPage({
     }
   }
 
+useEffect(() => {
+  if (!message || message === 'Loading applicant detail...') return;
+  const timer = setTimeout(() => setMessage(''), 2500);
+  return () => clearTimeout(timer);
+}, [message]);
+
 async function downloadAllApplicantDocuments() {
   try {
     if (!requestId) return;
@@ -305,13 +307,7 @@ async function downloadAllApplicantDocuments() {
 }
 
   if (!detail) {
-    useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 2500);
-    return () => clearTimeout(timer);
-  }, [message]);
-
-  return (
+    return (
       <div className="space-y-8">
         <div className="page-gradient rounded-[2rem] p-6">
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
@@ -422,6 +418,13 @@ async function downloadAllApplicantDocuments() {
   >
     {busy ? 'Working...' : 'Send Message'}
   </button>
+
+  <a
+    href="#applicant-documents"
+    className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+  >
+    View / Download Documents
+  </a>
   {detail.status === 'CANCELLATION_REQUESTED' ? (
     <>
       <button

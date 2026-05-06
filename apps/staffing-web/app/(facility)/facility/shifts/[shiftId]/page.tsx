@@ -84,10 +84,6 @@ export default function FacilityShiftDetailPage({
 
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
-      if (action === 'approve') {
-        window.alert('Please review/download the worker documents before approving this applicant.');
-      }
-
       setBusyId(requestId);
       setMessage('');
 

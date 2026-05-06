@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { loginRequest } from '@/lib/auth-client';
+import { loginRequest, meRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
 
@@ -14,6 +14,35 @@ export function LoginForm({ next = '' }: LoginFormProps) {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function autoRouteIfLoggedIn() {
+      try {
+        const res = await meRequest();
+        if (!mounted) return;
+
+        const role = res.data.role;
+
+        if (role === 'INTERNAL_ADMIN') {
+          window.location.replace('/app/admin/index.html');
+        } else if (role === 'FACILITY_ADMIN') {
+          window.location.replace('/app/facility/index.html');
+        } else if (role === 'PROFESSIONAL') {
+          window.location.replace('/app/worker/index.html');
+        }
+      } catch {
+        // Stay on login page if no valid saved session exists.
+      }
+    }
+
+    autoRouteIfLoggedIn();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
 async function handleSubmit(e: React.FormEvent) {
   e.preventDefault();

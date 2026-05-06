@@ -43,6 +43,16 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
     }
 
     loadUnreadCount();
+
+    function handleNotificationsChanged() {
+      loadUnreadCount();
+    }
+
+    window.addEventListener('wezen-notifications-changed', handleNotificationsChanged);
+
+    return () => {
+      window.removeEventListener('wezen-notifications-changed', handleNotificationsChanged);
+    };
   }, []);
 
   return (

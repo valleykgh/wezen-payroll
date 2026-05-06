@@ -65,7 +65,8 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
         setUnreadCount(nextCount);
 
         if (Capacitor.isNativePlatform()) {
-          await Badge.set({ count: nextCount });
+          if (nextCount > 0) await Badge.set({ count: nextCount });
+          else await Badge.clear();
         }
       } catch {
         setUnreadCount(0);
@@ -76,6 +77,24 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
     }
 
     loadUnreadCount();
+
+    function handleNotificationsChanged(event: Event) {
+      const customEvent = event as CustomEvent<{ unreadCount?: number }>;
+      const nextCount = customEvent.detail?.unreadCount;
+
+      if (typeof nextCount === 'number') {
+        setUnreadCount(nextCount);
+        if (Capacitor.isNativePlatform()) {
+          if (nextCount > 0) Badge.set({ count: nextCount });
+          else Badge.clear();
+        }
+        return;
+      }
+
+      loadUnreadCount();
+    }
+
+    window.addEventListener('wezen-notifications-changed', handleNotificationsChanged);
 
     const interval = window.setInterval(loadUnreadCount, 25000);
 
@@ -90,6 +109,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
     }
 
     return () => {
+      window.removeEventListener('wezen-notifications-changed', handleNotificationsChanged);
       window.clearInterval(interval);
       removeListener?.();
     };

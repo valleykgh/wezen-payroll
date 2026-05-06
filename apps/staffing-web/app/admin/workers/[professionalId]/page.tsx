@@ -7,6 +7,14 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { TextArea } from '@/components/ui/text-area';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
+function formatDateOnly(value?: string | null) {
+  if (!value) return '';
+  const isoDate = value.split('T')[0];
+  const [year, month, day] = isoDate.split('-');
+  if (!year || !month || !day) return new Date(value).toLocaleDateString();
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 type WorkerDetail = {
   id: string;
   role: string;
@@ -78,9 +86,11 @@ export default function AdminWorkerDetailPage({
 const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
 const [adminUploadCategory, setAdminUploadCategory] = useState('BACKGROUND_CHECK');
 const [adminUploadName, setAdminUploadName] = useState('');
+const [adminUploadExpiresAt, setAdminUploadExpiresAt] = useState('');
 const [replaceExisting, setReplaceExisting] = useState(true);
 const [messageSubject, setMessageSubject] = useState('');
 const [messageBody, setMessageBody] = useState('');
+const [uploadMessage, setUploadMessage] = useState('');
 
 
   async function load(id: string) {
@@ -176,6 +186,7 @@ async function uploadAdminDocument() {
     formData.append('category', adminUploadCategory);
     formData.append('name', adminUploadName || adminUploadFile.name);
     formData.append('replaceExisting', String(replaceExisting));
+    if (adminUploadExpiresAt) formData.append('expiresAt', adminUploadExpiresAt);
 
     const res = await fetch(
       `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/documents/upload`,
@@ -194,15 +205,14 @@ async function uploadAdminDocument() {
 
     setAdminUploadFile(null);
     setAdminUploadName('');
+    setAdminUploadExpiresAt('');
     await load(professionalId);
 
-    setMessage('Admin document uploaded successfully.');
+    setUploadMessage('Admin document uploaded successfully.');
+    setTimeout(() => setUploadMessage(''), 2500);
   } catch (error) {
-    setMessage(
-      error instanceof Error
-        ? error.message
-        : 'Failed to upload admin document'
-    );
+    setUploadMessage(error instanceof Error ? error.message : 'Failed to upload admin document');
+    setTimeout(() => setUploadMessage(''), 2500);
   } finally {
     setBusy(false);
   }
@@ -665,6 +675,12 @@ const icaSignedStepLabel = isIcaSigned
     Use this for Background Check or internal compliance uploads.
   </p>
 
+  {uploadMessage ? (
+    <div className="mt-4 rounded-2xl bg-red-600 px-4 py-3 text-center text-sm font-extrabold text-white">
+      {uploadMessage}
+    </div>
+  ) : null}
+
   <div className="mt-4 grid w-full max-w-full grid-cols-1 gap-3 md:grid-cols-[260px_minmax(280px,1fr)]">
     <select
       value={adminUploadCategory}
@@ -687,6 +703,14 @@ const icaSignedStepLabel = isIcaSigned
       value={adminUploadName}
       onChange={(e) => setAdminUploadName(e.target.value)}
       placeholder="Document Name"
+      className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+    />
+
+    <input
+      type="date"
+      value={adminUploadExpiresAt}
+      onChange={(e) => setAdminUploadExpiresAt(e.target.value)}
+      aria-label="Expiry Date"
       className="w-full min-w-0 rounded-2xl border border-slate-300 px-4 py-3 text-sm"
     />
 
@@ -773,14 +797,14 @@ const icaSignedStepLabel = isIcaSigned
 
         <div className="mt-1 text-sm text-slate-500">
           {doc.expiresAt
-            ? `Expires on ${new Date(doc.expiresAt).toLocaleDateString()}`
+            ? `Expires on ${formatDateOnly(doc.expiresAt)}`
             : 'No expiry date provided'}
         </div>
 
         {doc.expiresAt && daysUntilExpiration != null ? (
           daysUntilExpiration < 0 ? (
             <div className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
-              This document expired on {new Date(doc.expiresAt).toLocaleDateString()}.
+              This document expired on {formatDateOnly(doc.expiresAt)}.
             </div>
           ) : daysUntilExpiration < 30 ? (
             <div className="rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800">

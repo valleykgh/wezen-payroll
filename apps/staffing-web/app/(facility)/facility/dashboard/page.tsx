@@ -159,20 +159,43 @@ const chartData = report
       </div>
 
       {cancellationRequests.length > 0 ? (
-        <Link
-          href="/facility/applicants"
-          className="block rounded-[1.75rem] border-2 border-rose-300 bg-rose-50 p-6 shadow-sm transition hover:bg-rose-100"
-        >
+        <section className="rounded-[1.75rem] border-2 border-rose-300 bg-rose-50 p-6 shadow-sm">
           <div className="text-sm font-bold uppercase tracking-[0.2em] text-rose-700">
             Urgent cancellation requests
           </div>
           <div className="mt-2 text-3xl font-extrabold text-rose-950">
             {cancellationRequests.length} need review
           </div>
-          <p className="mt-2 text-sm font-semibold text-rose-800">
-            Workers are requesting cancellation. Review and approve or deny now.
-          </p>
-        </Link>
+          <div className="mt-4 grid gap-3">
+            {cancellationRequests.slice(0, 5).map((request) => {
+              const workerName =
+                `${request.professional.firstName || ''} ${request.professional.lastName || ''}`.trim() ||
+                request.professional.email ||
+                'Worker';
+
+              return (
+                <Link
+                  key={request.id}
+                  href={`/facility/applicants/${request.id}`}
+                  className="block rounded-2xl border border-rose-200 bg-white px-4 py-4 transition hover:bg-rose-100"
+                >
+                  <div className="font-bold text-rose-950">{workerName}</div>
+                  <div className="mt-1 text-sm font-semibold text-rose-800">
+                    {request.shift.role} {request.shift.shiftType} • {formatShiftDate(request.shift.date)} • {request.shift.time}
+                  </div>
+                  {request.reviewNotes ? (
+                    <div className="mt-2 text-sm text-rose-700">
+                      Reason: {request.reviewNotes}
+                    </div>
+                  ) : null}
+                  <div className="mt-3 text-sm font-bold text-cyan-700">
+                    Review cancellation →
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
 
         {message && !dashboard ? (

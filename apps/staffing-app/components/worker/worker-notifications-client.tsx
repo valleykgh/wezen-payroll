@@ -44,6 +44,7 @@ export function WorkerNotificationsClient() {
       setNotifications((items) =>
         items.map((item) => (item.id === id ? { ...item, isRead: true } : item))
       );
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to mark notification read');
     }
@@ -56,6 +57,7 @@ export function WorkerNotificationsClient() {
       });
 
       setNotifications((items) => items.map((item) => ({ ...item, isRead: true })));
+      window.dispatchEvent(new CustomEvent('wezen-notifications-changed', { detail: { unreadCount: 0 } }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to mark all read');
     }
