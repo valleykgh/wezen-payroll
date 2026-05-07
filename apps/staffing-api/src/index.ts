@@ -6052,6 +6052,45 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
   }
 });
 
+
+app.delete('/api/shifts/:id', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!id) return res.status(400).json({ error: 'Shift id is required' });
+    if (!facilityId) return res.status(404).json({ error: 'Facility admin not found' });
+
+    const shift = await prisma.shift.findUnique({
+      where: { id },
+      include: {
+        requests: {
+          select: { status: true },
+        },
+      },
+    });
+
+    if (!shift) return res.status(404).json({ error: 'Shift not found' });
+    if (shift.facilityId !== facilityId) return res.status(403).json({ error: 'Forbidden' });
+
+    const approvedCount = shift.requests.filter((r) => r.status === 'APPROVED').length;
+
+    if (approvedCount > 0) {
+      return res.status(400).json({
+        error: 'This shift has approved workers and cannot be deleted. Please cancel it instead.',
+      });
+    }
+
+    await prisma.shift.delete({ where: { id } });
+
+    res.json({ data: { id, status: 'DELETED' } });
+  } catch (error) {
+    console.error('DELETE /api/shifts/:id error:', error);
+    res.status(500).json({ error: 'Failed to delete shift' });
+  }
+});
+
 app.get('/api/worker/notifications/unread-count', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;

@@ -45,6 +45,8 @@ export default function FacilityShiftsPage() {
   const [fillFilter, setFillFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState<SortValue>('date-asc');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
 
   async function loadShifts(currentFacilityId?: string | null) {
     try {
@@ -96,6 +98,31 @@ export default function FacilityShiftsPage() {
       setMessage('Shift duplicated successfully.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to duplicate shift');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteShift(id: string) {
+    const confirmed = window.confirm('Delete this shift permanently? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setBusyId(id);
+      setMessage('');
+
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || 'Failed to delete shift');
+
+      await loadShifts(facilityId);
+      setMessage('Shift deleted successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete shift');
     } finally {
       setBusyId(null);
     }
@@ -160,6 +187,14 @@ export default function FacilityShiftsPage() {
       items = items.filter((shift) => shift.status === statusFilter);
     }
 
+    if (startDateFilter) {
+      items = items.filter((shift) => shift.date.split('T')[0] >= startDateFilter);
+    }
+
+    if (endDateFilter) {
+      items = items.filter((shift) => shift.date.split('T')[0] <= endDateFilter);
+    }
+
     items.sort((a, b) => {
       if (sortBy === 'date-asc') {
         return new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -173,7 +208,7 @@ export default function FacilityShiftsPage() {
     });
 
     return items;
-  }, [shifts, roleFilter, shiftTypeFilter, fillFilter, statusFilter, sortBy]);
+  }, [shifts, roleFilter, shiftTypeFilter, fillFilter, statusFilter, sortBy, startDateFilter, endDateFilter]);
 
   return (
     <div className="space-y-8">
@@ -220,7 +255,7 @@ export default function FacilityShiftsPage() {
       </div>
 
       <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
             <select
@@ -274,7 +309,29 @@ export default function FacilityShiftsPage() {
               <option value="OPEN">Open</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
+              <option value="INVITE_ONLY">Invite only</option>
+              <option value="UNFILLED">Unfilled</option>
             </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Start date</label>
+            <input
+              type="date"
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">End date</label>
+            <input
+              type="date"
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+            />
           </div>
 
           <div>
@@ -423,6 +480,16 @@ export default function FacilityShiftsPage() {
                 >
                   {busyId === shift.id ? 'Working...' : 'Duplicate Shift'}
                 </button>
+
+                {shift.fillCount === 0 ? (
+                  <button
+                    onClick={() => deleteShift(shift.id)}
+                    disabled={busyId === shift.id}
+                    className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                  >
+                    {busyId === shift.id ? 'Working...' : 'Delete Shift'}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
