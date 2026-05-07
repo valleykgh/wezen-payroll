@@ -24,6 +24,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Upload compliance documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select and upload compliance documents.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Receive shift updates and staffing alerts.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
