@@ -109,6 +109,37 @@ export function WorkerProfileClient() {
     }
   }
 
+
+  async function deleteAccount() {
+    const confirmed = window.confirm(
+      'Delete your Wezen Staffing account? This will deactivate your login and remove your active app access.'
+    );
+
+    if (!confirmed) return;
+
+    const finalConfirm = window.confirm(
+      'This action cannot be undone. Continue deleting your account?'
+    );
+
+    if (!finalConfirm) return;
+
+    try {
+      setBusy(true);
+      setMessage('');
+
+      await apiFetch('/api/account', {
+        method: 'DELETE',
+      });
+
+      setMessage('Account deleted.');
+      window.location.href = '/login/index.html';
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete account');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     loadProfile();
   }, []);

@@ -6197,6 +6197,58 @@ app.post('/api/worker/notifications/mark-all-read', requireRole('PROFESSIONAL'),
 });
 
 
+
+app.delete('/api/account', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true },
+    });
+
+    if (!user) {
+      clearAuthCookie(res);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.userDeviceToken.deleteMany({ where: { userId } });
+      await tx.passwordResetToken.deleteMany({ where: { userId } });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email: `deleted-${userId}@deleted.wezenstaffing.local`,
+          passwordHash: null,
+          firstName: null,
+          lastName: null,
+          phone: null,
+          notificationEmail: null,
+          isActive: false,
+          notifyNewWorkerSignup: false,
+          notifyDocumentUploads: false,
+          notifyAgreementSigned: false,
+          notifyWorkerReadyForReview: false,
+        },
+      });
+    });
+
+    clearAuthCookie(res);
+
+    return res.json({
+      data: {
+        deleted: true,
+        userId,
+      },
+    });
+  } catch (error) {
+    console.error('DELETE /api/account error:', error);
+    return res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+
 app.post('/api/users/device-tokens', requireAuth, async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;

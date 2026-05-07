@@ -86,6 +86,37 @@ export function FacilitySettingsClient() {
     }
   }
 
+
+  async function deleteAccount() {
+    const confirmed = window.confirm(
+      'Delete this facility admin account? This will deactivate your login and remove your active app access.'
+    );
+
+    if (!confirmed) return;
+
+    const finalConfirm = window.confirm(
+      'This action cannot be undone. Continue deleting this account?'
+    );
+
+    if (!finalConfirm) return;
+
+    try {
+      setBusy(true);
+      setMessage('');
+
+      await apiFetch('/api/account', {
+        method: 'DELETE',
+      });
+
+      setMessage('Account deleted.');
+      window.location.href = '/login/index.html';
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete account');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     load().catch((error) => setMessage(error instanceof Error ? error.message : 'Failed to load settings'));
   }, []);
@@ -117,6 +148,21 @@ export function FacilitySettingsClient() {
       <button onClick={save} disabled={busy} className="rounded-2xl bg-cyan-600 px-4 py-4 text-sm font-extrabold text-white disabled:opacity-60">
         {busy ? 'Saving...' : 'Save Settings'}
       </button>
+
+      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-rose-200">
+        <h2 className="text-lg font-extrabold text-rose-700">Delete Account</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Deleting this account will deactivate your facility admin login and remove active app access.
+        </p>
+        <button
+          type="button"
+          onClick={deleteAccount}
+          disabled={busy}
+          className="mt-4 w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+        >
+          Delete Facility Admin Account
+        </button>
+      </section>
     </div>
   );
 }
