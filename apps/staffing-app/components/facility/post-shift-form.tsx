@@ -47,7 +47,7 @@ function formatTimeLabel(value: string) {
 
 export function PostShiftForm() {
   const [role, setRole] = useState('CNA');
-  const [shiftType, setShiftType] = useState('AM');
+  const [shiftTypes, setShiftTypes] = useState<string[]>(['AM']);
   const [date, setDate] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -67,30 +67,39 @@ export function PostShiftForm() {
     setMessage('');
 
     try {
-      const me = await apiFetch<{ data: { facilityId?: string | null } }>('/api/auth/me');
+      if (shiftTypes.length === 0) {
+        throw new Error('Select at least one shift type.');
+      }
 
-      const res = await apiFetch<{ data: { id: string } }>('/api/shifts', {
-        method: 'POST',
-        body: JSON.stringify({
-          facilityId: me.data.facilityId,
-          role,
-          shiftType,
-          date,
-          workersNeeded,
-          specialInstructions,
-          visibility,
-        }),
-      });
+      const me = await apiFetch<{ data: { facilityId?: string | null } }>('/api/auth/me');
+      let firstCreatedShiftId = '';
+
+      for (const currentShiftType of shiftTypes) {
+        const res = await apiFetch<{ data: { id: string } }>('/api/shifts', {
+          method: 'POST',
+          body: JSON.stringify({
+            facilityId: me.data.facilityId,
+            role,
+            shiftType: currentShiftType,
+            date,
+            workersNeeded,
+            specialInstructions,
+            visibility,
+          }),
+        });
+
+        if (!firstCreatedShiftId) firstCreatedShiftId = res.data.id;
+      }
 
       if (visibility === 'INVITE_ONLY') {
-        setCreatedInviteShiftId(res.data.id);
+        setCreatedInviteShiftId(firstCreatedShiftId);
         setInviteMode(true);
         setMessage('✅ Invite-only shift created. Search and invite workers.');
         await searchWorkers();
         return;
       }
 
-      setMessage('✅ Success! Shift posted successfully. Nearby eligible workers are being notified.');
+      setMessage(`✅ Success! ${shiftTypes.length} shift${shiftTypes.length === 1 ? '' : 's'} posted successfully.`);
       setDate('');
       setWorkersNeeded(1);
       setSpecialInstructions('');
@@ -115,6 +124,14 @@ export function PostShiftForm() {
       `/api/facility/workers/search?${params.toString()}`
     );
     setWorkers(res.data || []);
+  }
+
+  function toggleShiftType(type: string) {
+    setShiftTypes((current) =>
+      current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type]
+    );
   }
 
   function toggleWorker(workerId: string) {
@@ -185,11 +202,26 @@ export function PostShiftForm() {
             <option value="RN">RN</option>
           </select>
 
-          <select value={shiftType} onChange={(e) => setShiftType(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
-            <option value="AM">AM</option>
-            <option value="PM">PM</option>
-            <option value="NOC">NOC</option>
-          </select>
+          <div className="grid grid-cols-3 gap-2">
+            {['AM', 'PM', 'NOC'].map((type) => {
+              const active = shiftTypes.includes(type);
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleShiftType(type)}
+                  className={
+                    active
+                      ? 'rounded-2xl bg-cyan-600 px-3 py-3 text-sm font-bold text-white'
+                      : 'rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700'
+                  }
+                >
+                  {type}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-4 text-base font-semibold text-slate-950" />

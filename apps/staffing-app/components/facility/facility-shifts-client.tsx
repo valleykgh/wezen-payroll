@@ -34,6 +34,7 @@ export function FacilityShiftsClient() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [editingId, setEditingId] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   async function loadShifts() {
     setLoading(true);
@@ -101,6 +102,67 @@ export function FacilityShiftsClient() {
       setBusyId('');
     }
   }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
+  async function duplicateShift(id: string) {
+    setBusyId(id);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/shifts/${id}/duplicate`, { method: 'POST' });
+      setMessage('Shift duplicated.');
+      await loadShifts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to duplicate shift');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function deleteShift(id: string) {
+    if (!window.confirm('Delete this shift permanently?')) return;
+
+    setBusyId(id);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/shifts/${id}`, { method: 'DELETE' });
+      setSelectedIds((current) => current.filter((item) => item !== id));
+      setMessage('Shift deleted.');
+      await loadShifts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete shift');
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected shift(s)?`)) return;
+
+    setBusyId('bulk-delete');
+    setMessage('');
+
+    try {
+      await Promise.all(
+        selectedIds.map((id) => apiFetch(`/api/shifts/${id}`, { method: 'DELETE' }))
+      );
+      setSelectedIds([]);
+      setMessage('Selected shifts deleted.');
+      await loadShifts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete selected shifts');
+    } finally {
+      setBusyId('');
+    }
+  }
+
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
@@ -133,6 +195,17 @@ export function FacilityShiftsClient() {
         </div>
       ) : null}
 
+      {selectedIds.length > 0 ? (
+        <button
+          type="button"
+          onClick={deleteSelected}
+          disabled={busyId === 'bulk-delete'}
+          className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+        >
+          {busyId === 'bulk-delete' ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}
+        </button>
+      ) : null}
+
       {shifts.map((shift) => {
         const [start = '', end = ''] = shift.time.split(' - ');
         const isEditing = editingId === shift.id;
@@ -140,7 +213,14 @@ export function FacilityShiftsClient() {
         return (
           <div key={shift.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(shift.id)}
+                  onChange={() => toggleSelected(shift.id)}
+                  className="mt-1 h-5 w-5"
+                />
+                <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">
                   {shift.role} • {shift.shiftType}
                 </p>
@@ -150,6 +230,7 @@ export function FacilityShiftsClient() {
                 <p className="mt-1 text-sm text-slate-600">
                   {[shift.city, shift.state].filter(Boolean).join(', ') || shift.facilityName}
                 </p>
+                </div>
               </div>
 
               <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
@@ -198,7 +279,7 @@ export function FacilityShiftsClient() {
               </form>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-4 gap-2">
+            <div className="mt-4 grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setEditingId(shift.id)}
@@ -233,6 +314,24 @@ export function FacilityShiftsClient() {
                 className="rounded-2xl bg-cyan-700 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
               >
                 Reopen
+              </button>
+
+              <button
+                type="button"
+                onClick={() => duplicateShift(shift.id)}
+                disabled={busyId === shift.id}
+                className="rounded-2xl bg-emerald-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
+              >
+                Duplicate
+              </button>
+
+              <button
+                type="button"
+                onClick={() => deleteShift(shift.id)}
+                disabled={busyId === shift.id}
+                className="rounded-2xl bg-red-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
+              >
+                Delete
               </button>
             </div>
           </div>
