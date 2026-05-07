@@ -45,6 +45,7 @@ export default function FacilityShiftsPage() {
   const [fillFilter, setFillFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState<SortValue>('date-asc');
+  const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
 
@@ -77,6 +78,49 @@ export default function FacilityShiftsPage() {
 
     init();
   }, []);
+
+  function toggleSelectedShift(id: string) {
+    setSelectedShiftIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
+  async function deleteSelectedShifts() {
+    if (selectedShiftIds.length === 0) {
+      setMessage('Please select at least one shift to delete.');
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedShiftIds.length} selected shift${selectedShiftIds.length === 1 ? '' : 's'}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setBusyId('bulk-delete');
+      setMessage('');
+
+      for (const id of selectedShiftIds) {
+        const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        const text = await res.text();
+
+        if (!res.ok) {
+          throw new Error(text || 'Failed to delete one or more selected shifts');
+        }
+      }
+
+      setSelectedShiftIds([]);
+      await loadShifts(facilityId);
+      setMessage('Selected shifts deleted successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete selected shifts');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function duplicateShift(id: string) {
     try {
@@ -349,6 +393,20 @@ export default function FacilityShiftsPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="text-sm font-semibold text-slate-700">
+          {selectedShiftIds.length} selected
+        </div>
+        <button
+          type="button"
+          onClick={deleteSelectedShifts}
+          disabled={busyId === 'bulk-delete' || selectedShiftIds.length === 0}
+          className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busyId === 'bulk-delete' ? 'Deleting...' : 'Delete Selected'}
+        </button>
+      </div>
+
       {message ? (
         <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
           {message}
@@ -362,6 +420,15 @@ export default function FacilityShiftsPage() {
             className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm"
           >
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedShiftIds.includes(shift.id)}
+                  onChange={() => toggleSelectedShift(shift.id)}
+                  className="mt-1 h-5 w-5 rounded border-slate-300"
+                  aria-label="Select shift"
+                />
+              </div>
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="text-xl font-bold tracking-tight text-slate-950">

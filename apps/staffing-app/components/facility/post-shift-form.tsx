@@ -96,8 +96,6 @@ export function PostShiftForm() {
 
       setMessage('✅ Success! Shift posted successfully. Nearby eligible workers are being notified.');
       setDate('');
-      setStartTimeLabel('');
-      setEndTimeLabel('');
       setWorkersNeeded(1);
       setSpecialInstructions('');
     } catch (error) {
@@ -204,7 +202,11 @@ export function PostShiftForm() {
 
         <input placeholder="End time: 15:30 or 3:30 PM" value={endTimeLabel} onChange={(e) => setEndTimeLabel(e.target.value)} onBlur={(e) => setEndTimeLabel(formatTimeLabel(e.target.value))} required className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
-        <input type="number" min={1} value={workersNeeded} onChange={(e) => setWorkersNeeded(Number(e.target.value))} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
+                <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
+          Shift times will use facility defaults for the selected AM / PM / NOC shift types.
+        </div>
+
+<input type="number" min={1} value={workersNeeded} onChange={(e) => setWorkersNeeded(Number(e.target.value))} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
         <textarea placeholder="Special instructions" value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} className="min-h-24 rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
