@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 type Shift = {
@@ -35,6 +35,13 @@ export function FacilityShiftsClient() {
   const [busyId, setBusyId] = useState('');
   const [editingId, setEditingId] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [shiftTypeFilter, setShiftTypeFilter] = useState('ALL');
+  const [fillFilter, setFillFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [sortBy, setSortBy] = useState('date-asc');
 
   async function loadShifts() {
     setLoading(true);
@@ -163,6 +170,31 @@ export function FacilityShiftsClient() {
     }
   }
 
+
+  const filteredShifts = useMemo(() => {
+    let items = [...shifts];
+
+    if (roleFilter !== 'ALL') items = items.filter((shift) => shift.role === roleFilter);
+    if (shiftTypeFilter !== 'ALL') items = items.filter((shift) => shift.shiftType === shiftTypeFilter);
+    if (fillFilter !== 'ALL') items = items.filter((shift) => shift.fillStatus === fillFilter);
+    if (statusFilter !== 'ALL') items = items.filter((shift) => shift.status === statusFilter);
+
+    items = items.filter((shift) => {
+      const dateOnly = shift.date.split('T')[0];
+      if (startDate && dateOnly < startDate) return false;
+      if (endDate && dateOnly > endDate) return false;
+      return true;
+    });
+
+    items.sort((a, b) => {
+      if (sortBy === 'date-desc') return new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (sortBy === 'most-requested') return b.applicants - a.applicants;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+
+    return items;
+  }, [shifts, roleFilter, shiftTypeFilter, fillFilter, statusFilter, startDate, endDate, sortBy]);
+
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
@@ -195,6 +227,82 @@ export function FacilityShiftsClient() {
         </div>
       ) : null}
 
+
+      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-base font-extrabold text-slate-950">Filters</h2>
+        <div className="mt-4 grid gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+              <option value="ALL">All roles</option>
+              <option value="CNA">CNA</option>
+              <option value="LVN">LVN</option>
+              <option value="RN">RN</option>
+            </select>
+
+            <select value={shiftTypeFilter} onChange={(e) => setShiftTypeFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+              <option value="ALL">All shifts</option>
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+              <option value="NOC">NOC</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <select value={fillFilter} onChange={(e) => setFillFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+              <option value="ALL">All fill</option>
+              <option value="OPEN">Open</option>
+              <option value="PARTIAL">Partial</option>
+              <option value="FILLED">Filled</option>
+            </select>
+
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+              <option value="ALL">All statuses</option>
+              <option value="OPEN">Open</option>
+              <option value="INVITE_ONLY">Invite only</option>
+              <option value="FILLED">Filled</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+              <option value="UNFILLED">Unfilled</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
+          </div>
+
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
+            <option value="date-asc">Date ascending</option>
+            <option value="date-desc">Date descending</option>
+            <option value="most-requested">Most requested</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRoleFilter('ALL');
+              setShiftTypeFilter('ALL');
+              setFillFilter('ALL');
+              setStatusFilter('ALL');
+              setStartDate('');
+              setEndDate('');
+              setSortBy('date-asc');
+            }}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900"
+          >
+            Clear Filters
+          </button>
+        </div>
+      </section>
+
+
+
+      {!loading && shifts.length > 0 && filteredShifts.length === 0 ? (
+        <div className="rounded-3xl bg-white p-5 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+          No shifts match the selected filters.
+        </div>
+      ) : null}
+
       {selectedIds.length > 0 ? (
         <button
           type="button"
@@ -206,7 +314,7 @@ export function FacilityShiftsClient() {
         </button>
       ) : null}
 
-      {shifts.map((shift) => {
+      {filteredShifts.map((shift) => {
         const [start = '', end = ''] = shift.time.split(' - ');
         const isEditing = editingId === shift.id;
 

@@ -4,6 +4,8 @@ import { AppShell } from '@/components/app/app-shell';
 const items = [
   { label: 'Profile & Settings', href: '/app/facility/settings/index.html' },
   { label: 'Favorites', href: '/app/facility/favorites/index.html' },
+  { label: 'Alerts', href: '/app/facility/alerts/index.html' },
+  { label: 'Compliance', href: '/app/facility/compliance/index.html' },
   { label: 'Notifications', href: '/app/facility/notifications/index.html' },
   { label: 'Workers', href: '/app/facility/workers/index.html' },
   { label: 'Schedule', href: '/app/facility/schedule/index.html' },
