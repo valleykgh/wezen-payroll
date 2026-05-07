@@ -202,7 +202,7 @@ export function FacilityShiftsClient() {
               <button
                 type="button"
                 onClick={() => setEditingId(shift.id)}
-                disabled={shift.status !== 'OPEN' || shift.fillCount > 0}
+                disabled={!['OPEN', 'INVITE_ONLY'].includes(shift.status) || shift.fillCount > 0}
                 className="rounded-2xl bg-cyan-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
               >
                 Edit

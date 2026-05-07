@@ -120,8 +120,8 @@ export default function EditShiftPage({
 
         const shift = res.data;
 
-        if (shift.status !== 'OPEN' || shift.fillCount > 0) {
-          setMessage('This shift cannot be edited because it is no longer open or already has approved coverage.');
+        if (!['OPEN', 'INVITE_ONLY'].includes(shift.status) || shift.fillCount > 0) {
+          setMessage('This shift cannot be edited because it is no longer open/invite-only or already has approved coverage.');
           return;
         }
 

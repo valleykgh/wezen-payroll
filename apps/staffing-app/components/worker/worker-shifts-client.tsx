@@ -47,6 +47,7 @@ type ShiftInvitation = {
 };
 
 export function WorkerShiftsClient() {
+  const invitationIdFromEmail = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invitationId') : null;
   const [shifts, setShifts] = useState<WorkerShift[]>([]);
   const [role, setRole] = useState('');
   const [shiftType, setShiftType] = useState('');
@@ -71,7 +72,11 @@ export function WorkerShiftsClient() {
   async function loadInvitations() {
     try {
       const res = await apiFetch<{ data: ShiftInvitation[] }>('/api/worker/shift-invitations');
-      setInvitations((res.data || []).filter((item) => item.status === 'SENT'));
+      const items = (res.data || []).filter((item) => item.status === 'SENT');
+      setInvitations(items);
+      if (invitationIdFromEmail && items.some((item) => item.id === invitationIdFromEmail)) {
+        setMessage('Invitation loaded. Please tap Accept or Decline below.');
+      }
     } catch {
       setInvitations([]);
     }
