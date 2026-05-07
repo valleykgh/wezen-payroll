@@ -374,24 +374,14 @@ export function PostShiftForm() {
             />
           </FormField>
 
-          <FormField label="Workers needed" htmlFor="workersNeeded">
-            <TextInput
-              id="workersNeeded"
-              type="number"
-              min={1}
-              value={workersNeeded}
-              onChange={(e) => setWorkersNeeded(Number(e.target.value))}
-              required
-            />
-          </FormField>
-
           <FormField label="Start time" htmlFor="startTime">
             <TextInput
               id="startTime"
               type="text"
               placeholder="7, 7am, 15:30, 3:30pm"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)} onBlur={(e) => setStartTime(normalizeTimeInput(e.target.value))}
+              onChange={(e) => setStartTime(e.target.value)}
+              onBlur={(e) => setStartTime(normalizeTimeInput(e.target.value))}
               required
             />
           </FormField>
@@ -402,7 +392,19 @@ export function PostShiftForm() {
               type="text"
               placeholder="7, 7am, 15:30, 3:30pm"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)} onBlur={(e) => setEndTime(normalizeTimeInput(e.target.value))}
+              onChange={(e) => setEndTime(e.target.value)}
+              onBlur={(e) => setEndTime(normalizeTimeInput(e.target.value))}
+              required
+            />
+          </FormField>
+
+          <FormField label="Workers needed" htmlFor="workersNeeded">
+            <TextInput
+              id="workersNeeded"
+              type="number"
+              min={1}
+              value={workersNeeded}
+              onChange={(e) => setWorkersNeeded(Number(e.target.value))}
               required
             />
           </FormField>
