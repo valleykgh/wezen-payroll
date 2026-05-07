@@ -1966,6 +1966,7 @@ const createShiftSchema = z.object({
   workersNeeded: z.number().int().positive(),
   specialInstructions: z.string().optional(),
   payRateCents: z.number().int().nonnegative().optional(),
+  visibility: z.enum(['PUBLIC', 'INVITE_ONLY']).optional(),
 });
 
 app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
@@ -2028,9 +2029,11 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
         workersNeeded: parsed.data.workersNeeded,
         specialInstructions: parsed.data.specialInstructions,
         payRateCents: resolvedPayRateCents,
+        status: parsed.data.visibility === 'INVITE_ONLY' ? 'INVITE_ONLY' : 'OPEN',
       },
     });
 
+    if (shift.status === 'OPEN') {
     try {
       const facilityForAlerts = await prisma.facility.findUnique({
         where: { id: facilityId },
@@ -2178,6 +2181,7 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
     } catch (notificationError) {
       console.error('Open shift worker notification failed:', notificationError);
     }
+    }
 
     res.status(201).json({ data: shift });
   } catch (error) {
@@ -2187,6 +2191,349 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
 });
 const requestShiftSchema = z.object({
   shiftId: z.string().min(1),
+});
+
+
+
+const facilityWorkerSearchSchema = z.object({
+  q: z.string().trim().optional(),
+  role: z.nativeEnum(ClinicianRole).optional(),
+});
+
+app.get('/api/facility/workers/search', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = facilityWorkerSearchSchema.safeParse({
+    q: req.query.q,
+    role: req.query.role,
+  });
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const search = String(parsed.data.q || '').trim();
+
+    const workers = await prisma.professionalProfile.findMany({
+      where: {
+        approvedByWezen: true,
+        ...(parsed.data.role ? { role: parsed.data.role } : {}),
+        user: {
+          isActive: true,
+          isSystemUser: false,
+          ...(search
+            ? {
+                OR: [
+                  { firstName: { contains: search, mode: 'insensitive' } },
+                  { lastName: { contains: search, mode: 'insensitive' } },
+                  { email: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
+      },
+      include: {
+        user: true,
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 50,
+    });
+
+    res.json({
+      data: workers.map((worker) => ({
+        id: worker.id,
+        role: worker.role,
+        firstName: worker.user.firstName,
+        lastName: worker.user.lastName,
+        email: worker.user.email,
+        city: worker.city,
+        state: worker.state,
+        zipCode: worker.zipCode,
+        openShiftAlertsEnabled: worker.openShiftAlertsEnabled,
+      })),
+    });
+  } catch (error) {
+    console.error('GET /api/facility/workers/search error:', error);
+    res.status(500).json({ error: 'Failed to search workers' });
+  }
+});
+
+const createShiftInvitationsSchema = z.object({
+  professionalIds: z.array(z.string().min(1)).min(1),
+  message: z.string().trim().optional(),
+});
+
+app.post('/api/shifts/:id/invitations', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = createShiftInvitationsSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const shiftId = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: { facility: true },
+    });
+
+    if (!shift) {
+      return res.status(404).json({ error: 'Shift not found' });
+    }
+
+    if (shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (!['OPEN', 'INVITE_ONLY'].includes(shift.status)) {
+      return res.status(400).json({ error: 'Only open or invite-only shifts can have invitations.' });
+    }
+
+    const workers = await prisma.professionalProfile.findMany({
+      where: {
+        id: { in: parsed.data.professionalIds },
+        approvedByWezen: true,
+        role: shift.role,
+        user: {
+          isActive: true,
+          isSystemUser: false,
+        },
+      },
+      include: { user: true },
+    });
+
+    const created = [];
+
+    for (const worker of workers) {
+      const invitation = await prisma.shiftInvitation.upsert({
+        where: {
+          shiftId_professionalId: {
+            shiftId,
+            professionalId: worker.id,
+          },
+        },
+        update: {
+          status: 'SENT',
+          message: parsed.data.message || null,
+          respondedAt: null,
+        },
+        create: {
+          shiftId,
+          professionalId: worker.id,
+          facilityId,
+          status: 'SENT',
+          message: parsed.data.message || null,
+        },
+      });
+
+      created.push(invitation);
+
+      const inviteMessage = `${shift.facility.name} invited you to a ${shift.role} ${shift.shiftType} shift on ${shift.date.toISOString().split('T')[0]} from ${shift.startTimeLabel} to ${shift.endTimeLabel}.`;
+
+      await createWorkerNotification({
+        professionalId: worker.id,
+        type: 'GENERAL',
+        title: 'Shift invitation',
+        message: parsed.data.message ? `${inviteMessage} Message: ${parsed.data.message}` : inviteMessage,
+      });
+
+      if (worker.user.email) {
+        try {
+          await sendEmail({
+            to: worker.user.email,
+            subject: `Shift invitation from ${shift.facility.name}`,
+            html: `
+              <h2>Shift invitation</h2>
+              <p>${inviteMessage}</p>
+              ${parsed.data.message ? `<p><strong>Message:</strong> ${parsed.data.message}</p>` : ''}
+              <p>Please log in to Wezen Staffing to accept or decline this invitation.</p>
+            `,
+            text: [
+              'Shift invitation',
+              inviteMessage,
+              parsed.data.message ? `Message: ${parsed.data.message}` : '',
+              'Please log in to Wezen Staffing to accept or decline this invitation.',
+            ].filter(Boolean).join('\n'),
+          });
+        } catch (emailError) {
+          console.error('Shift invitation email failed:', emailError);
+        }
+      }
+    }
+
+    res.status(201).json({ data: created });
+  } catch (error) {
+    console.error('POST /api/shifts/:id/invitations error:', error);
+    res.status(500).json({ error: 'Failed to send shift invitations' });
+  }
+});
+
+app.post('/api/shifts/:id/post-publicly', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const shiftId = String(req.params.id || '');
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      select: { id: true, facilityId: true, status: true },
+    });
+
+    if (!shift) {
+      return res.status(404).json({ error: 'Shift not found' });
+    }
+
+    if (shift.facilityId !== facilityId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (shift.status !== 'INVITE_ONLY') {
+      return res.status(400).json({ error: 'Only invite-only shifts can be posted publicly.' });
+    }
+
+    const updated = await prisma.shift.update({
+      where: { id: shiftId },
+      data: { status: 'OPEN' },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/shifts/:id/post-publicly error:', error);
+    res.status(500).json({ error: 'Failed to post shift publicly' });
+  }
+});
+
+app.get('/api/worker/shift-invitations', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const invitations = await prisma.shiftInvitation.findMany({
+      where: { professionalId },
+      include: {
+        shift: { include: { facility: true } },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    res.json({
+      data: invitations.map((invite) => ({
+        id: invite.id,
+        status: invite.status,
+        message: invite.message,
+        createdAt: invite.createdAt,
+        respondedAt: invite.respondedAt,
+        shift: {
+          id: invite.shift.id,
+          role: invite.shift.role,
+          shiftType: invite.shift.shiftType,
+          date: invite.shift.date,
+          time: `${invite.shift.startTimeLabel} - ${invite.shift.endTimeLabel}`,
+          facilityName: invite.shift.facility.name,
+          city: invite.shift.facility.city,
+          state: invite.shift.facility.state,
+          status: invite.shift.status,
+        },
+      })),
+    });
+  } catch (error) {
+    console.error('GET /api/worker/shift-invitations error:', error);
+    res.status(500).json({ error: 'Failed to fetch shift invitations' });
+  }
+});
+
+app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const invitationId = String(req.params.id || '');
+    const action = String(req.body?.action || '').trim().toUpperCase();
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    if (!['ACCEPTED', 'DECLINED'].includes(action)) {
+      return res.status(400).json({ error: 'action must be ACCEPTED or DECLINED' });
+    }
+
+    const invitation = await prisma.shiftInvitation.findUnique({
+      where: { id: invitationId },
+      include: {
+        shift: true,
+      },
+    });
+
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    if (invitation.professionalId !== professionalId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const updated = await prisma.shiftInvitation.update({
+      where: { id: invitationId },
+      data: {
+        status: action,
+        respondedAt: new Date(),
+      },
+    });
+
+    let request = null;
+
+    if (action === 'ACCEPTED') {
+      request = await prisma.shiftRequest.upsert({
+        where: {
+          shiftId_professionalId: {
+            shiftId: invitation.shiftId,
+            professionalId,
+          },
+        },
+        update: {
+          status: 'REQUESTED',
+          reviewNotes: 'Worker accepted facility invitation.',
+        },
+        create: {
+          shiftId: invitation.shiftId,
+          professionalId,
+          status: 'REQUESTED',
+          reviewNotes: 'Worker accepted facility invitation.',
+        },
+      });
+
+      await createFacilityNotification({
+        facilityId: invitation.facilityId,
+        type: 'GENERAL',
+        title: 'Worker accepted shift invitation',
+        message: 'A worker accepted your shift invitation. Please review and approve the request.',
+      });
+    }
+
+    res.json({ data: updated, request });
+  } catch (error) {
+    console.error('POST /api/worker/shift-invitations/:id/respond error:', error);
+    res.status(500).json({ error: 'Failed to respond to shift invitation' });
+  }
 });
 
 app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {

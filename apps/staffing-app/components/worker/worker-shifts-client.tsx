@@ -28,6 +28,24 @@ type ShiftDetail = WorkerShift & {
   endTimeLabel?: string;
 };
 
+type ShiftInvitation = {
+  id: string;
+  status: string;
+  message?: string | null;
+  createdAt: string;
+  shift: {
+    id: string;
+    role: string;
+    shiftType: string;
+    date: string;
+    time: string;
+    facilityName: string;
+    city?: string | null;
+    state?: string | null;
+    status: string;
+  };
+};
+
 export function WorkerShiftsClient() {
   const [shifts, setShifts] = useState<WorkerShift[]>([]);
   const [role, setRole] = useState('');
@@ -42,11 +60,42 @@ export function WorkerShiftsClient() {
   const [shiftDetail, setShiftDetail] = useState<ShiftDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [invitations, setInvitations] = useState<ShiftInvitation[]>([]);
+  const [respondingInviteId, setRespondingInviteId] = useState('');
 
   const selectedShift = useMemo(
     () => shifts.find((shift) => shift.id === selectedShiftId) || null,
     [shifts, selectedShiftId]
   );
+
+  async function loadInvitations() {
+    try {
+      const res = await apiFetch<{ data: ShiftInvitation[] }>('/api/worker/shift-invitations');
+      setInvitations((res.data || []).filter((item) => item.status === 'SENT'));
+    } catch {
+      setInvitations([]);
+    }
+  }
+
+  async function respondToInvitation(invitationId: string, action: 'ACCEPTED' | 'DECLINED') {
+    try {
+      setRespondingInviteId(invitationId);
+      setMessage('');
+
+      await apiFetch(`/api/worker/shift-invitations/${invitationId}/respond`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+
+      setMessage(action === 'ACCEPTED' ? '✅ Invitation accepted. Facility will review your request.' : 'Invitation declined.');
+      await loadInvitations();
+      await loadShifts();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to respond to invitation');
+    } finally {
+      setRespondingInviteId('');
+    }
+  }
 
   async function loadShifts() {
     setLoading(true);
@@ -125,6 +174,7 @@ export function WorkerShiftsClient() {
 
   useEffect(() => {
     loadShifts();
+    loadInvitations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -179,6 +229,54 @@ export function WorkerShiftsClient() {
       {message ? (
         <div className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-md -translate-x-1/2 -translate-y-1/2 whitespace-pre-line rounded-3xl border-2 border-red-700 bg-red-600 px-6 py-6 text-center text-lg font-extrabold text-white shadow-2xl">
           {message}
+        </div>
+      ) : null}
+
+      {invitations.length > 0 ? (
+        <div className="rounded-3xl border-2 border-cyan-200 bg-cyan-50 p-5 shadow-sm">
+          <h2 className="text-lg font-extrabold text-slate-950">Shift Invitations</h2>
+          <p className="mt-1 text-sm text-slate-600">Facilities invited you to these shifts.</p>
+
+          <div className="mt-4 grid gap-3">
+            {invitations.map((invite) => (
+              <div key={invite.id} className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-cyan-100">
+                <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">
+                  {invite.shift.role} • {invite.shift.shiftType}
+                </p>
+                <h3 className="mt-2 text-base font-extrabold text-slate-950">{invite.shift.facilityName}</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {new Date(invite.shift.date).toLocaleDateString()} • {invite.shift.time}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {[invite.shift.city, invite.shift.state].filter(Boolean).join(', ') || 'Location not listed'}
+                </p>
+                {invite.message ? (
+                  <div className="mt-3 rounded-2xl bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-900">
+                    {invite.message}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => respondToInvitation(invite.id, 'ACCEPTED')}
+                    disabled={respondingInviteId === invite.id}
+                    className="rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => respondToInvitation(invite.id, 'DECLINED')}
+                    disabled={respondingInviteId === invite.id}
+                    className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-extrabold text-slate-900 disabled:opacity-60"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 

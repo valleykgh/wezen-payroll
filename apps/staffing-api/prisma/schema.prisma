@@ -26,6 +26,7 @@ enum ShiftType {
 
 enum ShiftStatus {
   OPEN
+  INVITE_ONLY
   PENDING
   FILLED
   COMPLETED
@@ -138,6 +139,7 @@ model Facility {
 
   admins        FacilityAdmin[]
   notifications FacilityNotification[]
+  shiftInvitations ShiftInvitation[]
   shifts        Shift[]
   requirements  FacilityRequirement[]
   facilityDnrs  FacilityDnr[]
@@ -185,6 +187,7 @@ model ProfessionalProfile {
   agreements    ProfessionalAgreement[]
   facilityDnrs  FacilityDnr[]
   notifications WorkerNotification[]
+  shiftInvitations ShiftInvitation[]
 }
 
 model ProfessionalDocument {
@@ -266,6 +269,7 @@ model Shift {
 
   facility              Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   requests              ShiftRequest[]
+  invitations           ShiftInvitation[]
   adminOverrideReason   String?
   adminOverrideByUserId String?
   adminOverrideAt       DateTime?
@@ -285,6 +289,25 @@ model ShiftRequest {
   professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
   @@unique([shiftId, professionalId])
+}
+
+model ShiftInvitation {
+  id             String   @id @default(cuid())
+  shiftId         String
+  professionalId String
+  facilityId      String
+  status          String   @default("SENT") // SENT, ACCEPTED, DECLINED, EXPIRED
+  message         String?
+  createdAt       DateTime @default(now())
+  respondedAt     DateTime?
+
+  shift        Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, professionalId])
+  @@index([facilityId])
+  @@index([professionalId])
 }
 
 model FacilityDnr {

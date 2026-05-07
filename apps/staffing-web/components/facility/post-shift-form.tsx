@@ -19,6 +19,17 @@ type FacilitySettings = {
   allowRateOverride?: boolean;
 };
 
+type WorkerSearchResult = {
+  id: string;
+  role: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email: string;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+};
+
 export function PostShiftForm() {
   const [facilityId, setFacilityId] = useState<string | null>(null);
   const [facilitySettings, setFacilitySettings] = useState<FacilitySettings | null>(null);
@@ -33,6 +44,12 @@ export function PostShiftForm() {
   const [payRateDollars, setPayRateDollars] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [inviteMode, setInviteMode] = useState(false);
+  const [createdInviteShiftId, setCreatedInviteShiftId] = useState('');
+  const [workerSearch, setWorkerSearch] = useState('');
+  const [workers, setWorkers] = useState<WorkerSearchResult[]>([]);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [inviteMessage, setInviteMessage] = useState('');
 
   useEffect(() => {
     async function loadFacilityContext() {
@@ -84,8 +101,7 @@ export function PostShiftForm() {
     }
   }, [selectedDefaultRateCents, facilitySettings]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function createShift(visibility: 'PUBLIC' | 'INVITE_ONLY') {
     setSubmitting(true);
     setMessage('');
 
@@ -112,6 +128,7 @@ export function PostShiftForm() {
           payRateCents: facilitySettings?.allowRateOverride
             ? Math.round(Number(payRateDollars) * 100)
             : selectedDefaultRateCents ?? undefined,
+          visibility,
         }),
       });
 
@@ -119,6 +136,17 @@ export function PostShiftForm() {
 
       if (!res.ok) {
         throw new Error(text || 'Failed to create shift');
+      }
+
+      const payload = text ? JSON.parse(text) : null;
+      const newShiftId = payload?.data?.id || '';
+
+      if (visibility === 'INVITE_ONLY') {
+        setCreatedInviteShiftId(newShiftId);
+        setInviteMode(true);
+        setMessage('✅ Invite-only shift created. Now search and invite workers.');
+        await searchWorkers(role);
+        return;
       }
 
       setMessage('✅ Shift published successfully. Nearby eligible workers are being notified.');
@@ -142,6 +170,61 @@ export function PostShiftForm() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await createShift('PUBLIC');
+  }
+
+  async function searchWorkers(nextRole = role) {
+    try {
+      const params = new URLSearchParams();
+      params.set('role', nextRole);
+      if (workerSearch.trim()) params.set('q', workerSearch.trim());
+
+      const res = await apiFetch<{ data: WorkerSearchResult[] }>(
+        `/api/facility/workers/search?${params.toString()}`
+      );
+
+      setWorkers(res.data || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to search workers');
+    }
+  }
+
+  async function inviteSelectedWorkers() {
+    try {
+      if (!createdInviteShiftId) throw new Error('Please create an invite-only shift first.');
+      if (selectedWorkerIds.length === 0) throw new Error('Please select at least one worker.');
+
+      setSubmitting(true);
+      setMessage('');
+
+      await apiFetch(`/api/shifts/${createdInviteShiftId}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify({
+          professionalIds: selectedWorkerIds,
+          message: inviteMessage || undefined,
+        }),
+      });
+
+      setMessage(`✅ Invitation sent to ${selectedWorkerIds.length} worker${selectedWorkerIds.length === 1 ? '' : 's'}.`);
+      setSelectedWorkerIds([]);
+      setInviteMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send invitations');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function toggleWorker(workerId: string) {
+    setSelectedWorkerIds((current) =>
+      current.includes(workerId)
+        ? current.filter((id) => id !== workerId)
+        : [...current, workerId]
+    );
   }
 
   useEffect(() => {
@@ -291,17 +374,108 @@ export function PostShiftForm() {
             disabled={submitting || !facilityId}
             className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? 'Publishing...' : 'Publish Shift'}
+            {submitting ? 'Publishing...' : 'Post Shift Publicly'}
           </button>
 
           <button
             type="button"
-            className="rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+            disabled={submitting || !facilityId}
+            onClick={() => createShift('INVITE_ONLY')}
+            className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Save Draft
+            {submitting ? 'Working...' : 'Invite Workers First'}
           </button>
         </div>
       </form>
+
+
+      {inviteMode ? (
+        <section className="rounded-[1.75rem] border-2 border-cyan-200 bg-cyan-50 p-6 shadow-sm xl:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-950">
+                Invite workers to this shift
+              </h2>
+              <p className="mt-1 text-sm text-slate-700">
+                This shift is invite-only until you decide to post it publicly.
+              </p>
+            </div>
+            {createdInviteShiftId ? (
+              <a
+                href={`/facility/shifts/${createdInviteShiftId}`}
+                className="rounded-full border border-cyan-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800"
+              >
+                View Shift
+              </a>
+            ) : null}
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              value={workerSearch}
+              onChange={(e) => setWorkerSearch(e.target.value)}
+              placeholder="Search approved workers by name or email"
+              className="rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm text-slate-900"
+            />
+            <button
+              type="button"
+              onClick={() => searchWorkers()}
+              className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+            >
+              Search Workers
+            </button>
+          </div>
+
+          <textarea
+            value={inviteMessage}
+            onChange={(e) => setInviteMessage(e.target.value)}
+            placeholder="Optional message to workers"
+            rows={3}
+            className="mt-4 w-full rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm text-slate-900"
+          />
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {workers.map((worker) => {
+              const fullName =
+                [worker.firstName, worker.lastName].filter(Boolean).join(' ') || worker.email;
+              const selected = selectedWorkerIds.includes(worker.id);
+
+              return (
+                <button
+                  key={worker.id}
+                  type="button"
+                  onClick={() => toggleWorker(worker.id)}
+                  className={
+                    selected
+                      ? 'rounded-2xl border-2 border-cyan-700 bg-white p-4 text-left shadow-sm'
+                      : 'rounded-2xl border border-cyan-200 bg-white p-4 text-left hover:border-cyan-500'
+                  }
+                >
+                  <div className="text-sm font-bold text-slate-950">{fullName}</div>
+                  <div className="mt-1 text-xs text-slate-600">{worker.email}</div>
+                  <div className="mt-2 text-xs font-semibold text-cyan-800">
+                    {worker.role} • {[worker.city, worker.state].filter(Boolean).join(', ') || 'Location not listed'}
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-slate-500">
+                    {selected ? 'Selected ✓' : 'Tap to select'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={inviteSelectedWorkers}
+              disabled={submitting || selectedWorkerIds.length === 0}
+              className="rounded-full bg-cyan-700 px-6 py-3 text-sm font-bold text-white disabled:opacity-60"
+            >
+              Send Invite{selectedWorkerIds.length ? ` (${selectedWorkerIds.length})` : ''}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <div className="space-y-6">
         <div className="rounded-[1.75rem] bg-gradient-to-br from-slate-900 to-cyan-700 p-6 text-white shadow-sm">

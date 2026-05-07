@@ -1639,6 +1639,7 @@ const createShiftSchema = z.object({
     workersNeeded: z.number().int().positive(),
     specialInstructions: z.string().optional(),
     payRateCents: z.number().int().nonnegative().optional(),
+    visibility: z.enum(['PUBLIC', 'INVITE_ONLY']).optional(),
 });
 app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req, res) => {
     const parsed = createShiftSchema.safeParse(req.body);
@@ -1693,125 +1694,128 @@ app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req, res) => {
                 workersNeeded: parsed.data.workersNeeded,
                 specialInstructions: parsed.data.specialInstructions,
                 payRateCents: resolvedPayRateCents,
+                status: parsed.data.visibility === 'INVITE_ONLY' ? 'INVITE_ONLY' : 'OPEN',
             },
         });
-        try {
-            const facilityForAlerts = await prisma.facility.findUnique({
-                where: { id: facilityId },
-                select: {
-                    name: true,
-                    city: true,
-                    state: true,
-                    zipCode: true,
-                    latitude: true,
-                    longitude: true,
-                },
-            });
-            if (facilityForAlerts) {
-                const workers = await prisma.professionalProfile.findMany({
-                    where: {
-                        approvedByWezen: true,
-                        role: parsed.data.role,
-                        openShiftAlertsEnabled: true,
-                    },
+        if (shift.status === 'OPEN') {
+            try {
+                const facilityForAlerts = await prisma.facility.findUnique({
+                    where: { id: facilityId },
                     select: {
-                        id: true,
+                        name: true,
                         city: true,
                         state: true,
                         zipCode: true,
                         latitude: true,
                         longitude: true,
-                        openShiftAlertRadiusMiles: true,
-                        user: {
-                            select: {
-                                email: true,
-                                firstName: true,
-                                lastName: true,
-                            },
-                        },
                     },
                 });
-                const zipCoordinates = {
-                    '94550': { latitude: 37.6819, longitude: -121.7680 },
-                    '95128': { latitude: 37.3169, longitude: -121.9364 },
-                    '95126': { latitude: 37.3305, longitude: -121.9168 },
-                    '95125': { latitude: 37.2958, longitude: -121.8950 },
-                    '95129': { latitude: 37.3058, longitude: -122.0007 },
-                    '94551': { latitude: 37.7397, longitude: -121.7403 },
-                    '94566': { latitude: 37.6506, longitude: -121.8747 },
-                    '94568': { latitude: 37.7161, longitude: -121.9107 },
-                    '94588': { latitude: 37.6879, longitude: -121.8916 },
-                };
-                function zip5(value) {
-                    return String(value || '').trim().slice(0, 5);
-                }
-                const matchingWorkers = workers.filter((worker) => {
-                    const radius = worker.openShiftAlertRadiusMiles ?? 50;
-                    if (worker.latitude != null &&
-                        worker.longitude != null &&
-                        facilityForAlerts.latitude != null &&
-                        facilityForAlerts.longitude != null) {
-                        const distance = calculateDistanceMiles(worker.latitude, worker.longitude, facilityForAlerts.latitude, facilityForAlerts.longitude);
-                        return distance <= radius;
-                    }
-                    const workerZip = zip5(worker.zipCode);
-                    const facilityZip = zip5(facilityForAlerts.zipCode);
-                    if (workerZip && facilityZip && workerZip === facilityZip) {
-                        return true;
-                    }
-                    const workerZipCoord = zipCoordinates[workerZip];
-                    const facilityZipCoord = zipCoordinates[facilityZip];
-                    if (workerZipCoord && facilityZipCoord) {
-                        const distance = calculateDistanceMiles(workerZipCoord.latitude, workerZipCoord.longitude, facilityZipCoord.latitude, facilityZipCoord.longitude);
-                        return distance <= radius;
-                    }
-                    const workerCity = String(worker.city || '').trim().toLowerCase();
-                    const facilityCity = String(facilityForAlerts.city || '').trim().toLowerCase();
-                    const workerState = String(worker.state || '').trim().toLowerCase();
-                    const facilityState = String(facilityForAlerts.state || '').trim().toLowerCase();
-                    return Boolean(workerCity && facilityCity && workerState && facilityState &&
-                        workerCity === facilityCity && workerState === facilityState);
-                });
-                const alertMessage = `${facilityForAlerts.name} posted a ${parsed.data.role} ${parsed.data.shiftType} shift on ${parsed.data.date} from ${parsed.data.startTimeLabel} to ${parsed.data.endTimeLabel}.`;
-                console.log('Open shift alert matching workers:', {
-                    shiftId: shift.id,
-                    facilityName: facilityForAlerts.name,
-                    role: parsed.data.role,
-                    matchingWorkerCount: matchingWorkers.length,
-                });
-                await Promise.all(matchingWorkers.map(async (worker) => {
-                    await createWorkerNotification({
-                        professionalId: worker.id,
-                        type: 'GENERAL',
-                        title: 'New shift opened near you',
-                        message: alertMessage,
+                if (facilityForAlerts) {
+                    const workers = await prisma.professionalProfile.findMany({
+                        where: {
+                            approvedByWezen: true,
+                            role: parsed.data.role,
+                            openShiftAlertsEnabled: true,
+                        },
+                        select: {
+                            id: true,
+                            city: true,
+                            state: true,
+                            zipCode: true,
+                            latitude: true,
+                            longitude: true,
+                            openShiftAlertRadiusMiles: true,
+                            user: {
+                                select: {
+                                    email: true,
+                                    firstName: true,
+                                    lastName: true,
+                                },
+                            },
+                        },
                     });
-                    if (worker.user.email) {
-                        try {
-                            await sendEmail({
-                                to: worker.user.email,
-                                subject: `New ${parsed.data.role} shift near you`,
-                                html: `
+                    const zipCoordinates = {
+                        '94550': { latitude: 37.6819, longitude: -121.7680 },
+                        '95128': { latitude: 37.3169, longitude: -121.9364 },
+                        '95126': { latitude: 37.3305, longitude: -121.9168 },
+                        '95125': { latitude: 37.2958, longitude: -121.8950 },
+                        '95129': { latitude: 37.3058, longitude: -122.0007 },
+                        '94551': { latitude: 37.7397, longitude: -121.7403 },
+                        '94566': { latitude: 37.6506, longitude: -121.8747 },
+                        '94568': { latitude: 37.7161, longitude: -121.9107 },
+                        '94588': { latitude: 37.6879, longitude: -121.8916 },
+                    };
+                    function zip5(value) {
+                        return String(value || '').trim().slice(0, 5);
+                    }
+                    const matchingWorkers = workers.filter((worker) => {
+                        const radius = worker.openShiftAlertRadiusMiles ?? 50;
+                        if (worker.latitude != null &&
+                            worker.longitude != null &&
+                            facilityForAlerts.latitude != null &&
+                            facilityForAlerts.longitude != null) {
+                            const distance = calculateDistanceMiles(worker.latitude, worker.longitude, facilityForAlerts.latitude, facilityForAlerts.longitude);
+                            return distance <= radius;
+                        }
+                        const workerZip = zip5(worker.zipCode);
+                        const facilityZip = zip5(facilityForAlerts.zipCode);
+                        if (workerZip && facilityZip && workerZip === facilityZip) {
+                            return true;
+                        }
+                        const workerZipCoord = zipCoordinates[workerZip];
+                        const facilityZipCoord = zipCoordinates[facilityZip];
+                        if (workerZipCoord && facilityZipCoord) {
+                            const distance = calculateDistanceMiles(workerZipCoord.latitude, workerZipCoord.longitude, facilityZipCoord.latitude, facilityZipCoord.longitude);
+                            return distance <= radius;
+                        }
+                        const workerCity = String(worker.city || '').trim().toLowerCase();
+                        const facilityCity = String(facilityForAlerts.city || '').trim().toLowerCase();
+                        const workerState = String(worker.state || '').trim().toLowerCase();
+                        const facilityState = String(facilityForAlerts.state || '').trim().toLowerCase();
+                        return Boolean(workerCity && facilityCity && workerState && facilityState &&
+                            workerCity === facilityCity && workerState === facilityState);
+                    });
+                    const alertMessage = `${facilityForAlerts.name} posted a ${parsed.data.role} ${parsed.data.shiftType} shift on ${parsed.data.date} from ${parsed.data.startTimeLabel} to ${parsed.data.endTimeLabel}.`;
+                    console.log('Open shift alert matching workers:', {
+                        shiftId: shift.id,
+                        facilityName: facilityForAlerts.name,
+                        role: parsed.data.role,
+                        matchingWorkerCount: matchingWorkers.length,
+                    });
+                    await Promise.all(matchingWorkers.map(async (worker) => {
+                        await createWorkerNotification({
+                            professionalId: worker.id,
+                            type: 'GENERAL',
+                            title: 'New shift opened near you',
+                            message: alertMessage,
+                        });
+                        if (worker.user.email) {
+                            try {
+                                await sendEmail({
+                                    to: worker.user.email,
+                                    subject: `New ${parsed.data.role} shift near you`,
+                                    html: `
                     <h2>New shift opened near you</h2>
                     <p>${alertMessage}</p>
                     <p>Please log in to Wezen Staffing to review and request this shift.</p>
                   `,
-                                text: [
-                                    'New shift opened near you',
-                                    alertMessage,
-                                    'Please log in to Wezen Staffing to review and request this shift.',
-                                ].join('\n'),
-                            });
+                                    text: [
+                                        'New shift opened near you',
+                                        alertMessage,
+                                        'Please log in to Wezen Staffing to review and request this shift.',
+                                    ].join('\n'),
+                                });
+                            }
+                            catch (emailError) {
+                                console.error('Open shift worker email failed:', emailError);
+                            }
                         }
-                        catch (emailError) {
-                            console.error('Open shift worker email failed:', emailError);
-                        }
-                    }
-                }));
+                    }));
+                }
             }
-        }
-        catch (notificationError) {
-            console.error('Open shift worker notification failed:', notificationError);
+            catch (notificationError) {
+                console.error('Open shift worker notification failed:', notificationError);
+            }
         }
         res.status(201).json({ data: shift });
     }
@@ -1822,6 +1826,305 @@ app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req, res) => {
 });
 const requestShiftSchema = z.object({
     shiftId: z.string().min(1),
+});
+const facilityWorkerSearchSchema = z.object({
+    q: z.string().trim().optional(),
+    role: z.nativeEnum(ClinicianRole).optional(),
+});
+app.get('/api/facility/workers/search', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    const parsed = facilityWorkerSearchSchema.safeParse({
+        q: req.query.q,
+        role: req.query.role,
+    });
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const search = String(parsed.data.q || '').trim();
+        const workers = await prisma.professionalProfile.findMany({
+            where: {
+                approvedByWezen: true,
+                ...(parsed.data.role ? { role: parsed.data.role } : {}),
+                user: {
+                    isActive: true,
+                    isSystemUser: false,
+                    ...(search
+                        ? {
+                            OR: [
+                                { firstName: { contains: search, mode: 'insensitive' } },
+                                { lastName: { contains: search, mode: 'insensitive' } },
+                                { email: { contains: search, mode: 'insensitive' } },
+                            ],
+                        }
+                        : {}),
+                },
+            },
+            include: {
+                user: true,
+            },
+            orderBy: [{ updatedAt: 'desc' }],
+            take: 50,
+        });
+        res.json({
+            data: workers.map((worker) => ({
+                id: worker.id,
+                role: worker.role,
+                firstName: worker.user.firstName,
+                lastName: worker.user.lastName,
+                email: worker.user.email,
+                city: worker.city,
+                state: worker.state,
+                zipCode: worker.zipCode,
+                openShiftAlertsEnabled: worker.openShiftAlertsEnabled,
+            })),
+        });
+    }
+    catch (error) {
+        console.error('GET /api/facility/workers/search error:', error);
+        res.status(500).json({ error: 'Failed to search workers' });
+    }
+});
+const createShiftInvitationsSchema = z.object({
+    professionalIds: z.array(z.string().min(1)).min(1),
+    message: z.string().trim().optional(),
+});
+app.post('/api/shifts/:id/invitations', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    const parsed = createShiftInvitationsSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const shiftId = String(req.params.id || '');
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const shift = await prisma.shift.findUnique({
+            where: { id: shiftId },
+            include: { facility: true },
+        });
+        if (!shift) {
+            return res.status(404).json({ error: 'Shift not found' });
+        }
+        if (shift.facilityId !== facilityId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (!['OPEN', 'INVITE_ONLY'].includes(shift.status)) {
+            return res.status(400).json({ error: 'Only open or invite-only shifts can have invitations.' });
+        }
+        const workers = await prisma.professionalProfile.findMany({
+            where: {
+                id: { in: parsed.data.professionalIds },
+                approvedByWezen: true,
+                role: shift.role,
+                user: {
+                    isActive: true,
+                    isSystemUser: false,
+                },
+            },
+            include: { user: true },
+        });
+        const created = [];
+        for (const worker of workers) {
+            const invitation = await prisma.shiftInvitation.upsert({
+                where: {
+                    shiftId_professionalId: {
+                        shiftId,
+                        professionalId: worker.id,
+                    },
+                },
+                update: {
+                    status: 'SENT',
+                    message: parsed.data.message || null,
+                    respondedAt: null,
+                },
+                create: {
+                    shiftId,
+                    professionalId: worker.id,
+                    facilityId,
+                    status: 'SENT',
+                    message: parsed.data.message || null,
+                },
+            });
+            created.push(invitation);
+            const inviteMessage = `${shift.facility.name} invited you to a ${shift.role} ${shift.shiftType} shift on ${shift.date.toISOString().split('T')[0]} from ${shift.startTimeLabel} to ${shift.endTimeLabel}.`;
+            await createWorkerNotification({
+                professionalId: worker.id,
+                type: 'GENERAL',
+                title: 'Shift invitation',
+                message: parsed.data.message ? `${inviteMessage} Message: ${parsed.data.message}` : inviteMessage,
+            });
+            if (worker.user.email) {
+                try {
+                    await sendEmail({
+                        to: worker.user.email,
+                        subject: `Shift invitation from ${shift.facility.name}`,
+                        html: `
+              <h2>Shift invitation</h2>
+              <p>${inviteMessage}</p>
+              ${parsed.data.message ? `<p><strong>Message:</strong> ${parsed.data.message}</p>` : ''}
+              <p>Please log in to Wezen Staffing to accept or decline this invitation.</p>
+            `,
+                        text: [
+                            'Shift invitation',
+                            inviteMessage,
+                            parsed.data.message ? `Message: ${parsed.data.message}` : '',
+                            'Please log in to Wezen Staffing to accept or decline this invitation.',
+                        ].filter(Boolean).join('\n'),
+                    });
+                }
+                catch (emailError) {
+                    console.error('Shift invitation email failed:', emailError);
+                }
+            }
+        }
+        res.status(201).json({ data: created });
+    }
+    catch (error) {
+        console.error('POST /api/shifts/:id/invitations error:', error);
+        res.status(500).json({ error: 'Failed to send shift invitations' });
+    }
+});
+app.post('/api/shifts/:id/post-publicly', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const shiftId = String(req.params.id || '');
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const shift = await prisma.shift.findUnique({
+            where: { id: shiftId },
+            select: { id: true, facilityId: true, status: true },
+        });
+        if (!shift) {
+            return res.status(404).json({ error: 'Shift not found' });
+        }
+        if (shift.facilityId !== facilityId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (shift.status !== 'INVITE_ONLY') {
+            return res.status(400).json({ error: 'Only invite-only shifts can be posted publicly.' });
+        }
+        const updated = await prisma.shift.update({
+            where: { id: shiftId },
+            data: { status: 'OPEN' },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('POST /api/shifts/:id/post-publicly error:', error);
+        res.status(500).json({ error: 'Failed to post shift publicly' });
+    }
+});
+app.get('/api/worker/shift-invitations', requireRole('PROFESSIONAL'), async (req, res) => {
+    try {
+        const professionalId = await getProfessionalProfileIdForUser(req.authUser.userId);
+        if (!professionalId) {
+            return res.status(404).json({ error: 'Professional profile not found' });
+        }
+        const invitations = await prisma.shiftInvitation.findMany({
+            where: { professionalId },
+            include: {
+                shift: { include: { facility: true } },
+            },
+            orderBy: [{ createdAt: 'desc' }],
+        });
+        res.json({
+            data: invitations.map((invite) => ({
+                id: invite.id,
+                status: invite.status,
+                message: invite.message,
+                createdAt: invite.createdAt,
+                respondedAt: invite.respondedAt,
+                shift: {
+                    id: invite.shift.id,
+                    role: invite.shift.role,
+                    shiftType: invite.shift.shiftType,
+                    date: invite.shift.date,
+                    time: `${invite.shift.startTimeLabel} - ${invite.shift.endTimeLabel}`,
+                    facilityName: invite.shift.facility.name,
+                    city: invite.shift.facility.city,
+                    state: invite.shift.facility.state,
+                    status: invite.shift.status,
+                },
+            })),
+        });
+    }
+    catch (error) {
+        console.error('GET /api/worker/shift-invitations error:', error);
+        res.status(500).json({ error: 'Failed to fetch shift invitations' });
+    }
+});
+app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'), async (req, res) => {
+    try {
+        const invitationId = String(req.params.id || '');
+        const action = String(req.body?.action || '').trim().toUpperCase();
+        const professionalId = await getProfessionalProfileIdForUser(req.authUser.userId);
+        if (!professionalId) {
+            return res.status(404).json({ error: 'Professional profile not found' });
+        }
+        if (!['ACCEPTED', 'DECLINED'].includes(action)) {
+            return res.status(400).json({ error: 'action must be ACCEPTED or DECLINED' });
+        }
+        const invitation = await prisma.shiftInvitation.findUnique({
+            where: { id: invitationId },
+            include: {
+                shift: true,
+            },
+        });
+        if (!invitation) {
+            return res.status(404).json({ error: 'Invitation not found' });
+        }
+        if (invitation.professionalId !== professionalId) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const updated = await prisma.shiftInvitation.update({
+            where: { id: invitationId },
+            data: {
+                status: action,
+                respondedAt: new Date(),
+            },
+        });
+        let request = null;
+        if (action === 'ACCEPTED') {
+            request = await prisma.shiftRequest.upsert({
+                where: {
+                    shiftId_professionalId: {
+                        shiftId: invitation.shiftId,
+                        professionalId,
+                    },
+                },
+                update: {
+                    status: 'REQUESTED',
+                    reviewNotes: 'Worker accepted facility invitation.',
+                },
+                create: {
+                    shiftId: invitation.shiftId,
+                    professionalId,
+                    status: 'REQUESTED',
+                    reviewNotes: 'Worker accepted facility invitation.',
+                },
+            });
+            await createFacilityNotification({
+                facilityId: invitation.facilityId,
+                type: 'GENERAL',
+                title: 'Worker accepted shift invitation',
+                message: 'A worker accepted your shift invitation. Please review and approve the request.',
+            });
+        }
+        res.json({ data: updated, request });
+    }
+    catch (error) {
+        console.error('POST /api/worker/shift-invitations/:id/respond error:', error);
+        res.status(500).json({ error: 'Failed to respond to shift invitation' });
+    }
 });
 app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req, res) => {
     const parsed = requestShiftSchema.safeParse(req.body);
