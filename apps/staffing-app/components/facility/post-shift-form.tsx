@@ -49,6 +49,7 @@ export function PostShiftForm() {
   const [role, setRole] = useState('CNA');
   const [shiftTypes, setShiftTypes] = useState<string[]>(['AM']);
   const [date, setDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [message, setMessage] = useState('');
@@ -74,14 +75,17 @@ export function PostShiftForm() {
       const me = await apiFetch<{ data: { facilityId?: string | null } }>('/api/auth/me');
       let firstCreatedShiftId = '';
 
-      for (const currentShiftType of shiftTypes) {
+      const datesToCreate = getDateRange(date, endDate);
+
+      for (const currentDate of datesToCreate) {
+        for (const currentShiftType of shiftTypes) {
         const res = await apiFetch<{ data: { id: string } }>('/api/shifts', {
           method: 'POST',
           body: JSON.stringify({
             facilityId: me.data.facilityId,
             role,
             shiftType: currentShiftType,
-            date,
+            date: currentDate,
             workersNeeded,
             specialInstructions,
             visibility,
@@ -89,6 +93,7 @@ export function PostShiftForm() {
         });
 
         if (!firstCreatedShiftId) firstCreatedShiftId = res.data.id;
+        }
       }
 
       if (visibility === 'INVITE_ONLY') {
@@ -101,6 +106,7 @@ export function PostShiftForm() {
 
       setMessage(`✅ Success! ${shiftTypes.length} shift${shiftTypes.length === 1 ? '' : 's'} posted successfully.`);
       setDate('');
+      setEndDate('');
       setWorkersNeeded(1);
       setSpecialInstructions('');
     } catch (error) {
@@ -224,7 +230,17 @@ export function PostShiftForm() {
           </div>
         </div>
 
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-4 text-base font-semibold text-slate-950" />
+        <div className="grid grid-cols-2 gap-3">
+          <label className="grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+            Start date
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-cyan-300 bg-cyan-50 px-3 py-4 text-sm font-semibold text-slate-950" />
+          </label>
+
+          <label className="grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+            End date optional
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-3 py-4 text-sm font-semibold text-slate-950" />
+          </label>
+        </div>
 
                 <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
           Shift times will use facility defaults for the selected AM / PM / NOC shift types.
@@ -279,4 +295,30 @@ export function PostShiftForm() {
       ) : null}
     </form>
   );
+}
+
+
+function getDateRange(startDate: string, endDate?: string) {
+  if (!startDate) return [];
+
+  const start = new Date(`${startDate}T12:00:00.000Z`);
+  const end = endDate ? new Date(`${endDate}T12:00:00.000Z`) : start;
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return [startDate];
+  }
+
+  if (end < start) {
+    return [startDate];
+  }
+
+  const dates: string[] = [];
+  const current = new Date(start);
+
+  while (current <= end) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
 }
