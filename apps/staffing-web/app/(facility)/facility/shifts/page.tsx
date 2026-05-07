@@ -373,10 +373,10 @@ export default function FacilityShiftsPage() {
 
               <div className="flex w-full flex-col gap-3 lg:w-56">
                 <Link
-                  href={`/facility/shifts/${shift.id}`}
+                  href="/facility/applicants"
                   className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
                 >
-                  View Shift
+                  Review Applicants
                 </Link>
 	    
 	        {['OPEN', 'FILLED'].includes(shift.status) && shift.fillCount === 0 ? (
