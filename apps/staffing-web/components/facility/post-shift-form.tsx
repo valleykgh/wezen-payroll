@@ -30,13 +30,52 @@ type WorkerSearchResult = {
   zipCode?: string | null;
 };
 
+
+function getDateRange(startDate: string, endDate?: string) {
+  if (!startDate) return [];
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = endDate ? new Date(`${endDate}T12:00:00`) : start;
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return [startDate];
+  }
+
+  const dates: string[] = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().split('T')[0]);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
+}
+
+function toggleShiftTypeSelection(
+  value: ShiftType,
+  selected: ShiftType[],
+  setSelected: (items: ShiftType[]) => void,
+  setPrimary: (item: ShiftType) => void
+) {
+  const next = selected.includes(value)
+    ? selected.filter((item) => item !== value)
+    : [...selected, value];
+
+  const finalItems = next.length > 0 ? next : [value];
+  setSelected(finalItems);
+  setPrimary(finalItems[0]);
+}
+
+
 export function PostShiftForm() {
   const [facilityId, setFacilityId] = useState<string | null>(null);
   const [facilitySettings, setFacilitySettings] = useState<FacilitySettings | null>(null);
 
   const [shiftType, setShiftType] = useState<ShiftType>('AM');
+  const [selectedShiftTypes, setSelectedShiftTypes] = useState<ShiftType[]>(['AM']);
   const [role, setRole] = useState('CNA');
   const [date, setDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -111,49 +150,67 @@ export function PostShiftForm() {
         throw new Error('You must be signed in as a facility admin.');
       }
 
-      const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          facilityId,
-          role,
-          shiftType,
-          date,
-          startTimeLabel: formatTimeLabel(startTime),
-          endTimeLabel: formatTimeLabel(endTime),
-          workersNeeded: Number(workersNeeded),
-          specialInstructions: instructions || undefined,
-          payRateCents: facilitySettings?.allowRateOverride
-            ? Math.round(Number(payRateDollars) * 100)
-            : selectedDefaultRateCents ?? undefined,
-          visibility,
-        }),
-      });
+      const datesToCreate = getDateRange(date, endDate);
+      const typesToCreate = selectedShiftTypes.length ? selectedShiftTypes : [shiftType];
 
-      const text = await res.text();
-
-      if (!res.ok) {
-        throw new Error(text || 'Failed to create shift');
+      if (datesToCreate.length === 0) {
+        throw new Error('Please select a start date.');
       }
 
-      const payload = text ? JSON.parse(text) : null;
-      const newShiftId = payload?.data?.id || '';
+      let firstCreatedShiftId = '';
+
+      for (const currentDate of datesToCreate) {
+        for (const currentShiftType of typesToCreate) {
+          const res = await fetch(`${STAFFING_API_BASE_URL}/api/shifts`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              facilityId,
+              role,
+              shiftType: currentShiftType,
+              date: currentDate,
+              startTimeLabel: formatTimeLabel(startTime),
+              endTimeLabel: formatTimeLabel(endTime),
+              workersNeeded: Number(workersNeeded),
+              specialInstructions: instructions || undefined,
+              payRateCents: facilitySettings?.allowRateOverride
+                ? Math.round(Number(payRateDollars) * 100)
+                : selectedDefaultRateCents ?? undefined,
+              visibility,
+            }),
+          });
+
+          const text = await res.text();
+
+          if (!res.ok) {
+            throw new Error(text || 'Failed to create shift');
+          }
+
+          const payload = text ? JSON.parse(text) : null;
+          firstCreatedShiftId = firstCreatedShiftId || payload?.data?.id || '';
+        }
+      }
 
       if (visibility === 'INVITE_ONLY') {
-        setCreatedInviteShiftId(newShiftId);
+        setCreatedInviteShiftId(firstCreatedShiftId);
         setInviteMode(true);
-        setMessage('✅ Invite-only shift created. Now search and invite workers.');
+        setMessage(`✅ ${datesToCreate.length * typesToCreate.length} invite-only shift${datesToCreate.length * typesToCreate.length === 1 ? '' : 's'} created. Now search and invite workers.`);
         await searchWorkers(role);
+        setTimeout(() => {
+          inviteSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
         return;
       }
 
-      setMessage('✅ Shift published successfully. Nearby eligible workers are being notified.');
+      setMessage(`✅ ${datesToCreate.length * typesToCreate.length} shift${datesToCreate.length * typesToCreate.length === 1 ? '' : 's'} published successfully. Nearby eligible workers are being notified.`);
       setRole('CNA');
       setShiftType('AM');
+      setSelectedShiftTypes(['AM']);
       setDate('');
+      setEndDate('');
       setWorkersNeeded(1);
       setStartTime('');
       setEndTime('');
@@ -283,9 +340,11 @@ export function PostShiftForm() {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setShiftType(type)}
+                  onClick={() =>
+                    toggleShiftTypeSelection(type, selectedShiftTypes, setSelectedShiftTypes, setShiftType)
+                  }
                   className={
-                    shiftType === type
+                    selectedShiftTypes.includes(type)
                       ? 'rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white'
                       : 'rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900'
                   }
@@ -296,13 +355,22 @@ export function PostShiftForm() {
             </div>
           </div>
 
-          <FormField label="Date" htmlFor="date">
+          <FormField label="Start date" htmlFor="date">
             <TextInput
               id="date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               required
+            />
+          </FormField>
+
+          <FormField label="End date (optional)" htmlFor="endDate">
+            <TextInput
+              id="endDate"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
             />
           </FormField>
 
@@ -487,14 +555,14 @@ export function PostShiftForm() {
             Shift preview
           </div>
           <div className="mt-3 text-2xl font-bold tracking-tight">
-            {role} • {shiftType} Shift
+            {role} • {selectedShiftTypes.join(' + ')} Shift
           </div>
           <div className="mt-2 text-cyan-50">
             {facilitySettings?.name || 'Your facility'}
           </div>
           <div className="mt-5 grid gap-3">
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
-              Date: {date || 'Select a date'}
+              Date: {date || 'Select a start date'}{endDate ? ` through ${endDate}` : ''}
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
               Time:{' '}
