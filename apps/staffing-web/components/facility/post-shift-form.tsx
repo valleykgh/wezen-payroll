@@ -172,8 +172,6 @@ export function PostShiftForm() {
               role,
               shiftType: currentShiftType,
               date: currentDate,
-              startTimeLabel: formatTimeLabel(startTime),
-              endTimeLabel: formatTimeLabel(endTime),
               workersNeeded: Number(workersNeeded),
               specialInstructions: instructions || undefined,
               payRateCents: facilitySettings?.allowRateOverride
@@ -212,8 +210,6 @@ export function PostShiftForm() {
       setDate('');
       setEndDate('');
       setWorkersNeeded(1);
-      setStartTime('');
-      setEndTime('');
       setInstructions('');
 
       if (facilitySettings?.allowRateOverride) {
@@ -371,30 +367,6 @@ export function PostShiftForm() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-            />
-          </FormField>
-
-          <FormField label="Start time" htmlFor="startTime">
-            <TextInput
-              id="startTime"
-              type="text"
-              placeholder="7, 7am, 15:30, 3:30pm"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              onBlur={(e) => setStartTime(normalizeTimeInput(e.target.value))}
-              required
-            />
-          </FormField>
-
-          <FormField label="End time" htmlFor="endTime">
-            <TextInput
-              id="endTime"
-              type="text"
-              placeholder="7, 7am, 15:30, 3:30pm"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              onBlur={(e) => setEndTime(normalizeTimeInput(e.target.value))}
-              required
             />
           </FormField>
 
@@ -567,10 +539,7 @@ export function PostShiftForm() {
               Date: {date || 'Select a start date'}{endDate ? ` through ${endDate}` : ''}
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
-              Time:{' '}
-              {startTime && endTime
-                ? `${formatTimeLabel(startTime)} - ${formatTimeLabel(endTime)}`
-                : 'Select times'}
+              Time: Uses facility default times for {selectedShiftTypes.join(' + ')}
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-sm">
               Workers Needed: {workersNeeded}

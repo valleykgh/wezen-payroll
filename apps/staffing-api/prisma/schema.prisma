@@ -133,6 +133,12 @@ model Facility {
   defaultLvnRateCents Int?
   defaultRnRateCents  Int?
   allowRateOverride   Boolean  @default(false)
+  defaultAmStartTimeLabel  String? @default("7:00 AM")
+  defaultAmEndTimeLabel    String? @default("3:30 PM")
+  defaultPmStartTimeLabel  String? @default("3:00 PM")
+  defaultPmEndTimeLabel    String? @default("11:30 PM")
+  defaultNocStartTimeLabel String? @default("11:00 PM")
+  defaultNocEndTimeLabel   String? @default("7:30 AM")
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

@@ -1319,6 +1319,12 @@ const createFacilitySchema = z.object({
   defaultLvnRateCents: z.number().int().nonnegative().optional(),
   defaultRnRateCents: z.number().int().nonnegative().optional(),
   allowRateOverride: z.boolean().optional(),
+  defaultAmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultAmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocEndTimeLabel: z.string().trim().optional().nullable(),
 });
 
 const updateFacilitySchema = z.object({
@@ -1331,6 +1337,12 @@ const updateFacilitySchema = z.object({
   defaultLvnRateCents: z.number().int().nonnegative().nullable().optional(),
   defaultRnRateCents: z.number().int().nonnegative().nullable().optional(),
   allowRateOverride: z.boolean().optional(),
+  defaultAmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultAmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocEndTimeLabel: z.string().trim().optional().nullable(),
 });
 
 const updateFacilitySettingsSchema = z.object({
@@ -1354,6 +1366,13 @@ const updateFacilitySettingsSchema = z.object({
   defaultLvnRateCents: z.number().int().nonnegative().nullable().optional(),
   defaultRnRateCents: z.number().int().nonnegative().nullable().optional(),
   allowRateOverride: z.boolean().optional(),
+
+  defaultAmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultAmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultPmEndTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocStartTimeLabel: z.string().trim().optional().nullable(),
+  defaultNocEndTimeLabel: z.string().trim().optional().nullable(),
 });
 
 const adminShiftOverrideSchema = z.object({
@@ -1961,8 +1980,8 @@ const createShiftSchema = z.object({
   role: z.nativeEnum(ClinicianRole),
   shiftType: z.nativeEnum(ShiftType),
   date: z.string().min(1),
-  startTimeLabel: z.string().min(1),
-  endTimeLabel: z.string().min(1),
+  startTimeLabel: z.string().optional(),
+  endTimeLabel: z.string().optional(),
   workersNeeded: z.number().int().positive(),
   specialInstructions: z.string().optional(),
   payRateCents: z.number().int().nonnegative().optional(),
@@ -1997,6 +2016,12 @@ app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest
     defaultLvnRateCents: true,
     defaultRnRateCents: true,
     allowRateOverride: true,
+    defaultAmStartTimeLabel: true,
+    defaultAmEndTimeLabel: true,
+    defaultPmStartTimeLabel: true,
+    defaultPmEndTimeLabel: true,
+    defaultNocStartTimeLabel: true,
+    defaultNocEndTimeLabel: true,
   },
 });
 
@@ -2018,14 +2043,31 @@ if (facility.allowRateOverride && parsed.data.payRateCents != null) {
   resolvedPayRateCents = parsed.data.payRateCents;
 }
 
+    const defaultTimesByShiftType = {
+      AM: {
+        start: facility.defaultAmStartTimeLabel || '7:00 AM',
+        end: facility.defaultAmEndTimeLabel || '3:30 PM',
+      },
+      PM: {
+        start: facility.defaultPmStartTimeLabel || '3:00 PM',
+        end: facility.defaultPmEndTimeLabel || '11:30 PM',
+      },
+      NOC: {
+        start: facility.defaultNocStartTimeLabel || '11:00 PM',
+        end: facility.defaultNocEndTimeLabel || '7:30 AM',
+      },
+    } as const;
+
+    const defaultTimes = defaultTimesByShiftType[parsed.data.shiftType];
+
     const shift = await prisma.shift.create({
       data: {
         facilityId,
         role: parsed.data.role,
         shiftType: parsed.data.shiftType,
         date: new Date(`${parsed.data.date}T12:00:00.000Z`),
-	startTimeLabel: parsed.data.startTimeLabel,
-        endTimeLabel: parsed.data.endTimeLabel,
+        startTimeLabel: parsed.data.startTimeLabel || defaultTimes.start,
+        endTimeLabel: parsed.data.endTimeLabel || defaultTimes.end,
         workersNeeded: parsed.data.workersNeeded,
         specialInstructions: parsed.data.specialInstructions,
         payRateCents: resolvedPayRateCents,
@@ -6913,6 +6955,12 @@ app.get('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), asyn
         defaultLvnRateCents: true,
         defaultRnRateCents: true,
         allowRateOverride: true,
+        defaultAmStartTimeLabel: true,
+        defaultAmEndTimeLabel: true,
+        defaultPmStartTimeLabel: true,
+        defaultPmEndTimeLabel: true,
+        defaultNocStartTimeLabel: true,
+        defaultNocEndTimeLabel: true,
       },
     });
 
@@ -8074,6 +8122,12 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         defaultLvnRateCents: parsed.data.defaultLvnRateCents ?? null,
         defaultRnRateCents: parsed.data.defaultRnRateCents ?? null,
         allowRateOverride: parsed.data.allowRateOverride ?? false,
+        defaultAmStartTimeLabel: parsed.data.defaultAmStartTimeLabel || '7:00 AM',
+        defaultAmEndTimeLabel: parsed.data.defaultAmEndTimeLabel || '3:30 PM',
+        defaultPmStartTimeLabel: parsed.data.defaultPmStartTimeLabel || '3:00 PM',
+        defaultPmEndTimeLabel: parsed.data.defaultPmEndTimeLabel || '11:30 PM',
+        defaultNocStartTimeLabel: parsed.data.defaultNocStartTimeLabel || '11:00 PM',
+        defaultNocEndTimeLabel: parsed.data.defaultNocEndTimeLabel || '7:30 AM',
       },
     });
 
@@ -8103,6 +8157,12 @@ app.put('/api/facility/settings', requireRole('FACILITY_ADMIN'), async (req: Aut
         defaultLvnRateCents: facility.defaultLvnRateCents,
         defaultRnRateCents: facility.defaultRnRateCents,
         allowRateOverride: facility.allowRateOverride,
+        defaultAmStartTimeLabel: facility.defaultAmStartTimeLabel,
+        defaultAmEndTimeLabel: facility.defaultAmEndTimeLabel,
+        defaultPmStartTimeLabel: facility.defaultPmStartTimeLabel,
+        defaultPmEndTimeLabel: facility.defaultPmEndTimeLabel,
+        defaultNocStartTimeLabel: facility.defaultNocStartTimeLabel,
+        defaultNocEndTimeLabel: facility.defaultNocEndTimeLabel,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,

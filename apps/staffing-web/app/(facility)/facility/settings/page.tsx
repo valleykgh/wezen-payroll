@@ -19,6 +19,12 @@ type FacilitySettings = {
   defaultLvnRateCents?: number | null;
   defaultRnRateCents?: number | null;
   allowRateOverride: boolean;
+  defaultAmStartTimeLabel?: string | null;
+  defaultAmEndTimeLabel?: string | null;
+  defaultPmStartTimeLabel?: string | null;
+  defaultPmEndTimeLabel?: string | null;
+  defaultNocStartTimeLabel?: string | null;
+  defaultNocEndTimeLabel?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
@@ -48,6 +54,12 @@ export default function FacilitySettingsPage() {
   const [defaultLvnRateDollars, setDefaultLvnRateDollars] = useState('');
   const [defaultRnRateDollars, setDefaultRnRateDollars] = useState('');
   const [allowRateOverride, setAllowRateOverride] = useState(false);
+  const [defaultAmStartTimeLabel, setDefaultAmStartTimeLabel] = useState('7:00 AM');
+  const [defaultAmEndTimeLabel, setDefaultAmEndTimeLabel] = useState('3:30 PM');
+  const [defaultPmStartTimeLabel, setDefaultPmStartTimeLabel] = useState('3:00 PM');
+  const [defaultPmEndTimeLabel, setDefaultPmEndTimeLabel] = useState('11:30 PM');
+  const [defaultNocStartTimeLabel, setDefaultNocStartTimeLabel] = useState('11:00 PM');
+  const [defaultNocEndTimeLabel, setDefaultNocEndTimeLabel] = useState('7:30 AM');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
@@ -80,6 +92,12 @@ export default function FacilitySettingsPage() {
       data.defaultRnRateCents != null ? (data.defaultRnRateCents / 100).toFixed(2) : ''
     );
     setAllowRateOverride(Boolean(data.allowRateOverride));
+    setDefaultAmStartTimeLabel(data.defaultAmStartTimeLabel || '7:00 AM');
+    setDefaultAmEndTimeLabel(data.defaultAmEndTimeLabel || '3:30 PM');
+    setDefaultPmStartTimeLabel(data.defaultPmStartTimeLabel || '3:00 PM');
+    setDefaultPmEndTimeLabel(data.defaultPmEndTimeLabel || '11:30 PM');
+    setDefaultNocStartTimeLabel(data.defaultNocStartTimeLabel || '11:00 PM');
+    setDefaultNocEndTimeLabel(data.defaultNocEndTimeLabel || '7:30 AM');
   }
 
   useEffect(() => {
@@ -130,6 +148,12 @@ export default function FacilitySettingsPage() {
             ? Math.round(Number(defaultRnRateDollars) * 100)
             : null,
           allowRateOverride,
+          defaultAmStartTimeLabel,
+          defaultAmEndTimeLabel,
+          defaultPmStartTimeLabel,
+          defaultPmEndTimeLabel,
+          defaultNocStartTimeLabel,
+          defaultNocEndTimeLabel,
         }),
       });
 
@@ -512,6 +536,31 @@ async function changePassword() {
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+
+function TimePair({
+  title,
+  start,
+  end,
+  setStart,
+  setEnd,
+}: {
+  title: string;
+  start: string;
+  end: string;
+  setStart: (value: string) => void;
+  setEnd: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-4 ring-1 ring-cyan-100">
+      <div className="font-bold text-slate-950">{title}</div>
+      <div className="mt-3 grid gap-3">
+        <input value={start} onChange={(e) => setStart(e.target.value)} placeholder="Start time" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
+        <input value={end} onChange={(e) => setEnd(e.target.value)} placeholder="End time" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
+      </div>
     </div>
   );
 }
