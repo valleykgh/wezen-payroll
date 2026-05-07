@@ -147,7 +147,7 @@ export default function FacilityShiftsPage() {
       await loadShifts(facilityId);
       setMessage(
         action === 'close'
-          ? 'Shift closed successfully.'
+          ? 'Shift completed successfully.'
           : action === 'reopen'
             ? 'Shift reopened successfully.'
             : 'Shift cancelled successfully.'
@@ -445,14 +445,14 @@ export default function FacilityShiftsPage() {
   </Link>
 ) : null}
 
-                {['OPEN', 'FILLED'].includes(shift.status) ? (
+                {['OPEN', 'INVITE_ONLY', 'FILLED'].includes(shift.status) ? (
                   <>
                     <button
                       onClick={() => updateShift(shift.id, 'close')}
                       disabled={busyId === shift.id}
                       className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      {busyId === shift.id ? 'Working...' : 'Close Shift'}
+                      {busyId === shift.id ? 'Working...' : 'Complete Shift'}
                     </button>
 
                     <button
@@ -481,7 +481,7 @@ export default function FacilityShiftsPage() {
                   {busyId === shift.id ? 'Working...' : 'Duplicate Shift'}
                 </button>
 
-                {shift.fillCount === 0 ? (
+                {shift.status !== 'COMPLETED' ? (
                   <button
                     onClick={() => deleteShift(shift.id)}
                     disabled={busyId === shift.id}
