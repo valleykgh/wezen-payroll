@@ -411,14 +411,7 @@ export function PostShiftForm() {
                 This shift is invite-only until you decide to post it publicly.
               </p>
             </div>
-            {createdInviteShiftId ? (
-              <a
-                href="/facility/shifts"
-                className="rounded-full border border-cyan-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800"
-              >
-                View Shift List
-              </a>
-            ) : null}
+            
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
