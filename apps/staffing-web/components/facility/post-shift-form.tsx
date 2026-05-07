@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { FormField } from '@/components/ui/form-field';
 import { SelectInput } from '@/components/ui/select-input';
@@ -50,6 +50,7 @@ export function PostShiftForm() {
   const [workers, setWorkers] = useState<WorkerSearchResult[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
+  const inviteSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     async function loadFacilityContext() {
@@ -228,6 +229,16 @@ export function PostShiftForm() {
   }
 
   useEffect(() => {
+    if (!inviteMode) return;
+    setTimeout(() => {
+      inviteSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 150);
+  }, [inviteMode]);
+
+  useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
     return () => clearTimeout(timer);
@@ -390,7 +401,7 @@ export function PostShiftForm() {
 
 
       {inviteMode ? (
-        <section className="rounded-[1.75rem] border-2 border-cyan-200 bg-cyan-50 p-6 shadow-sm xl:col-span-2">
+        <section ref={inviteSectionRef} className="rounded-[1.75rem] border-2 border-cyan-200 bg-cyan-50 p-6 shadow-sm xl:col-span-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-slate-950">
@@ -402,10 +413,10 @@ export function PostShiftForm() {
             </div>
             {createdInviteShiftId ? (
               <a
-                href={`/facility/shifts/${createdInviteShiftId}`}
+                href="/facility/shifts"
                 className="rounded-full border border-cyan-300 bg-white px-4 py-2 text-sm font-semibold text-cyan-800"
               >
-                View Shift
+                View Shift List
               </a>
             ) : null}
           </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 type WorkerSearchResult = {
@@ -62,6 +62,7 @@ export function PostShiftForm() {
   const [workers, setWorkers] = useState<WorkerSearchResult[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
+  const inviteSectionRef = useRef<HTMLDivElement | null>(null);
 
   async function createShift(visibility: 'PUBLIC' | 'INVITE_ONLY') {
     setLoading(true);
@@ -157,6 +158,16 @@ export function PostShiftForm() {
   }
 
   useEffect(() => {
+    if (!inviteMode) return;
+    setTimeout(() => {
+      inviteSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 150);
+  }, [inviteMode]);
+
+  useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
     return () => clearTimeout(timer);
@@ -207,7 +218,7 @@ export function PostShiftForm() {
       </div>
 
       {inviteMode ? (
-        <div className="mt-5 rounded-3xl border border-cyan-200 bg-cyan-50 p-4">
+        <div ref={inviteSectionRef} className="mt-5 rounded-3xl border border-cyan-200 bg-cyan-50 p-4">
           <h3 className="text-base font-extrabold text-slate-950">Invite workers</h3>
           <p className="mt-1 text-xs text-slate-600">This shift is invite-only until posted publicly.</p>
 
