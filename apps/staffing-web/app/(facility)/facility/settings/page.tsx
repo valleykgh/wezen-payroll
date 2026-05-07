@@ -525,6 +525,19 @@ async function changePassword() {
           </div>
         </div>
 
+        <div className="mt-8 rounded-[1.75rem] border border-cyan-200 bg-cyan-50 p-5">
+          <h3 className="text-lg font-bold text-slate-950">Default shift times</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            These times are used automatically when posting AM, PM, or NOC shifts.
+          </p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <TimePair title="AM Shift" start={defaultAmStartTimeLabel} end={defaultAmEndTimeLabel} setStart={setDefaultAmStartTimeLabel} setEnd={setDefaultAmEndTimeLabel} />
+            <TimePair title="PM Shift" start={defaultPmStartTimeLabel} end={defaultPmEndTimeLabel} setStart={setDefaultPmStartTimeLabel} setEnd={setDefaultPmEndTimeLabel} />
+            <TimePair title="NOC Shift" start={defaultNocStartTimeLabel} end={defaultNocEndTimeLabel} setStart={setDefaultNocStartTimeLabel} setEnd={setDefaultNocEndTimeLabel} />
+          </div>
+        </div>
+
         <div className="mt-6">
           <button
             type="button"
