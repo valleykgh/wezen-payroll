@@ -54,10 +54,16 @@ export default function WorkerShiftsPage() {
   const [respondingInviteId, setRespondingInviteId] = useState('');
   const searchParams = useSearchParams();
 
+  const invitationIdFromEmail = searchParams.get('invitationId');
+
   async function loadInvitations() {
     try {
       const res = await apiFetch<{ data: ShiftInvitation[] }>('/api/worker/shift-invitations');
-      setInvitations((res.data || []).filter((item) => item.status === 'SENT'));
+      const items = (res.data || []).filter((item) => item.status === 'SENT');
+      setInvitations(items);
+      if (invitationIdFromEmail && items.some((item) => item.id === invitationIdFromEmail)) {
+        setMessage('Invitation loaded. Please click Accept or Decline below.');
+      }
     } catch {
       setInvitations([]);
     }

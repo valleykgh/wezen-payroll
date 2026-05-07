@@ -2360,12 +2360,15 @@ app.post('/api/shifts/:id/invitations', requireRole('FACILITY_ADMIN'), async (re
               <p>${inviteMessage}</p>
               ${parsed.data.message ? `<p><strong>Message:</strong> ${parsed.data.message}</p>` : ''}
               <p>Please log in to Wezen Staffing to accept or decline this invitation.</p>
+              <p>
+                <a href="https://wezenstaffing.com/worker/shifts?invitationId=${invitation.id}" style="display:inline-block;padding:12px 18px;background:#0891b2;color:white;text-decoration:none;border-radius:999px;font-weight:bold;">Accept / Decline Invitation</a>
+              </p>
             `,
             text: [
               'Shift invitation',
               inviteMessage,
               parsed.data.message ? `Message: ${parsed.data.message}` : '',
-              'Please log in to Wezen Staffing to accept or decline this invitation.',
+              'Open this link to accept or decline: https://wezenstaffing.com/worker/shifts?invitationId=' + invitation.id,
             ].filter(Boolean).join('\n'),
           });
         } catch (emailError) {
@@ -2524,9 +2527,25 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
       await createFacilityNotification({
         facilityId: invitation.facilityId,
         type: 'GENERAL',
-        title: 'Worker accepted shift invitation',
-        message: 'A worker accepted your shift invitation. Please review and approve the request.',
+        title: action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation',
+        message: action === 'ACCEPTED'
+          ? 'A worker accepted your shift invitation. Please review and approve the request.'
+          : 'A worker declined your shift invitation.',
       });
+
+      try {
+        const recipients = await getFacilityNotificationRecipients(invitation.facilityId);
+        if (recipients.length) {
+          await sendEmail({
+            to: recipients.join(','),
+            subject: action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation',
+            html: `<h2>${action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation'}</h2><p>Please log in to Wezen Staffing to review the shift invitation response.</p>`,
+            text: `${action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation'}\nPlease log in to Wezen Staffing to review the shift invitation response.`,
+          });
+        }
+      } catch (emailError) {
+        console.error('Facility shift invitation response email failed:', emailError);
+      }
     }
 
     res.json({ data: updated, request });
@@ -2854,7 +2873,7 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         return requestRecord;
       }
 
-      if (requestRecord.shift.status !== 'OPEN') {
+      if (!['OPEN', 'INVITE_ONLY'].includes(String(requestRecord.shift.status))) {
         throw new Error('SHIFT_NOT_OPEN');
       }
 
