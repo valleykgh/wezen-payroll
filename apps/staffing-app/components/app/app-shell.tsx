@@ -28,10 +28,10 @@ const navByRole = {
   ],
   facility: [
     { label: 'Home', href: '/app/facility/index.html' },
-    { label: 'Alerts', href: '/app/facility/notifications/index.html' },
-    { label: 'Applicants', href: '/app/facility/applicants/index.html' },
     { label: 'Shifts', href: '/app/facility/shifts/index.html' },
     { label: 'Post', href: '/app/facility/post-shift/index.html' },
+    { label: 'Applicants', href: '/app/facility/applicants/index.html' },
+    { label: 'More', href: '/app/facility/more/index.html' },
   ],
   admin: [
     { label: 'Home', href: '/app/admin/index.html' },
@@ -149,7 +149,7 @@ export function AppShell({ title, subtitle, role, children }: AppShellProps) {
       <section className="px-5 py-5">{children}</section>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-none">
-        <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {nav.map((item) => {
             const active =
               pathname === item.href ||

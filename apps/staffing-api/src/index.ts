@@ -5474,32 +5474,22 @@ app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN'), async (req: A
     // 🚫 Do NOT allow edits if already assigned
     const hasApproved = shift.requests.some(r => r.status === 'APPROVED');
 
-    if (shift.status !== 'OPEN' || hasApproved) {
+    if (!['OPEN', 'INVITE_ONLY'].includes(shift.status) || hasApproved) {
       return res.status(400).json({
         error: 'Cannot edit shift after approvals. Cancel and recreate instead.',
       });
     }
 
-    const {
-      date,
-      shiftType,
-      startTimeLabel,
-      endTimeLabel,
-      workersNeeded,
-      payRateCents,
-      specialInstructions,
-    } = req.body;
-
     const updated = await prisma.shift.update({
       where: { id: shiftId },
       data: {
-        date: date ? new Date(`${String(date)}T12:00:00.000Z`) : undefined,
-	shiftType,
-        startTimeLabel,
-        endTimeLabel,
-        workersNeeded,
-        payRateCents,
-        specialInstructions,
+        role: req.body.role,
+        shiftType: req.body.shiftType,
+        date: new Date(`${req.body.date}T12:00:00.000Z`),
+        startTimeLabel: req.body.startTimeLabel,
+        endTimeLabel: req.body.endTimeLabel,
+        workersNeeded: Number(req.body.workersNeeded),
+        specialInstructions: req.body.specialInstructions ?? null,
       },
     });
 
@@ -5679,6 +5669,7 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
         latitude: true,
         longitude: true,
         maxDistanceMiles: true,
+        role: true,
       },
     });
 
@@ -5698,7 +5689,7 @@ app.get('/api/worker/shifts', requireRole('PROFESSIONAL'), async (req: AuthedReq
               }
             : {}),
         },
-        ...(role ? { role } : {}),
+        role: role || profile?.role,
         ...(shiftType ? { shiftType } : {}),
         date: {
           gte: new Date(new Date().toDateString()),

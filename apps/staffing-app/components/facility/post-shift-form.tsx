@@ -49,8 +49,6 @@ export function PostShiftForm() {
   const [role, setRole] = useState('CNA');
   const [shiftType, setShiftType] = useState('AM');
   const [date, setDate] = useState('');
-  const [startTimeLabel, setStartTimeLabel] = useState('');
-  const [endTimeLabel, setEndTimeLabel] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [message, setMessage] = useState('');
@@ -78,8 +76,6 @@ export function PostShiftForm() {
           role,
           shiftType,
           date,
-          startTimeLabel: formatTimeLabel(startTimeLabel),
-          endTimeLabel: formatTimeLabel(endTimeLabel),
           workersNeeded,
           specialInstructions,
           visibility,
@@ -197,10 +193,6 @@ export function PostShiftForm() {
         </div>
 
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-4 text-base font-semibold text-slate-950" />
-
-        <input placeholder="Start time: 7 or 7:00 or 15:30" value={startTimeLabel} onChange={(e) => setStartTimeLabel(e.target.value)} onBlur={(e) => setStartTimeLabel(formatTimeLabel(e.target.value))} required className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-
-        <input placeholder="End time: 15:30 or 3:30 PM" value={endTimeLabel} onChange={(e) => setEndTimeLabel(e.target.value)} onBlur={(e) => setEndTimeLabel(formatTimeLabel(e.target.value))} required className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
 
                 <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
           Shift times will use facility defaults for the selected AM / PM / NOC shift types.
