@@ -15,11 +15,13 @@ type Worker = {
   totalRequests: number;
   approvedCount: number;
   lastRequestedAt?: string | null;
+  isFavorite?: boolean;
 };
 
 export default function FacilityWorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [message, setMessage] = useState('Loading workers...');
+  const [busyFavoriteId, setBusyFavoriteId] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -44,6 +46,26 @@ export default function FacilityWorkersPage() {
     }
     load();
   }, []);
+
+
+  async function toggleFavorite(worker: Worker) {
+    try {
+      setBusyFavoriteId(worker.id);
+      await apiFetch(`/api/facility/favorites/${worker.id}`, {
+        method: worker.isFavorite ? 'DELETE' : 'POST',
+      });
+
+      setWorkers((current) =>
+        current.map((item) =>
+          item.id === worker.id ? { ...item, isFavorite: !worker.isFavorite } : item
+        )
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update favorite');
+    } finally {
+      setBusyFavoriteId('');
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -78,8 +100,19 @@ export default function FacilityWorkersPage() {
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <div className="text-lg font-semibold text-slate-950">
-                    {worker.firstName} {worker.lastName}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(worker)}
+                      disabled={busyFavoriteId === worker.id}
+                      title={worker.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                      className={worker.isFavorite ? 'text-2xl text-yellow-500' : 'text-2xl text-slate-300 hover:text-yellow-500'}
+                    >
+                      ★
+                    </button>
+                    <div className="text-lg font-semibold text-slate-950">
+                      {worker.firstName} {worker.lastName}
+                    </div>
                   </div>
                   <div className="mt-1 text-sm text-slate-600">
                     {worker.role} • {worker.city || 'Unknown city'}

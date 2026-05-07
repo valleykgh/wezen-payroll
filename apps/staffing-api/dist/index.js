@@ -6692,11 +6692,18 @@ app.get('/api/facility/workers', requireRole('FACILITY_ADMIN'), async (req, res)
                 }
             }
         }
+        const favoriteRows = await prisma.$queryRaw `
+      SELECT "professionalId" FROM "FacilityFavorite" WHERE "facilityId" = ${facilityId}
+    `;
+        const favoriteIds = new Set(favoriteRows.map((row) => row.professionalId));
         const workers = Array.from(grouped.values()).sort((a, b) => {
             const aTime = a.lastRequestedAt ? +new Date(a.lastRequestedAt) : 0;
             const bTime = b.lastRequestedAt ? +new Date(b.lastRequestedAt) : 0;
             return bTime - aTime;
-        });
+        }).map((worker) => ({
+            ...worker,
+            isFavorite: favoriteIds.has(worker.id),
+        }));
         res.json({ data: workers });
     }
     catch (error) {
@@ -6990,54 +6997,91 @@ app.get('/api/facility/favorites', requireRole('FACILITY_ADMIN'), async (req, re
         if (!facilityId) {
             return res.status(404).json({ error: 'Facility admin not found' });
         }
-        const facilityStatus = await ensureFacilityIsActive(facilityId);
-        if (!facilityStatus.ok) {
-            clearAuthCookie(res);
-            return res.status(403).json({ error: facilityStatus.error });
-        }
-        const approvedRequests = await prisma.shiftRequest.findMany({
-            where: {
-                status: 'APPROVED',
-                shift: {
-                    facilityId,
-                },
-            },
-            include: {
-                professional: {
-                    include: {
-                        user: true,
-                    },
-                },
-            },
+        const rows = await prisma.$queryRaw `
+      SELECT
+        p."id",
+        u."firstName",
+        u."lastName",
+        u."email",
+        p."role",
+        p."city",
+        p."state",
+        f."createdAt" AS "favoritedAt",
+        COALESCE(COUNT(sr."id"), 0) AS "approvedCount"
+      FROM "FacilityFavorite" f
+      JOIN "ProfessionalProfile" p ON p."id" = f."professionalId"
+      JOIN "User" u ON u."id" = p."userId"
+      LEFT JOIN "ShiftRequest" sr
+        ON sr."professionalId" = p."id"
+       AND sr."status" = 'APPROVED'
+       AND sr."shiftId" IN (SELECT "id" FROM "Shift" WHERE "facilityId" = ${facilityId})
+      WHERE f."facilityId" = ${facilityId}
+      GROUP BY p."id", u."firstName", u."lastName", u."email", p."role", p."city", p."state", f."createdAt"
+      ORDER BY f."createdAt" DESC
+    `;
+        res.json({
+            data: rows.map((row) => ({
+                ...row,
+                approvedCount: Number(row.approvedCount || 0),
+                isFavorite: true,
+            })),
         });
-        const grouped = new Map();
-        for (const request of approvedRequests) {
-            const p = request.professional;
-            const existing = grouped.get(p.id);
-            if (!existing) {
-                grouped.set(p.id, {
-                    id: p.id,
-                    firstName: p.user.firstName ?? null,
-                    lastName: p.user.lastName ?? null,
-                    email: p.user.email,
-                    role: p.role,
-                    city: p.city ?? null,
-                    state: p.state ?? null,
-                    approvedCount: 1,
-                });
-            }
-            else {
-                existing.approvedCount += 1;
-            }
-        }
-        const favorites = Array.from(grouped.values())
-            .filter((worker) => worker.approvedCount >= 2)
-            .sort((a, b) => b.approvedCount - a.approvedCount);
-        res.json({ data: favorites });
     }
     catch (error) {
         console.error('GET /api/facility/favorites error:', error);
         res.status(500).json({ error: 'Failed to fetch favorite workers' });
+    }
+});
+app.post('/api/facility/favorites/:professionalId', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const professionalId = String(req.params.professionalId || '');
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId)
+            return res.status(404).json({ error: 'Facility admin not found' });
+        if (!professionalId)
+            return res.status(400).json({ error: 'professionalId is required' });
+        const relationshipCount = await prisma.shiftRequest.count({
+            where: {
+                professionalId,
+                shift: { facilityId },
+            },
+        });
+        if (relationshipCount === 0) {
+            return res.status(403).json({ error: 'Worker is not connected to this facility yet' });
+        }
+        const id = `fav_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        await prisma.$executeRaw `
+      INSERT INTO "FacilityFavorite" ("id", "facilityId", "professionalId")
+      VALUES (${id}, ${facilityId}, ${professionalId})
+      ON CONFLICT ("facilityId", "professionalId") DO NOTHING
+    `;
+        res.json({ data: { professionalId, isFavorite: true } });
+    }
+    catch (error) {
+        console.error('POST /api/facility/favorites/:professionalId error:', error);
+        res.status(500).json({ error: 'Failed to favorite worker' });
+    }
+});
+app.delete('/api/facility/favorites/:professionalId', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const professionalId = String(req.params.professionalId || '');
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId)
+            return res.status(404).json({ error: 'Facility admin not found' });
+        if (!professionalId)
+            return res.status(400).json({ error: 'professionalId is required' });
+        await prisma.$executeRaw `
+      DELETE FROM "FacilityFavorite"
+      WHERE "facilityId" = ${facilityId}
+        AND "professionalId" = ${professionalId}
+    `;
+        res.json({ data: { professionalId, isFavorite: false } });
+    }
+    catch (error) {
+        console.error('DELETE /api/facility/favorites/:professionalId error:', error);
+        res.status(500).json({ error: 'Failed to remove favorite worker' });
     }
 });
 app.get('/api/worker/shifts/:shiftId', requireRole('PROFESSIONAL'), async (req, res) => {

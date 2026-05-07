@@ -17,6 +17,7 @@ type FavoriteWorker = {
 export default function FacilityFavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteWorker[]>([]);
   const [message, setMessage] = useState('Loading favorites...');
+  const [busyId, setBusyId] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -41,6 +42,21 @@ export default function FacilityFavoritesPage() {
    }
     load();
   }, []);
+
+
+  async function removeFavorite(workerId: string) {
+    try {
+      setBusyId(workerId);
+      await apiFetch(`/api/facility/favorites/${workerId}`, {
+        method: 'DELETE',
+      });
+      setFavorites((current) => current.filter((worker) => worker.id !== workerId));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to remove favorite');
+    } finally {
+      setBusyId('');
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -85,8 +101,18 @@ export default function FacilityFavoritesPage() {
                   <div className="mt-2 text-sm text-slate-500">{worker.email}</div>
                 </div>
 
-                <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  {worker.approvedCount} approved shift(s)
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    {worker.approvedCount} approved shift(s)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFavorite(worker.id)}
+                    disabled={busyId === worker.id}
+                    className="rounded-full border border-yellow-300 bg-yellow-50 px-3 py-1 text-xs font-semibold text-yellow-700"
+                  >
+                    ★ Remove
+                  </button>
                 </div>
               </div>
             </div>
@@ -94,7 +120,7 @@ export default function FacilityFavoritesPage() {
 
           {favorites.length === 0 && !message ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              No favorite workers yet. Workers approved multiple times will appear here.
+              No favorite workers yet. Click the star next to a worker to add them here.
             </div>
           ) : null}
         </div>
