@@ -9,12 +9,12 @@ function getNotificationLink(message: string) {
 
   const applicantsMatch = raw.match(/^\/facility\/applicants\?shiftId=([^&#\s]+)/);
   if (applicantsMatch?.[1]) {
-    return `/facility/shifts/${applicantsMatch[1]}`;
+    return `/facility/shift-detail?shiftId=${applicantsMatch[1]}`;
   }
 
   const shiftMatch = raw.match(/^\/facility\/shifts\/([^/?#\s]+)/);
   if (shiftMatch?.[1]) {
-    return `/facility/shifts/${shiftMatch[1]}`;
+    return `/facility/shift-detail?shiftId=${shiftMatch[1]}`;
   }
 
   return raw;
