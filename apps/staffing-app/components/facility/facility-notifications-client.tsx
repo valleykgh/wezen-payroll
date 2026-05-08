@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
@@ -11,12 +9,21 @@ function getNotificationLink(message: string) {
     return `/app/facility/applicants/index.html?shiftId=${applicantsMatch[1]}`;
   }
 
-  const oldShiftMatch = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
-  if (oldShiftMatch?.[1]) {
-    return `/app/facility/shift-detail/index.html?shiftId=${oldShiftMatch[1]}`;
+  const shiftMatch = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
+  if (shiftMatch?.[1]) {
+    return `/app/facility/shift-detail/index.html?shiftId=${shiftMatch[1]}`;
   }
 
   return '';
+}
+
+function getNotificationActionLabel(title: string) {
+  const lower = title.toLowerCase();
+
+  if (lower.includes('accepted')) return 'Review Applicant';
+  if (lower.includes('declined')) return 'View Declined Worker';
+
+  return 'Open Related Item';
 }
 
 function cleanNotificationMessage(message: string) {
@@ -118,12 +125,15 @@ export function FacilityNotificationsClient() {
               <h3 className="text-lg font-extrabold text-slate-950">{item.title}</h3>
               <p className="mt-2 text-sm font-semibold text-slate-700">{cleanNotificationMessage(item.message)}</p>
               {getNotificationLink(item.message) ? (
-                <Link
-                  href={getNotificationLink(item.message)}
-                  className="mt-3 inline-flex rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white"
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = getNotificationLink(item.message);
+                  }}
+                  className="mt-3 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white"
                 >
-                  Open Related Item
-                </Link>
+                  {getNotificationActionLabel(item.title)}
+                </button>
               ) : null}
               <p className="mt-3 text-xs font-bold text-slate-500">
                 {new Date(item.createdAt).toLocaleString()}
