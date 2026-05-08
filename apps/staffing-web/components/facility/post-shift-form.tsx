@@ -191,17 +191,6 @@ export function PostShiftForm() {
         }
       }
 
-      if (visibility === 'INVITE_ONLY') {
-        setCreatedInviteShiftId(firstCreatedShiftId);
-        setInviteMode(true);
-        setMessage(`✅ ${datesToCreate.length * typesToCreate.length} invite-only shift${datesToCreate.length * typesToCreate.length === 1 ? '' : 's'} created. Now search and invite workers.`);
-        await searchWorkers(role);
-        setTimeout(() => {
-          inviteSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 150);
-        return;
-      }
-
       setMessage(`✅ ${datesToCreate.length * typesToCreate.length} shift${datesToCreate.length * typesToCreate.length === 1 ? '' : 's'} published successfully. Nearby eligible workers are being notified.`);
       setRole('CNA');
       setShiftType('AM');
