@@ -84,7 +84,6 @@ export function PostShiftForm() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [inviteMode, setInviteMode] = useState(false);
-  const [createdInviteShiftId, setCreatedInviteShiftId] = useState('');
   const [workerSearch, setWorkerSearch] = useState('');
   const [workers, setWorkers] = useState<WorkerSearchResult[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
@@ -237,9 +236,16 @@ export function PostShiftForm() {
       params.set('role', nextRole);
       if (workerSearch.trim()) params.set('q', workerSearch.trim());
 
-      const res = await apiFetch<{ data: WorkerSearchResult[] }>(
-        `/api/facility/workers/search?${params.toString()}`
-      );
+      const endpoint = date
+        ? (() => {
+            params.set('startDate', date);
+            params.set('endDate', endDate || date);
+            params.set('shiftTypes', selectedShiftTypes.join(','));
+            return `/api/facility/available-workers?${params.toString()}`;
+          })()
+        : `/api/facility/workers/search?${params.toString()}`;
+
+      const res = await apiFetch<{ data: WorkerSearchResult[] }>(endpoint);
 
       setWorkers(res.data || []);
     } catch (error) {
@@ -249,21 +255,29 @@ export function PostShiftForm() {
 
   async function inviteSelectedWorkers() {
     try {
-      if (!createdInviteShiftId) throw new Error('Please create an invite-only shift first.');
       if (selectedWorkerIds.length === 0) throw new Error('Please select at least one worker.');
+      if (!date) throw new Error('Please select a start date.');
+      if (selectedShiftTypes.length === 0) throw new Error('Select at least one shift type.');
 
       setSubmitting(true);
       setMessage('');
 
-      await apiFetch(`/api/shifts/${createdInviteShiftId}/invitations`, {
+      const res = await apiFetch<{ data: Array<{ shiftId: string }> }>('/api/facility/availability-invitations', {
         method: 'POST',
         body: JSON.stringify({
+          startDate: date,
+          endDate: endDate || date,
+          role,
+          shiftTypes: selectedShiftTypes,
           professionalIds: selectedWorkerIds,
+          workersNeeded: Number(workersNeeded),
           message: inviteMessage || undefined,
         }),
       });
 
-      setMessage(`✅ Invitation sent to ${selectedWorkerIds.length} worker${selectedWorkerIds.length === 1 ? '' : 's'}.`);
+      setMessage(`✅ Invitations sent. ${res.data.length} invite-only shift${res.data.length === 1 ? '' : 's'} created.`);
+      setInviteMode(false);
+      setWorkers([]);
       setSelectedWorkerIds([]);
       setInviteMessage('');
     } catch (error) {
@@ -450,7 +464,7 @@ export function PostShiftForm() {
                 Invite workers to this shift
               </h2>
               <p className="mt-1 text-sm text-slate-700">
-                This shift is invite-only until you decide to post it publicly.
+                No shift is created until you press Send Invite.
               </p>
             </div>
             
