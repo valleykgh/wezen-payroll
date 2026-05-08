@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
@@ -105,12 +103,15 @@ export default function FacilityNotificationsPage() {
               <h2 className="text-lg font-bold text-slate-950">{item.title}</h2>
               <p className="mt-2 text-sm text-slate-700">{cleanNotificationMessage(item.message)}</p>
               {getNotificationLink(item.message) ? (
-                <Link
-                  href={getNotificationLink(item.message)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = getNotificationLink(item.message);
+                  }}
                   className="mt-3 inline-flex rounded-full bg-cyan-600 px-4 py-2 text-xs font-bold text-white"
                 >
                   {getNotificationActionLabel(item.title)}
-                </Link>
+                </button>
               ) : null}
               <p className="mt-3 text-xs font-semibold text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
             </div>

@@ -85,6 +85,14 @@ export default function FacilityShiftsPage() {
     );
   }
 
+  function selectAllVisibleShifts() {
+    setSelectedShiftIds(filteredShifts.map((shift) => shift.id));
+  }
+
+  function clearSelectedShifts() {
+    setSelectedShiftIds([]);
+  }
+
   async function deleteSelectedShifts() {
     if (selectedShiftIds.length === 0) {
       setMessage('Please select at least one shift to delete.');
@@ -396,15 +404,37 @@ export default function FacilityShiftsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-sm font-semibold text-slate-700">
           {selectedShiftIds.length} selected
+          <span className="ml-2 text-slate-500">({filteredShifts.length} visible)</span>
         </div>
-        <button
-          type="button"
-          onClick={deleteSelectedShifts}
-          disabled={busyId === 'bulk-delete' || selectedShiftIds.length === 0}
-          className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {busyId === 'bulk-delete' ? 'Deleting...' : 'Delete Selected'}
-        </button>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={selectAllVisibleShifts}
+            disabled={filteredShifts.length === 0}
+            className="rounded-full border border-cyan-300 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Select All Visible
+          </button>
+
+          <button
+            type="button"
+            onClick={clearSelectedShifts}
+            disabled={selectedShiftIds.length === 0}
+            className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Clear Selection
+          </button>
+
+          <button
+            type="button"
+            onClick={deleteSelectedShifts}
+            disabled={busyId === 'bulk-delete' || selectedShiftIds.length === 0}
+            className="rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busyId === 'bulk-delete' ? 'Deleting...' : 'Delete Selected'}
+          </button>
+        </div>
       </div>
 
       {message ? (
