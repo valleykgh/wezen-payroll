@@ -2421,7 +2421,7 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
       }
     }
 
-    const params: any[] = [startDate, endDate, shiftTypes, datesInRange.length];
+    const params: any[] = [startDate, endDate, shiftTypes];
     const where: string[] = [
       `wa.date >= $1::date`,
       `wa.date <= $2::date`,
