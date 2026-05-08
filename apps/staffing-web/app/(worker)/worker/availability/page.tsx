@@ -54,6 +54,8 @@ export default function WorkerAvailabilityPage() {
   const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
   const [month, setMonth] = useState(defaultMonth);
+  const [viewMode, setViewMode] = useState<'MONTH' | 'WEEK'>('MONTH');
+  const [weekStart, setWeekStart] = useState(toDateInput(today));
   const [selected, setSelected] = useState<Record<string, ShiftType[]>>({});
   const [message, setMessage] = useState('Loading availability...');
   const [busy, setBusy] = useState(false);
@@ -214,6 +216,23 @@ export default function WorkerAvailabilityPage() {
       ) : null}
 
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setViewMode('MONTH')}
+            className={viewMode === 'MONTH' ? 'rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white' : 'rounded-full border border-slate-300 px-5 py-3 text-sm font-bold text-slate-800'}
+          >
+            Month View
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('WEEK')}
+            className={viewMode === 'WEEK' ? 'rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white' : 'rounded-full border border-slate-300 px-5 py-3 text-sm font-bold text-slate-800'}
+          >
+            Week View
+          </button>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Month</label>
@@ -224,6 +243,18 @@ export default function WorkerAvailabilityPage() {
               className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
             />
           </div>
+
+          {viewMode === 'WEEK' ? (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Week starting</label>
+              <input
+                type="date"
+                value={weekStart}
+                onChange={(e) => setWeekStart(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+              />
+            </div>
+          ) : null}
 
           <button
             type="button"
@@ -300,10 +331,18 @@ export default function WorkerAvailabilityPage() {
       </section>
 
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-950">Month view</h2>
+        <h2 className="text-xl font-bold text-slate-950">
+          {viewMode === 'WEEK' ? 'Week view' : 'Month view'}
+        </h2>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {days.map((date) => {
+          {(viewMode === 'WEEK' ? days.filter((date) => {
+            const start = new Date(`${weekStart}T12:00:00.000Z`);
+            const end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + 6);
+            const current = new Date(`${date}T12:00:00.000Z`);
+            return current >= start && current <= end;
+          }) : days).map((date) => {
             const activeTypes = selected[date] || [];
 
             return (
