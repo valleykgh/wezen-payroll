@@ -1,7 +1,18 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+
+function getNotificationLink(message: string) {
+  const match = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
+  return match?.[1] ? `/app/facility/shift-detail/index.html?shiftId=${match[1]}` : '';
+}
+
+function cleanNotificationMessage(message: string) {
+  return message.replace(/\n?Link:\s*\/[^\s]+/g, '').trim();
+}
 
 type Notification = {
   id: string;

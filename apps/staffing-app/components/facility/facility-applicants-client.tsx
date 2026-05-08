@@ -10,6 +10,7 @@ type FacilityRequest = {
   requestedAt: string;
   reviewNotes?: string | null;
   shift: {
+    id: string;
     role: string;
     shiftType: string;
     date: string;
@@ -33,14 +34,19 @@ export function FacilityApplicantsClient() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
+  const [shiftIdFilter, setShiftIdFilter] = useState('');
 
   async function loadRequests() {
+    const params = new URLSearchParams(window.location.search);
+    const nextShiftIdFilter = params.get('shiftId') || '';
+    setShiftIdFilter(nextShiftIdFilter);
     setLoading(true);
     setMessage('');
 
     try {
       const res = await apiFetch<{ data: FacilityRequest[] }>('/api/facility/requests');
-      setRequests(res.data || []);
+      const items = res.data || [];
+      setRequests(nextShiftIdFilter ? items.filter((item) => item.shift.id === nextShiftIdFilter) : items);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load applicants');
     } finally {

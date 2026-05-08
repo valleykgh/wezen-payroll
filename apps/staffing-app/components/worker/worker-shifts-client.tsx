@@ -173,7 +173,7 @@ export function WorkerShiftsClient() {
 
   useEffect(() => {
     if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 2500);
+    const timer = setTimeout(() => setMessage(''), 7000);
     return () => clearTimeout(timer);
   }, [message]);
 

@@ -497,7 +497,7 @@ export default function FacilityShiftsPage() {
 
               <div className="flex w-full flex-col gap-3 lg:w-56">
                 <Link
-                  href="/facility/applicants"
+                  href={`/facility/applicants?shiftId=${shift.id}`}
                   className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
                 >
                   Review Applicants

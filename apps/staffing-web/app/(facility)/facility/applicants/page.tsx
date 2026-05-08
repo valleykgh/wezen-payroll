@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ApplicantsClient } from '@/components/facility/applicants-client';
 import { apiFetch } from '@/lib/api-client';
 
@@ -36,6 +37,8 @@ export default function FacilityApplicantsPage() {
   const [message, setMessage] = useState('Loading applicants...');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<SortValue>('newest');
+  const searchParams = useSearchParams();
+  const shiftIdFilter = searchParams.get('shiftId') || '';
 
   useEffect(() => {
     async function load() {
@@ -66,6 +69,10 @@ export default function FacilityApplicantsPage() {
 
   const filteredAndSorted = useMemo(() => {
     let items = [...requests];
+
+    if (shiftIdFilter) {
+      items = items.filter((item) => item.shift.id === shiftIdFilter);
+    }
 
     if (statusFilter !== 'ALL') {
       items = items.filter((item) => item.status === statusFilter);
@@ -149,7 +156,7 @@ export default function FacilityApplicantsPage() {
               Request filters
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Narrow the list by status and sort requests by timing.
+{shiftIdFilter ? 'Review applicants for this specific shift.' : 'Narrow the list by status and sort requests by timing.'}
             </p>
           </div>
 
