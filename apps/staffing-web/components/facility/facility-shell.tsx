@@ -21,6 +21,7 @@ const facilityNav: FacilityNavItem[] = [
   { href: '/facility/shifts/post', label: 'Post Shift' },
   { href: '/facility/applicants', label: 'Applicants', badgeKey: 'pendingRequests' },
   { href: '/facility/workers', label: 'Workers' },
+  { href: '/facility/availability', label: 'Available Workers' },
   { href: '/facility/compliance', label: 'Compliance' },
   { href: '/facility/favorites', label: 'Favorites' },
   { href: '/facility/schedule', label: 'Schedule' },
