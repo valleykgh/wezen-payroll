@@ -13,7 +13,7 @@ function getNotificationLink(message: string) {
 
   const oldShiftMatch = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
   if (oldShiftMatch?.[1]) {
-    return `/app/facility/applicants/index.html?shiftId=${oldShiftMatch[1]}`;
+    return `/app/facility/shift-detail/index.html?shiftId=${oldShiftMatch[1]}`;
   }
 
   return '';
