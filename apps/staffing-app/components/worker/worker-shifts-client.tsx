@@ -94,7 +94,7 @@ export function WorkerShiftsClient() {
 
       setMessage(action === 'ACCEPTED' ? '✅ Invitation accepted. Facility will review your request.' : 'Invitation declined.');
       await loadInvitations();
-      await loadShifts();
+      await loadShifts({ keepMessage: true });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to respond to invitation');
     } finally {
@@ -102,9 +102,9 @@ export function WorkerShiftsClient() {
     }
   }
 
-  async function loadShifts() {
+  async function loadShifts(options?: { keepMessage?: boolean }) {
     setLoading(true);
-    setMessage('');
+    if (!options?.keepMessage) setMessage('');
 
     const params = new URLSearchParams();
     if (role) params.set('role', role);
@@ -225,7 +225,7 @@ export function WorkerShiftsClient() {
             </select>
           </div>
 
-          <button type="button" onClick={loadShifts} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
+          <button type="button" onClick={() => loadShifts()} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
             Search shifts
           </button>
         </div>

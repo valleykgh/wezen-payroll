@@ -107,7 +107,15 @@ export function FacilityNotificationsClient() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-extrabold text-slate-950">{item.title}</h3>
-              <p className="mt-2 text-sm font-semibold text-slate-700">{item.message}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-700">{cleanNotificationMessage(item.message)}</p>
+              {getNotificationLink(item.message) ? (
+                <Link
+                  href={getNotificationLink(item.message)}
+                  className="mt-3 inline-flex rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white"
+                >
+                  Open Related Shift
+                </Link>
+              ) : null}
               <p className="mt-3 text-xs font-bold text-slate-500">
                 {new Date(item.createdAt).toLocaleString()}
               </p>

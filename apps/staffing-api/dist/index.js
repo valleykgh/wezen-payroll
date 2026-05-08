@@ -2509,28 +2509,33 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
                     reviewNotes: 'Worker accepted facility invitation.',
                 },
             });
-            await createFacilityNotification({
-                facilityId: invitation.facilityId,
-                type: 'GENERAL',
-                title: action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation',
-                message: action === 'ACCEPTED'
-                    ? 'A worker accepted your shift invitation. Please review and approve the request.'
-                    : 'A worker declined your shift invitation.',
-            });
-            try {
-                const recipients = await getFacilityNotificationRecipients(invitation.facilityId);
-                if (recipients.length) {
-                    await sendEmail({
-                        to: recipients.join(','),
-                        subject: action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation',
-                        html: `<h2>${action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation'}</h2><p>Please log in to Wezen Staffing to review the shift invitation response.</p>`,
-                        text: `${action === 'ACCEPTED' ? 'Worker accepted shift invitation' : 'Worker declined shift invitation'}\nPlease log in to Wezen Staffing to review the shift invitation response.`,
-                    });
-                }
+        }
+        const relatedPath = `/facility/shifts/${invitation.shiftId}`;
+        const title = action === 'ACCEPTED'
+            ? 'Worker accepted shift invitation'
+            : 'Worker declined shift invitation';
+        const body = action === 'ACCEPTED'
+            ? 'A worker accepted your shift invitation. Please review and approve the request.'
+            : 'A worker declined your shift invitation.';
+        await createFacilityNotification({
+            facilityId: invitation.facilityId,
+            type: 'GENERAL',
+            title,
+            message: `${body}\nLink: ${relatedPath}`,
+        });
+        try {
+            const recipients = await getFacilityNotificationRecipients(invitation.facilityId);
+            if (recipients.length) {
+                await sendEmail({
+                    to: recipients.join(','),
+                    subject: title,
+                    html: `<h2>${title}</h2><p>${body}</p><p><a href="https://wezenstaffing.com${relatedPath}" style="display:inline-block;padding:12px 18px;background:#0891b2;color:white;text-decoration:none;border-radius:999px;font-weight:bold;">Open Related Shift</a></p>`,
+                    text: `${title}\n${body}\nOpen related shift: https://wezenstaffing.com${relatedPath}`,
+                });
             }
-            catch (emailError) {
-                console.error('Facility shift invitation response email failed:', emailError);
-            }
+        }
+        catch (emailError) {
+            console.error('Facility shift invitation response email failed:', emailError);
         }
         res.json({ data: updated, request });
     }
