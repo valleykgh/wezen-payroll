@@ -231,16 +231,17 @@ export function PostShiftForm() {
       params.set('role', nextRole);
       if (workerSearch.trim()) params.set('q', workerSearch.trim());
 
-      const endpoint = date
-        ? (() => {
-            params.set('startDate', date);
-            params.set('endDate', endDate || date);
-            params.set('shiftTypes', selectedShiftTypes.join(','));
-            return `/api/facility/available-workers?${params.toString()}`;
-          })()
-        : `/api/facility/workers/search?${params.toString()}`;
+      if (!date) {
+        throw new Error('Please select a start date before searching available workers.');
+      }
 
-      const res = await apiFetch<{ data: WorkerSearchResult[] }>(endpoint);
+      params.set('startDate', date);
+      params.set('endDate', endDate || date);
+      params.set('shiftTypes', selectedShiftTypes.join(','));
+
+      const res = await apiFetch<{ data: WorkerSearchResult[] }>(
+        `/api/facility/available-workers?${params.toString()}`
+      );
 
       setWorkers(res.data || []);
     } catch (error) {
