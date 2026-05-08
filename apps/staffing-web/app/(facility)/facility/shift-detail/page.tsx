@@ -74,8 +74,20 @@ export default function FacilityShiftDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
 
   async function load(id: string) {
-    const res = await apiFetch<{ data: ShiftDetail }>(`/api/facility/shifts/${id}`);
-    setDetail(res.data);
+    try {
+      const res = await apiFetch<{ data: ShiftDetail }>(`/api/facility/shifts/${id}`);
+
+      if (!res?.data) {
+        setDetail(null);
+        setMessage('This shift no longer exists or is no longer available.');
+        return;
+      }
+
+      setDetail(res.data);
+    } catch {
+      setDetail(null);
+      setMessage('This shift no longer exists or is no longer available.');
+    }
   }
 
   useEffect(() => {
@@ -204,25 +216,19 @@ export default function FacilityShiftDetailPage() {
   }
 
   if (!detail) {
-    useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 2500);
-    return () => clearTimeout(timer);
-  }, [message]);
-
-  return (
+    return (
       <div className="space-y-8">
         <div className="page-gradient rounded-[2rem] p-6">
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">
             Shift Detail
           </div>
           <h1 className="mt-2 text-3xl font-bold text-slate-950">
-            Review shift staffing
+            Shift unavailable
           </h1>
         </div>
 
-        <div className="rounded-[1.75rem] border border-slate-200 bg-white p-8 text-slate-600 shadow-sm">
-          {message}
+        <div className="rounded-[1.75rem] border border-rose-200 bg-rose-50 p-8 text-rose-800 shadow-sm">
+          {message || 'This shift no longer exists or is no longer available.'}
         </div>
       </div>
     );
