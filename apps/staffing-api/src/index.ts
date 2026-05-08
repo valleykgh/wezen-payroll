@@ -3293,6 +3293,107 @@ if (!facilityStatus.ok) {
 });
 
 
+
+app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(403).json({ error: 'Facility account not found' });
+    }
+
+    const facilityStatus = await ensureFacilityIsActive(facilityId);
+    if (!facilityStatus.ok) {
+      clearAuthCookie(res);
+      return res.status(403).json({ error: facilityStatus.error });
+    }
+
+    const requests = await prisma.shiftRequest.findMany({
+      where: {
+        status: { in: ['REQUESTED', 'UNDER_REVIEW', 'CANCELLATION_REQUESTED'] },
+        shift: { facilityId },
+      },
+      include: {
+        shift: { include: { facility: true } },
+        professional: { include: { user: true } },
+      },
+      orderBy: [{ requestedAt: 'desc' }],
+    });
+
+    const declinedInvites = await prisma.shiftInvitation.findMany({
+      where: {
+        facilityId,
+        status: 'DECLINED',
+      },
+      include: {
+        shift: { include: { facility: true } },
+        professional: { include: { user: true } },
+      },
+      orderBy: [{ respondedAt: 'desc' }],
+    });
+
+    const requestItems = requests.map((request) => ({
+      id: request.id,
+      type: 'REQUEST',
+      label:
+        request.status === 'CANCELLATION_REQUESTED'
+          ? 'Cancellation Requested'
+          : request.reviewNotes === 'Worker accepted facility invitation.'
+            ? 'Accepted Invite / Requested'
+            : 'Requested',
+      status: request.status,
+      route: `/app/facility/applicant-detail/index.html?requestId=${request.id}`,
+      createdAt: request.requestedAt,
+      workerName:
+        [request.professional.user.firstName, request.professional.user.lastName].filter(Boolean).join(' ') ||
+        request.professional.user.email,
+      workerEmail: request.professional.user.email,
+      workerRole: request.professional.role,
+      shift: {
+        id: request.shift.id,
+        role: request.shift.role,
+        shiftType: request.shift.shiftType,
+        date: request.shift.date,
+        time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+        facilityName: request.shift.facility.name,
+      },
+    }));
+
+    const declinedItems = declinedInvites.map((invite) => ({
+      id: invite.id,
+      type: 'DECLINED_INVITATION',
+      label: 'Rejected Invitation',
+      status: 'DECLINED',
+      route: `/app/facility/shift-detail/index.html?shiftId=${invite.shift.id}`,
+      createdAt: invite.respondedAt || invite.createdAt,
+      workerName:
+        [invite.professional.user.firstName, invite.professional.user.lastName].filter(Boolean).join(' ') ||
+        invite.professional.user.email,
+      workerEmail: invite.professional.user.email,
+      workerRole: invite.professional.role,
+      shift: {
+        id: invite.shift.id,
+        role: invite.shift.role,
+        shiftType: invite.shift.shiftType,
+        date: invite.shift.date,
+        time: `${invite.shift.startTimeLabel} - ${invite.shift.endTimeLabel}`,
+        facilityName: invite.shift.facility.name,
+      },
+    }));
+
+    const data = [...requestItems, ...declinedItems].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    res.json({ data });
+  } catch (error) {
+    console.error('GET /api/facility/review-items error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility review items' });
+  }
+});
+
+
 app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');

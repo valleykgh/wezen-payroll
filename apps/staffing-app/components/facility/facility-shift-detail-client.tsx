@@ -17,6 +17,20 @@ type ShiftDetail = {
   status: string;
   payRateLabel: string;
   specialInstructions?: string | null;
+  declinedInvitations?: Array<{
+    id: string;
+    respondedAt?: string | null;
+    message?: string | null;
+    professional: {
+      id: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email: string;
+      role: string;
+      city?: string | null;
+      state?: string | null;
+    };
+  }>;
   applicants: Array<{
     id: string;
     status: string;
@@ -186,6 +200,41 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
       </div>
 
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        {detail.declinedInvitations && detail.declinedInvitations.length > 0 ? (
+          <div className="mb-5 rounded-3xl border border-rose-200 bg-rose-50 p-4">
+            <h3 className="text-lg font-extrabold text-rose-950">Declined invitations</h3>
+            <p className="mt-1 text-sm font-semibold text-rose-800">
+              These workers declined this shift invitation.
+            </p>
+
+            <div className="mt-4 grid gap-3">
+              {detail.declinedInvitations.map((invite) => {
+                const workerName =
+                  [invite.professional.firstName, invite.professional.lastName]
+                    .filter(Boolean)
+                    .join(' ') || invite.professional.email;
+
+                return (
+                  <div key={invite.id} className="rounded-2xl bg-white p-4 ring-1 ring-rose-100">
+                    <div className="font-extrabold text-slate-950">{workerName}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-600">
+                      {invite.professional.role} • {invite.professional.email}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {[invite.professional.city, invite.professional.state].filter(Boolean).join(', ') || 'Location not listed'}
+                    </div>
+                    {invite.respondedAt ? (
+                      <div className="mt-2 text-xs font-extrabold text-rose-700">
+                        Declined: {new Date(invite.respondedAt).toLocaleString()}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <h3 className="text-lg font-bold text-slate-950">Applicants</h3>
 
         <div className="mt-4 grid gap-3">
