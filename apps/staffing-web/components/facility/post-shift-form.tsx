@@ -436,7 +436,14 @@ export function PostShiftForm() {
           <button
             type="button"
             disabled={submitting || !facilityId}
-            onClick={() => createShift('INVITE_ONLY')}
+            onClick={async () => {
+              setInviteMode(true);
+              setMessage('Search and select workers. The shift will only be created after you press Send Invite.');
+              await searchWorkers();
+              setTimeout(() => {
+                inviteSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 150);
+            }}
             className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? 'Working...' : 'Invite Workers First'}
