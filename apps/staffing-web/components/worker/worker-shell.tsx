@@ -14,6 +14,7 @@ const workerNav = [
   { href: '/worker/documents', label: 'Documents' },
   { href: '/worker/agreements', label: 'Agreements' },
   { href: '/worker/shifts', label: 'Find Shifts' },
+  { href: '/worker/availability', label: 'Availability' },
   { href: '/worker/requests', label: 'My Requests' },
   { href: '/worker/notifications', label: 'Notifications', badgeKey: 'notifications' },
   { href: '/worker/schedule', label: 'Schedule' },
