@@ -764,6 +764,7 @@ async function sendPushToUser(userId: string, title: string, body: string, data?
               sound: 'default',
             },
             ...(data || {}),
+            data: data || {},
           }));
         });
 

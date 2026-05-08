@@ -59,19 +59,14 @@ type Notification = {
 };
 
 export function FacilityNotificationsClient() {
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [items, setItems] = useState<Notification[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
 
   async function load() {
     try {
-      const [reviewRes, notificationRes] = await Promise.all([
-        apiFetch<{ data: ReviewItem[] }>('/api/facility/review-items'),
-        apiFetch<{ data: Notification[] }>('/api/facility/notifications'),
-      ]);
-      setReviewItems(reviewRes.data || []);
-      setItems(notificationRes.data || []);
+      const res = await apiFetch<{ data: Notification[] }>('/api/facility/notifications');
+      setItems(res.data || []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load alerts');
     }
@@ -129,46 +124,7 @@ export function FacilityNotificationsClient() {
           {message}
         </div>
       ) : null}
-
-      {reviewItems.length > 0 ? (
-        <div className="grid gap-3">
-          {reviewItems.map((item) => (
-            <button
-              key={`${item.type}-${item.id}`}
-              type="button"
-              onClick={() => {
-                window.location.href = item.route;
-              }}
-              className="rounded-3xl bg-white p-5 text-left shadow-sm ring-1 ring-slate-200"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div
-                    className={
-                      item.type === 'DECLINED_INVITATION'
-                        ? 'inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-extrabold text-rose-700'
-                        : 'inline-flex rounded-full bg-cyan-100 px-3 py-1 text-xs font-extrabold text-cyan-700'
-                    }
-                  >
-                    {item.label}
-                  </div>
-                  <div className="mt-3 text-lg font-extrabold text-slate-950">{item.workerName}</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-600">
-                    {item.workerRole} • {item.workerEmail}
-                  </div>
-                  <div className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
-                    {item.shift.role} {item.shift.shiftType}
-                    <br />
-                    {new Date(item.shift.date).toLocaleDateString()} • {item.shift.time}
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {items.length === 0 && reviewItems.length === 0 ? (
+      {items.length === 0 ? (
         <div className="rounded-3xl bg-white p-5 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">
           No facility alerts yet.
         </div>
