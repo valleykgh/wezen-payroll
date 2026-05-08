@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
@@ -23,6 +24,20 @@ type ShiftDetail = {
   status: string;
   payRateLabel: string;
   specialInstructions?: string | null;
+  declinedInvitations?: Array<{
+    id: string;
+    respondedAt?: string | null;
+    message?: string | null;
+    professional: {
+      id: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email: string;
+      role: string;
+      city?: string | null;
+      state?: string | null;
+    };
+  }>;
   applicants: Array<{
     id: string;
     status: string;
@@ -50,11 +65,8 @@ function formatShiftDate(dateValue: string) {
   return `${Number(month)}/${Number(day)}/${year}`;
 }
 
-export default function FacilityShiftDetailPage({
-  params,
-}: {
-  params: Promise<{ shiftId: string }>;
-}) {
+export default function FacilityShiftDetailPage() {
+  const params = useParams<{ shiftId: string }>();
   const [shiftId, setShiftId] = useState('');
   const [detail, setDetail] = useState<ShiftDetail | null>(null);
   const [message, setMessage] = useState('Loading shift detail...');
@@ -69,18 +81,19 @@ export default function FacilityShiftDetailPage({
   useEffect(() => {
     async function init() {
       try {
-        const resolved = await params;
-        setShiftId(resolved.shiftId);
-        await load(resolved.shiftId);
-        setMessage('');
+        const id = String(params?.shiftId || '');
+        if (!id) throw new Error('Shift id is missing.');
 
+        setShiftId(id);
+        await load(id);
+        setMessage('');
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Failed to load shift detail');
       }
     }
 
     init();
-  }, [params]);
+  }, [params?.shiftId]);
 
   async function updateRequest(requestId: string, action: 'approve' | 'reject') {
     try {
@@ -331,6 +344,41 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
 ) : null}      
 
         <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+          {detail.declinedInvitations && detail.declinedInvitations.length > 0 ? (
+            <div className="mb-6 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-5">
+              <h2 className="text-lg font-bold text-rose-950">Declined invitations</h2>
+              <p className="mt-1 text-sm text-rose-800">
+                These workers declined this shift invitation.
+              </p>
+
+              <div className="mt-4 grid gap-3">
+                {detail.declinedInvitations.map((invite) => {
+                  const name =
+                    [invite.professional.firstName, invite.professional.lastName]
+                      .filter(Boolean)
+                      .join(' ') || invite.professional.email;
+
+                  return (
+                    <div key={invite.id} className="rounded-2xl bg-white p-4 ring-1 ring-rose-100">
+                      <div className="font-bold text-slate-950">{name}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {invite.professional.role} • {invite.professional.email}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {[invite.professional.city, invite.professional.state].filter(Boolean).join(', ') || 'Location not listed'}
+                      </div>
+                      {invite.respondedAt ? (
+                        <div className="mt-2 text-xs font-semibold text-rose-700">
+                          Declined: {new Date(invite.respondedAt).toLocaleString()}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <h2 className="text-xl font-bold tracking-tight text-slate-950">
             Applicant queue
           </h2>

@@ -109,7 +109,7 @@ export default function FacilityNotificationsPage() {
                   href={getNotificationLink(item.message)}
                   className="mt-3 inline-flex rounded-full bg-cyan-600 px-4 py-2 text-xs font-bold text-white"
                 >
-                  Open Related Item
+                  {getNotificationActionLabel(item.title)}
                 </Link>
               ) : null}
               <p className="mt-3 text-xs font-semibold text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
