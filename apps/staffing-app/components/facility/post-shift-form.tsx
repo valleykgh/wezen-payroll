@@ -11,7 +11,21 @@ type WorkerSearchResult = {
   email: string;
   city?: string | null;
   state?: string | null;
+  availableDateCount?: number;
+  availabilities?: Array<{
+    date: string;
+    shiftType: string;
+    note?: string | null;
+  }>;
 };
+
+function formatAvailabilityDate(dateValue: string) {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
 
 function formatTimeLabel(value: string) {
   const raw = value.trim().toLowerCase();
@@ -126,9 +140,16 @@ export function PostShiftForm() {
     params.set('role', role);
     if (workerSearch.trim()) params.set('q', workerSearch.trim());
 
-    const res = await apiFetch<{ data: WorkerSearchResult[] }>(
-      `/api/facility/workers/search?${params.toString()}`
-    );
+    const endpoint = date
+      ? (() => {
+          params.set('startDate', date);
+          params.set('endDate', date);
+          params.set('shiftTypes', Array.isArray(shiftTypes) ? shiftTypes.join(',') : String(shiftTypes));
+          return `/api/facility/available-workers?${params.toString()}`;
+        })()
+      : `/api/facility/workers/search?${params.toString()}`;
+
+    const res = await apiFetch<{ data: WorkerSearchResult[] }>(endpoint);
     setWorkers(res.data || []);
   }
 
@@ -282,6 +303,24 @@ export function PostShiftForm() {
                   <p className="text-sm font-bold text-slate-950">{fullName}</p>
                   <p className="mt-1 text-xs text-slate-600">{worker.email}</p>
                   <p className="mt-2 text-xs font-bold text-cyan-800">{worker.role} • {[worker.city, worker.state].filter(Boolean).join(', ') || 'Location not listed'}</p>
+                  {worker.availabilities && worker.availabilities.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="w-full text-xs font-extrabold text-emerald-700">Available:</span>
+                      {worker.availabilities.map((item, index) => (
+                        <span
+                          key={`${worker.id}-${item.date}-${item.shiftType}-${index}`}
+                          className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700"
+                        >
+                          {formatAvailabilityDate(item.date)} {item.shiftType}
+                        </span>
+                      ))}
+                    </div>
+                  ) : date ? (
+                    <p className="mt-3 text-xs font-bold text-amber-700">
+                      No matching availability found for selected date/shift.
+                    </p>
+                  ) : null}
+
                   <p className="mt-2 text-xs font-extrabold text-slate-500">{selected ? 'Selected ✓' : 'Tap to select'}</p>
                 </button>
               );

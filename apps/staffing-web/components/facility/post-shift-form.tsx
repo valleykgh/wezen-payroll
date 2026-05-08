@@ -620,6 +620,14 @@ function normalizeTimeInput(value: string) {
   return `${hour12}:${String(minute).padStart(2, '0')} ${suffix}`;
 }
 
+function formatAvailabilityDate(dateValue: string) {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function formatTimeLabel(value: string) {
   return normalizeTimeInput(value);
 }
