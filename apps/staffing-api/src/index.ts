@@ -2438,7 +2438,12 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
 
     if (q) {
       params.push(`%${q}%`);
-      where.push(`(u.email ILIKE $${params.length} OR u."firstName" ILIKE $${params.length} OR u."lastName" ILIKE $${params.length})`);
+      where.push(`(
+        u.email ILIKE $${params.length}
+        OR u."firstName" ILIKE $${params.length}
+        OR u."lastName" ILIKE $${params.length}
+        OR CONCAT_WS(' ', u."firstName", u."lastName") ILIKE $${params.length}
+      )`);
     }
 
     const rows = await prisma.$queryRawUnsafe<any[]>(

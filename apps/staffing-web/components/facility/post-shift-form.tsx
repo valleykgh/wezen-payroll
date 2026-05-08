@@ -28,6 +28,12 @@ type WorkerSearchResult = {
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
+  availableDateCount?: number;
+  availabilities?: Array<{
+    date: string;
+    shiftType: string;
+    note?: string | null;
+  }>;
 };
 
 
@@ -512,6 +518,27 @@ export function PostShiftForm() {
                   <div className="mt-2 text-xs font-semibold text-cyan-800">
                     {worker.role} • {[worker.city, worker.state].filter(Boolean).join(', ') || 'Location not listed'}
                   </div>
+
+                  {worker.availabilities && worker.availabilities.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="w-full text-xs font-extrabold text-emerald-700">
+                        Available dates:
+                      </div>
+                      {worker.availabilities.map((item, index) => (
+                        <span
+                          key={`${worker.id}-${item.date}-${item.shiftType}-${index}`}
+                          className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700"
+                        >
+                          {formatAvailabilityDate(item.date)} {item.shiftType}
+                        </span>
+                      ))}
+                    </div>
+                  ) : date ? (
+                    <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                      No matching availability found for selected date/shift.
+                    </div>
+                  ) : null}
+
                   <div className="mt-2 text-xs font-bold text-slate-500">
                     {selected ? 'Selected ✓' : 'Tap to select'}
                   </div>
