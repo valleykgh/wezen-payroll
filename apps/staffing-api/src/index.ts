@@ -2465,7 +2465,7 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
       JOIN "User" u ON u.id = p."userId"
       WHERE ${where.join(' AND ')}
       GROUP BY p.id, u."firstName", u."lastName", u.email, p.role, p.city, p.state
-      HAVING COUNT(DISTINCT wa.date) >= $4
+      HAVING COUNT(DISTINCT wa.date) > 0
       ORDER BY u."lastName" ASC NULLS LAST, u."firstName" ASC NULLS LAST, u.email ASC
       `,
       ...params
@@ -3025,7 +3025,7 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
     const relatedPath =
       action === 'ACCEPTED'
         ? `/facility/applicants?shiftId=${invitation.shiftId}`
-        : '/facility/shifts';
+        : `/facility/shifts/${invitation.shiftId}`;
 
     const title =
       action === 'ACCEPTED'
@@ -5821,6 +5821,17 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
           },
           orderBy: [{ requestedAt: 'desc' }],
         },
+        invitations: {
+          where: { status: 'DECLINED' },
+          include: {
+            professional: {
+              include: {
+                user: true,
+              },
+            },
+          },
+          orderBy: [{ respondedAt: 'desc' }],
+        },
       },
     });
 
@@ -5876,6 +5887,20 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
           ? `$${(shift.payRateCents / 100).toFixed(2)}/hr`
           : 'Rate not listed',
         specialInstructions: shift.specialInstructions,
+        declinedInvitations: shift.invitations.map((invitation) => ({
+          id: invitation.id,
+          respondedAt: invitation.respondedAt,
+          message: invitation.message,
+          professional: {
+            id: invitation.professional.id,
+            firstName: invitation.professional.user.firstName,
+            lastName: invitation.professional.user.lastName,
+            email: invitation.professional.user.email,
+            role: invitation.professional.role,
+            city: invitation.professional.city,
+            state: invitation.professional.state,
+          },
+        })),
         applicants: shift.requests.map((request) => ({
           id: request.id,
           status: request.status,
