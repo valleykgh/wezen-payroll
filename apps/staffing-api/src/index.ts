@@ -3030,10 +3030,7 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
     const shiftDate = invitation.shift.date.toISOString().slice(0, 10);
     const shiftSummary = `${invitation.shift.role} ${invitation.shift.shiftType} on ${shiftDate} from ${invitation.shift.startTimeLabel} to ${invitation.shift.endTimeLabel}`;
 
-    const relatedPath =
-      action === 'ACCEPTED'
-        ? `/facility/applicants?shiftId=${invitation.shiftId}`
-        : `/facility/shifts/${invitation.shiftId}`;
+    const relatedPath = `/facility/shifts/${invitation.shiftId}`;
 
     const title =
       action === 'ACCEPTED'

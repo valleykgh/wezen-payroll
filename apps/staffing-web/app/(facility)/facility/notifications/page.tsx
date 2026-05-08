@@ -9,12 +9,26 @@ function getNotificationLink(message: string) {
   const match = message.match(/Link:\s*(\/[^\s]+)/);
   const raw = match?.[1] || '';
 
-  const oldShiftMatch = raw.match(/^\/facility\/shifts\/([^/?#]+)/);
-  if (oldShiftMatch) {
-    return `/facility/applicants?shiftId=${oldShiftMatch[1]}`;
+  const applicantsMatch = raw.match(/^\/facility\/applicants\?shiftId=([^&#\s]+)/);
+  if (applicantsMatch?.[1]) {
+    return `/facility/shifts/${applicantsMatch[1]}`;
+  }
+
+  const shiftMatch = raw.match(/^\/facility\/shifts\/([^/?#\s]+)/);
+  if (shiftMatch?.[1]) {
+    return `/facility/shifts/${shiftMatch[1]}`;
   }
 
   return raw;
+}
+
+function getNotificationActionLabel(title: string) {
+  const lower = title.toLowerCase();
+
+  if (lower.includes('accepted')) return 'Review Applicant';
+  if (lower.includes('declined')) return 'View Declined Worker';
+
+  return 'Open Related Item';
 }
 
 function cleanNotificationMessage(message: string) {
