@@ -2967,6 +2967,11 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
       where: { id: invitationId },
       include: {
         shift: true,
+        professional: {
+          include: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -3009,15 +3014,28 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
       });
     }
 
-    const relatedPath = `/facility/applicants?shiftId=${invitation.shiftId}`;
+    const workerName =
+      [invitation.professional.user.firstName, invitation.professional.user.lastName]
+        .filter(Boolean)
+        .join(' ') || invitation.professional.user.email || 'Worker';
+
+    const shiftDate = invitation.shift.date.toISOString().slice(0, 10);
+    const shiftSummary = `${invitation.shift.role} ${invitation.shift.shiftType} on ${shiftDate} from ${invitation.shift.startTimeLabel} to ${invitation.shift.endTimeLabel}`;
+
+    const relatedPath =
+      action === 'ACCEPTED'
+        ? `/facility/applicants?shiftId=${invitation.shiftId}`
+        : '/facility/shifts';
+
     const title =
       action === 'ACCEPTED'
         ? 'Worker accepted shift invitation'
         : 'Worker declined shift invitation';
+
     const body =
       action === 'ACCEPTED'
-        ? 'A worker accepted your shift invitation. Please review and approve the request.'
-        : 'A worker declined your shift invitation.';
+        ? `${workerName} accepted your invitation for ${shiftSummary}. Please review and approve the request.`
+        : `${workerName} declined your invitation for ${shiftSummary}.`;
 
     await createFacilityNotification({
       facilityId: invitation.facilityId,

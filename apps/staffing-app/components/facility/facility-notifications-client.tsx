@@ -122,7 +122,7 @@ export function FacilityNotificationsClient() {
                   href={getNotificationLink(item.message)}
                   className="mt-3 inline-flex rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white"
                 >
-                  Open Related Shift
+                  Open Related Item
                 </Link>
               ) : null}
               <p className="mt-3 text-xs font-bold text-slate-500">
