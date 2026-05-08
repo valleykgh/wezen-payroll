@@ -664,7 +664,7 @@ function calculateDistanceMiles(
 }
 
 
-async function sendPushToUser(userId: string, title: string, body: string) {
+async function sendPushToUser(userId: string, title: string, body: string, data?: Record<string, string>) {
   try {
     const tokens = await prisma.userDeviceToken.findMany({
       where: {
@@ -763,6 +763,7 @@ async function sendPushToUser(userId: string, title: string, body: string) {
               },
               sound: 'default',
             },
+            ...(data || {}),
           }));
         });
 
@@ -794,14 +795,14 @@ async function sendPushToUser(userId: string, title: string, body: string) {
   }
 }
 
-async function sendPushToFacilityAdmins(facilityId: string, title: string, body: string) {
+async function sendPushToFacilityAdmins(facilityId: string, title: string, body: string, data?: Record<string, string>) {
   const admins = await prisma.facilityAdmin.findMany({
     where: { facilityId },
     select: { userId: true },
   });
 
   await Promise.all(
-    admins.map((admin) => sendPushToUser(admin.userId, title, body))
+    admins.map((admin) => sendPushToUser(admin.userId, title, body, data))
   );
 }
 
@@ -835,6 +836,7 @@ async function createFacilityNotification(params: {
   type: NotificationType;
   title: string;
   message: string;
+  pushData?: Record<string, string>;
 }) {
   await prisma.facilityNotification.create({
     data: {
@@ -845,7 +847,7 @@ async function createFacilityNotification(params: {
     },
   });
 
-  await sendPushToFacilityAdmins(params.facilityId, params.title, params.message);
+  await sendPushToFacilityAdmins(params.facilityId, params.title, params.message, params.pushData);
 }
 
 
@@ -3047,6 +3049,13 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
       type: 'GENERAL',
       title,
       message: `${body}\nLink: ${relatedPath}`,
+      pushData: {
+        route:
+          action === 'ACCEPTED'
+            ? `/app/facility/shift-detail/index.html?shiftId=${invitation.shiftId}`
+            : `/app/facility/shift-detail/index.html?shiftId=${invitation.shiftId}`,
+        shiftId: invitation.shiftId,
+      },
     });
 
     try {
