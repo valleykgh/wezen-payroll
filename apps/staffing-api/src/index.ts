@@ -3009,7 +3009,7 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
       });
     }
 
-    const relatedPath = `/facility/shifts/${invitation.shiftId}`;
+    const relatedPath = `/facility/applicants?shiftId=${invitation.shiftId}`;
     const title =
       action === 'ACCEPTED'
         ? 'Worker accepted shift invitation'

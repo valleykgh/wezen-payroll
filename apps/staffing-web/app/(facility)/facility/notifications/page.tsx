@@ -7,7 +7,14 @@ import { apiFetch } from '@/lib/api-client';
 
 function getNotificationLink(message: string) {
   const match = message.match(/Link:\s*(\/[^\s]+)/);
-  return match?.[1] || '';
+  const raw = match?.[1] || '';
+
+  const oldShiftMatch = raw.match(/^\/facility\/shifts\/([^/?#]+)/);
+  if (oldShiftMatch) {
+    return `/facility/applicants?shiftId=${oldShiftMatch[1]}`;
+  }
+
+  return raw;
 }
 
 function cleanNotificationMessage(message: string) {

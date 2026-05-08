@@ -6,8 +6,17 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 function getNotificationLink(message: string) {
-  const match = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
-  return match?.[1] ? `/app/facility/shift-detail/index.html?shiftId=${match[1]}` : '';
+  const applicantsMatch = message.match(/Link:\s*\/facility\/applicants\?shiftId=([^\s]+)/);
+  if (applicantsMatch?.[1]) {
+    return `/app/facility/applicants/index.html?shiftId=${applicantsMatch[1]}`;
+  }
+
+  const oldShiftMatch = message.match(/Link:\s*\/facility\/shifts\/([^\s]+)/);
+  if (oldShiftMatch?.[1]) {
+    return `/app/facility/applicants/index.html?shiftId=${oldShiftMatch[1]}`;
+  }
+
+  return '';
 }
 
 function cleanNotificationMessage(message: string) {
