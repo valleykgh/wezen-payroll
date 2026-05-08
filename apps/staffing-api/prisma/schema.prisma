@@ -194,6 +194,7 @@ model ProfessionalProfile {
   facilityDnrs  FacilityDnr[]
   notifications WorkerNotification[]
   shiftInvitations ShiftInvitation[]
+  availabilities WorkerAvailability[]
 }
 
 model ProfessionalDocument {
@@ -295,6 +296,22 @@ model ShiftRequest {
   professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
   @@unique([shiftId, professionalId])
+}
+
+model WorkerAvailability {
+  id             String    @id @default(cuid())
+  professionalId String
+  date           DateTime
+  shiftType      ShiftType
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, date, shiftType])
+  @@index([date, shiftType])
+  @@index([professionalId])
 }
 
 model ShiftInvitation {

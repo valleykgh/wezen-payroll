@@ -2242,6 +2242,251 @@ const facilityWorkerSearchSchema = z.object({
   role: z.nativeEnum(ClinicianRole).optional(),
 });
 
+
+function availabilityDateRange(startDateRaw: string, endDateRaw?: string) {
+  const start = new Date(`${startDateRaw}T12:00:00.000Z`);
+  const end = endDateRaw ? new Date(`${endDateRaw}T12:00:00.000Z`) : start;
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  const current = new Date(start);
+
+  while (current <= end) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+function cleanShiftTypes(value: unknown) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || '')
+        .split(',')
+        .map((item) => item.trim());
+
+  return raw.filter((item): item is 'AM' | 'PM' | 'NOC' =>
+    item === 'AM' || item === 'PM' || item === 'NOC'
+  );
+}
+
+app.get('/api/worker/availability', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || startDate || '');
+
+    if (!startDate) {
+      return res.status(400).json({ error: 'startDate is required' });
+    }
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT id, "professionalId", to_char(date, 'YYYY-MM-DD') AS date, "shiftType", note, "createdAt", "updatedAt"
+      FROM "WorkerAvailability"
+      WHERE "professionalId" = $1
+        AND date >= $2::date
+        AND date <= $3::date
+      ORDER BY date ASC, "shiftType" ASC
+      `,
+      professionalId,
+      startDate,
+      endDate
+    );
+
+    res.json({ data: rows });
+  } catch (error) {
+    console.error('GET /api/worker/availability error:', error);
+    res.status(500).json({ error: 'Failed to fetch availability' });
+  }
+});
+
+app.put('/api/worker/availability', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
+
+    if (!professionalId) {
+      return res.status(404).json({ error: 'Professional profile not found' });
+    }
+
+    const startDate = String(req.body?.startDate || '');
+    const endDate = String(req.body?.endDate || startDate || '');
+    const datesInRange = availabilityDateRange(startDate, endDate);
+
+    if (!datesInRange.length) {
+      return res.status(400).json({ error: 'Valid startDate and endDate are required' });
+    }
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `
+        DELETE FROM "WorkerAvailability"
+        WHERE "professionalId" = $1
+          AND date >= $2::date
+          AND date <= $3::date
+        `,
+        professionalId,
+        startDate,
+        endDate
+      );
+
+      for (const item of items) {
+        const date = String(item?.date || '');
+        if (!datesInRange.includes(date)) continue;
+
+        const shiftTypes = cleanShiftTypes(item?.shiftTypes || item?.shiftType);
+        const note = item?.note ? String(item.note) : null;
+
+        for (const shiftType of shiftTypes) {
+          await tx.$executeRawUnsafe(
+            `
+            INSERT INTO "WorkerAvailability" ("id", "professionalId", date, "shiftType", note, "createdAt", "updatedAt")
+            VALUES ($1, $2, $3::date, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT ("professionalId", date, "shiftType")
+            DO UPDATE SET note = EXCLUDED.note, "updatedAt" = CURRENT_TIMESTAMP
+            `,
+            `avail_${randomBytes(12).toString('hex')}`,
+            professionalId,
+            date,
+            shiftType,
+            note
+          );
+        }
+      }
+    });
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT id, "professionalId", to_char(date, 'YYYY-MM-DD') AS date, "shiftType", note, "createdAt", "updatedAt"
+      FROM "WorkerAvailability"
+      WHERE "professionalId" = $1
+        AND date >= $2::date
+        AND date <= $3::date
+      ORDER BY date ASC, "shiftType" ASC
+      `,
+      professionalId,
+      startDate,
+      endDate
+    );
+
+    res.json({ data: rows });
+  } catch (error) {
+    console.error('PUT /api/worker/availability error:', error);
+    res.status(500).json({ error: 'Failed to save availability' });
+  }
+});
+
+async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facility' | 'admin') {
+  try {
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || startDate || '');
+    const role = String(req.query.role || '');
+    const q = String(req.query.q || '').trim();
+    const shiftTypes = cleanShiftTypes(req.query.shiftTypes || req.query.shiftType);
+
+    const datesInRange = availabilityDateRange(startDate, endDate);
+
+    if (!datesInRange.length) {
+      return res.status(400).json({ error: 'Valid startDate and endDate are required' });
+    }
+
+    if (!shiftTypes.length) {
+      return res.status(400).json({ error: 'At least one shiftType is required' });
+    }
+
+    let facilityId = '';
+
+    if (scope === 'facility') {
+      facilityId = await getFacilityIdForUser(req.authUser!.userId) || '';
+
+      if (!facilityId) {
+        return res.status(404).json({ error: 'Facility admin not found' });
+      }
+
+      const facilityStatus = await ensureFacilityIsActive(facilityId);
+      if (!facilityStatus.ok) {
+        clearAuthCookie(res);
+        return res.status(403).json({ error: facilityStatus.error });
+      }
+    }
+
+    const params: any[] = [startDate, endDate, shiftTypes, datesInRange.length];
+    const where: string[] = [
+      `wa.date >= $1::date`,
+      `wa.date <= $2::date`,
+      `wa."shiftType" = ANY($3::text[])`,
+      `p."approvedByWezen" = true`,
+      `u."isActive" = true`,
+      `u."isSystemUser" = false`,
+    ];
+
+    if (role && ['CNA', 'LVN', 'RN'].includes(role)) {
+      params.push(role);
+      where.push(`p.role = $${params.length}`);
+    }
+
+    if (q) {
+      params.push(`%${q}%`);
+      where.push(`(u.email ILIKE $${params.length} OR u."firstName" ILIKE $${params.length} OR u."lastName" ILIKE $${params.length})`);
+    }
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT
+        p.id,
+        u."firstName",
+        u."lastName",
+        u.email,
+        p.role,
+        p.city,
+        p.state,
+        COUNT(DISTINCT wa.date)::int AS "availableDateCount",
+        json_agg(
+          json_build_object(
+            'date', to_char(wa.date, 'YYYY-MM-DD'),
+            'shiftType', wa."shiftType",
+            'note', wa.note
+          )
+          ORDER BY wa.date ASC, wa."shiftType" ASC
+        ) AS availabilities
+      FROM "WorkerAvailability" wa
+      JOIN "ProfessionalProfile" p ON p.id = wa."professionalId"
+      JOIN "User" u ON u.id = p."userId"
+      WHERE ${where.join(' AND ')}
+      GROUP BY p.id, u."firstName", u."lastName", u.email, p.role, p.city, p.state
+      HAVING COUNT(DISTINCT wa.date) >= $4
+      ORDER BY u."lastName" ASC NULLS LAST, u."firstName" ASC NULLS LAST, u.email ASC
+      `,
+      ...params
+    );
+
+    res.json({ data: rows });
+  } catch (error) {
+    console.error(`${scope} available workers error:`, error);
+    res.status(500).json({ error: 'Failed to fetch available workers' });
+  }
+}
+
+app.get('/api/facility/available-workers', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  return findAvailableWorkers(req, res, 'facility');
+});
+
+app.get('/api/admin/available-workers', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  return findAvailableWorkers(req, res, 'admin');
+});
+
+
 app.get('/api/facility/workers/search', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
   const parsed = facilityWorkerSearchSchema.safeParse({
     q: req.query.q,
