@@ -211,23 +211,25 @@ export default function AdminShiftsPage() {
                 </div>
               </div>
 
-              <div className="flex w-full flex-col gap-3 lg:w-56">
-                <button
-                  onClick={() => cancelShift(shift.id)}
-                  disabled={busyId === shift.id || shift.status === 'CANCELLED'}
-                  className="inline-flex items-center justify-center rounded-full bg-amber-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
-                >
-                  {busyId === shift.id ? 'Working...' : 'Cancel Shift'}
-                </button>
+              {isDefaultAdmin ? (
+                <div className="flex w-full flex-col gap-3 lg:w-56">
+                  <button
+                    onClick={() => cancelShift(shift.id)}
+                    disabled={busyId === shift.id || shift.status === 'CANCELLED'}
+                    className="inline-flex items-center justify-center rounded-full bg-amber-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {busyId === shift.id ? 'Working...' : 'Cancel Shift'}
+                  </button>
 
-                <button
-                  onClick={() => deleteShift(shift.id)}
-                  disabled={busyId === shift.id}
-                  className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-                >
-                  {busyId === shift.id ? 'Working...' : 'Delete Shift'}
-                </button>
-              </div>
+                  <button
+                    onClick={() => deleteShift(shift.id)}
+                    disabled={busyId === shift.id}
+                    className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    {busyId === shift.id ? 'Working...' : 'Delete Shift'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
