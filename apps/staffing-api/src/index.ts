@@ -1004,10 +1004,11 @@ async function getWorkerDashboardData(userId: string) {
     return null;
   }
 
-  const approvedDocs = professional.documents.filter((doc) => doc.status === 'APPROVED').length;
-  const pendingDocs = professional.documents.filter((doc) => doc.status === 'PENDING').length;
-  const rejectedDocs = professional.documents.filter((doc) => doc.status === 'REJECTED').length;
-  const expiredDocs = professional.documents.filter((doc) => doc.status === 'EXPIRED').length;
+  const currentDocuments = getCurrentDocumentsByCategory(professional.documents);
+  const approvedDocs = currentDocuments.filter((doc) => doc.status === 'APPROVED' && !isDocumentExpired(doc)).length;
+  const pendingDocs = currentDocuments.filter((doc) => doc.status === 'PENDING').length;
+  const rejectedDocs = currentDocuments.filter((doc) => doc.status === 'REJECTED').length;
+  const expiredDocs = currentDocuments.filter((doc) => doc.status === 'EXPIRED' || isDocumentExpired(doc)).length;
 
   const ica = professional.agreements.find((agreement) => agreement.agreementType === 'ICA');
   const eligibility = await getWorkerEligibility(professional.id);
@@ -1067,7 +1068,7 @@ async function getWorkerDashboardData(userId: string) {
         pending: pendingDocs,
         rejected: rejectedDocs,
         expired: expiredDocs,
-        total: professional.documents.length,
+        total: currentDocuments.length,
       },
       agreementStatus: ica?.status ?? 'NOT_STARTED',
       requests: {
