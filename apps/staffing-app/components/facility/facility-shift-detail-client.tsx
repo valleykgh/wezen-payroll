@@ -266,6 +266,13 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
                   </span>
                 </div>
 
+                <Link
+                  href={`/app/facility/applicant-detail/index.html?requestId=${request.id}`}
+                  className="mt-4 block rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-3 text-center text-sm font-extrabold text-cyan-800"
+                >
+                  Review Applicant Details / View Documents
+                </Link>
+
                 {request.status === 'CANCELLATION_REQUESTED' ? (
                   <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                     <p className="text-sm font-bold text-amber-900">

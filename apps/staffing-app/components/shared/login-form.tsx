@@ -27,7 +27,7 @@ export function LoginForm({ next = '' }: LoginFormProps) {
 
         if (role === 'INTERNAL_ADMIN') {
           window.location.replace('/app/admin/index.html');
-        } else if (role === 'FACILITY_ADMIN') {
+        } else if ((role === 'FACILITY_ADMIN' || role === 'FACILITY_STAFF')) {
           window.location.replace('/app/facility/index.html');
         } else if (role === 'PROFESSIONAL') {
           window.location.replace('/app/worker/index.html');
@@ -62,7 +62,7 @@ async function handleSubmit(e: React.FormEvent) {
 
     if (role === 'INTERNAL_ADMIN') {
   target = '/app/admin/index.html';
-} else if (role === 'FACILITY_ADMIN') {
+} else if ((role === 'FACILITY_ADMIN' || role === 'FACILITY_STAFF')) {
   target = '/app/facility/index.html';
 } else if (role === 'PROFESSIONAL') {
   target = '/app/worker/index.html';

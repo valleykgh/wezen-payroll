@@ -4,6 +4,7 @@ import { Preferences } from '@capacitor/preferences';
 export type StaffingUserRole =
   | 'PROFESSIONAL'
   | 'FACILITY_ADMIN'
+  | 'FACILITY_STAFF'
   | 'INTERNAL_ADMIN';
 
 export type StaffingUser = {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { meRequest } from '@/lib/auth-client';
 
 type RoleGuardProps = {
-  allowed: Array<'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN'>;
+  allowed: Array<'PROFESSIONAL' | 'FACILITY_ADMIN' | 'FACILITY_STAFF' | 'INTERNAL_ADMIN'>;
   children: React.ReactNode;
 };
 
@@ -19,7 +19,7 @@ export function RoleGuard({ allowed, children }: RoleGuardProps) {
 
         if (!allowed.includes(role)) {
           if (role === 'PROFESSIONAL') window.location.assign('/app/worker/index.html');
-          else if (role === 'FACILITY_ADMIN') window.location.assign('/app/facility/index.html');
+          else if (role === 'FACILITY_ADMIN' || role === 'FACILITY_STAFF') window.location.assign('/app/facility/index.html');
           else if (role === 'INTERNAL_ADMIN') window.location.assign('/app/admin/index.html');
           else window.location.assign('/login/index.html');
           return;

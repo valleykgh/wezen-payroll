@@ -32,7 +32,7 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   mode === 'worker' && currentUser.role === 'PROFESSIONAL';
 
 const isFacilityAllowed =
-  mode === 'facility' && currentUser.role === 'FACILITY_ADMIN';
+  mode === 'facility' && ['FACILITY_ADMIN', 'FACILITY_STAFF'].includes(currentUser.role);
 
 const isAdminAllowed =
   mode === 'admin' && currentUser.role === 'INTERNAL_ADMIN';	
@@ -49,7 +49,7 @@ const isAdminAllowed =
   return;
 }
 
-if (currentUser.role === 'FACILITY_ADMIN') {
+if (currentUser.role === 'FACILITY_ADMIN' || currentUser.role === 'FACILITY_STAFF') {
   router.replace('/facility/dashboard');
   return;
 }
