@@ -43,7 +43,14 @@ export function WorkerDocumentsClient() {
         `/api/worker/documents?professionalId=${encodeURIComponent(id)}`
       );
 
-      setDocuments(res.data || []);
+      setDocuments(
+        (res.data || []).filter(
+          (doc) =>
+            doc.status !== 'EXPIRED' &&
+            !doc.name.includes('-old') &&
+            !(doc.expiresAt && new Date(doc.expiresAt).getTime() < Date.now())
+        )
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load documents');
     } finally {
