@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 
 type InternalAdmin = {
   id: string;
@@ -19,6 +20,7 @@ export default function InternalAdminsPage() {
   const [items, setItems] = useState<InternalAdmin[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
   const [email, setEmail] = useState('');
   const [notificationEmail, setNotificationEmail] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -36,7 +38,10 @@ export default function InternalAdminsPage() {
 
   useEffect(() => {
     loadAdmins();
+    meRequest().then((res) => setCurrentUser(res.data)).catch(() => setCurrentUser(null));
   }, []);
+
+  const isDefaultAdmin = currentUser?.email?.toLowerCase() === 'admin@wezenstaffing.com';
 
   async function createAdmin() {
     try {
@@ -114,7 +119,11 @@ export default function InternalAdminsPage() {
           Internal Admins
         </div>
         <h1 className="mt-2 text-3xl font-bold text-slate-950">Manage internal admins</h1>
-        <p className="mt-2 text-slate-600">Create, disable, or delete Wezen internal admin users.</p>
+        <p className="mt-2 text-slate-600">
+          {isDefaultAdmin
+            ? 'Create, disable, or delete Wezen internal admin users.'
+            : 'View internal admin users. Delete and disable actions are limited to the default admin.'}
+        </p>
       </div>
 
       {message ? (
@@ -123,6 +132,7 @@ export default function InternalAdminsPage() {
         </div>
       ) : null}
 
+      {isDefaultAdmin ? (
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold text-slate-950">Add internal admin</h2>
 
@@ -138,6 +148,7 @@ export default function InternalAdminsPage() {
           Create Internal Admin
         </button>
       </section>
+      ) : null}
 
       <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold text-slate-950">Current internal admins</h2>
@@ -160,23 +171,25 @@ export default function InternalAdminsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setActive(item.id, !item.isActive)}
-                    disabled={busy || item.isSystemUser}
-                    className={item.isActive ? 'rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60' : 'rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60'}
-                  >
-                    {item.isActive ? 'Disable' : 'Activate'}
-                  </button>
+                {isDefaultAdmin ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setActive(item.id, !item.isActive)}
+                      disabled={busy || item.isSystemUser}
+                      className={item.isActive ? 'rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60' : 'rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60'}
+                    >
+                      {item.isActive ? 'Disable' : 'Activate'}
+                    </button>
 
-                  <button
-                    onClick={() => deleteAdmin(item.id, item.email)}
-                    disabled={busy || item.isSystemUser}
-                    className="rounded-full border border-rose-300 bg-white px-5 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
-                  >
-                    Delete
-                  </button>
-                </div>
+                    <button
+                      onClick={() => deleteAdmin(item.id, item.email)}
+                      disabled={busy || item.isSystemUser}
+                      className="rounded-full border border-rose-300 bg-white px-5 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
