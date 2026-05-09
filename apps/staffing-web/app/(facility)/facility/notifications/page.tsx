@@ -3,18 +3,27 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
-function getNotificationLink(message: string) {
+function getNotificationLink(message: string, title = '') {
   const match = message.match(/Link:\s*(\/[^\s]+)/);
   const raw = match?.[1] || '';
+  const lower = `${title} ${message}`.toLowerCase();
 
   const applicantsMatch = raw.match(/^\/facility\/applicants\?shiftId=([^&#\s]+)/);
   if (applicantsMatch?.[1]) {
-    return `/facility/shift-detail/?shiftId=${applicantsMatch[1]}`;
+    if (lower.includes('declined')) {
+      return `/facility/shift-detail?shiftId=${applicantsMatch[1]}`;
+    }
+
+    return `/facility/applicants?shiftId=${applicantsMatch[1]}`;
   }
 
   const shiftMatch = raw.match(/^\/facility\/shifts\/([^/?#\s]+)/);
   if (shiftMatch?.[1]) {
-    return `/facility/shift-detail/?shiftId=${shiftMatch[1]}`;
+    if (lower.includes('declined')) {
+      return `/facility/shift-detail?shiftId=${shiftMatch[1]}`;
+    }
+
+    return `/facility/applicants?shiftId=${shiftMatch[1]}`;
   }
 
   return raw;
@@ -102,11 +111,11 @@ export default function FacilityNotificationsPage() {
             <div>
               <h2 className="text-lg font-bold text-slate-950">{item.title}</h2>
               <p className="mt-2 text-sm text-slate-700">{cleanNotificationMessage(item.message)}</p>
-              {getNotificationLink(item.message) ? (
+              {getNotificationLink(item.message, item.title) ? (
                 <button
                   type="button"
                   onClick={() => {
-                    window.location.href = getNotificationLink(item.message);
+                    window.location.href = getNotificationLink(item.message, item.title);
                   }}
                   className="mt-3 inline-flex rounded-full bg-cyan-600 px-4 py-2 text-xs font-bold text-white"
                 >

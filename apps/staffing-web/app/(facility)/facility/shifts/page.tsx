@@ -526,12 +526,14 @@ export default function FacilityShiftsPage() {
               </div>
 
               <div className="flex w-full flex-col gap-3 lg:w-56">
-                <Link
-                  href={`/facility/applicants?shiftId=${shift.id}`}
-                  className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                >
-                  Review Applicants
-                </Link>
+                {((shift.pendingCount ?? 0) > 0 || (shift.fillCount ?? 0) > 0) ? (
+                  <Link
+                    href={`/facility/applicants?shiftId=${shift.id}`}
+                    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                  >
+                    Review Applicants
+                  </Link>
+                ) : null}
 	    
 	        {['OPEN', 'FILLED', 'INVITE_ONLY'].includes(shift.status) && shift.fillCount === 0 ? (
   <Link
