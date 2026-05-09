@@ -37,6 +37,7 @@ export default function AdminShiftRequestsPage() {
   const [message, setMessage] = useState('Loading shift requests...');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
+  const isDefaultAdmin = currentUser?.email?.toLowerCase() === 'admin@wezenstaffing.com';
 
   async function load() {
     const res = await apiFetch<{ data: AdminShiftRequest[] }>('/api/admin/shift-requests');
