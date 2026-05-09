@@ -130,22 +130,28 @@ export function FacilityNotificationsClient() {
         </div>
       ) : null}
 
-      {items.map((item) => (
+      {items.map((item) => {
+        const link = getNotificationLink(item.message);
+
+        return (
         <div
           key={item.id}
+          onClick={() => {
+            if (link) window.location.href = link;
+          }}
           className={
             item.isRead
-              ? 'rounded-3xl bg-white p-5 ring-1 ring-slate-200'
-              : 'rounded-3xl border-2 border-rose-300 bg-rose-50 p-5'
+              ? `rounded-3xl bg-white p-5 ring-1 ring-slate-200 ${link ? 'cursor-pointer' : ''}`
+              : `rounded-3xl border-2 border-rose-300 bg-rose-50 p-5 ${link ? 'cursor-pointer' : ''}`
           }
         >
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-extrabold text-slate-950">{item.title}</h3>
               <p className="mt-2 text-sm font-semibold text-slate-700">{cleanNotificationMessage(item.message)}</p>
-              {getNotificationLink(item.message) ? (
+              {link ? (
                 <a
-                  href={getNotificationLink(item.message)}
+                  href={link}
                   className="mt-3 block w-full rounded-2xl bg-cyan-700 px-4 py-3 text-center text-sm font-bold text-white"
                 >
                   {getNotificationActionLabel(item.title)}
@@ -165,7 +171,10 @@ export function FacilityNotificationsClient() {
           {!item.isRead ? (
             <button
               type="button"
-              onClick={() => markRead(item.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                markRead(item.id);
+              }}
               disabled={busy === item.id}
               className="mt-4 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
             >
@@ -173,7 +182,8 @@ export function FacilityNotificationsClient() {
             </button>
           ) : null}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

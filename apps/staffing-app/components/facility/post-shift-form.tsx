@@ -13,6 +13,7 @@ type WorkerSearchResult = {
   state?: string | null;
   availableDateCount?: number;
   availabilities?: Array<{
+    id: string;
     date: string;
     shiftType: string;
     note?: string | null;
@@ -73,6 +74,7 @@ export function PostShiftForm() {
   const [workerSearch, setWorkerSearch] = useState('');
   const [workers, setWorkers] = useState<WorkerSearchResult[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [selectedAvailabilityIds, setSelectedAvailabilityIds] = useState<string[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const inviteSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -160,17 +162,21 @@ export function PostShiftForm() {
     );
   }
 
-  function toggleWorker(workerId: string) {
+  function toggleAvailability(workerId: string, availabilityId: string) {
+    setSelectedAvailabilityIds((current) =>
+      current.includes(availabilityId)
+        ? current.filter((id) => id !== availabilityId)
+        : [...current, availabilityId]
+    );
+
     setSelectedWorkerIds((current) =>
-      current.includes(workerId)
-        ? current.filter((id) => id !== workerId)
-        : [...current, workerId]
+      current.includes(workerId) ? current : [...current, workerId]
     );
   }
 
   async function inviteSelectedWorkers() {
     try {
-      if (selectedWorkerIds.length === 0) throw new Error('Select at least one worker.');
+      if (selectedAvailabilityIds.length === 0) throw new Error('Select at least one availability slot.');
       if (!date) throw new Error('Start date is required.');
       if (shiftTypes.length === 0) throw new Error('Select at least one shift type.');
 
@@ -185,6 +191,7 @@ export function PostShiftForm() {
           role,
           shiftTypes,
           professionalIds: selectedWorkerIds,
+          availabilityIds: selectedAvailabilityIds,
           workersNeeded,
           message: inviteMessage || undefined,
         }),
@@ -194,6 +201,7 @@ export function PostShiftForm() {
       setInviteMode(false);
       setWorkers([]);
       setSelectedWorkerIds([]);
+      setSelectedAvailabilityIds([]);
       setInviteMessage('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to send invitations');
@@ -311,25 +319,34 @@ export function PostShiftForm() {
 
           <div className="mt-3 grid gap-3">
             {workers.map((worker) => {
-              const selected = selectedWorkerIds.includes(worker.id);
               const fullName = [worker.firstName, worker.lastName].filter(Boolean).join(' ') || worker.email;
+              const selectedCount = (worker.availabilities || []).filter((item) => selectedAvailabilityIds.includes(item.id)).length;
 
               return (
-                <button key={worker.id} type="button" onClick={() => toggleWorker(worker.id)} className={selected ? 'rounded-2xl border-2 border-cyan-700 bg-white p-4 text-left' : 'rounded-2xl border border-cyan-200 bg-white p-4 text-left'}>
+                <div key={worker.id} className={selectedCount > 0 ? 'rounded-2xl border-2 border-cyan-700 bg-white p-4 text-left' : 'rounded-2xl border border-cyan-200 bg-white p-4 text-left'}>
                   <p className="text-sm font-bold text-slate-950">{fullName}</p>
                   <p className="mt-1 text-xs text-slate-600">{worker.email}</p>
                   <p className="mt-2 text-xs font-bold text-cyan-800">{worker.role} • {[worker.city, worker.state].filter(Boolean).join(', ') || 'Location not listed'}</p>
                   {worker.availabilities && worker.availabilities.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="w-full text-xs font-extrabold text-emerald-700">Available:</span>
-                      {worker.availabilities.map((item, index) => (
-                        <span
-                          key={`${worker.id}-${item.date}-${item.shiftType}-${index}`}
-                          className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700"
-                        >
-                          {formatAvailabilityDate(item.date)} {item.shiftType}
-                        </span>
-                      ))}
+                    <div className="mt-3 grid gap-2">
+                      <span className="w-full text-xs font-extrabold text-emerald-700">Select availability:</span>
+                      {worker.availabilities.map((item) => {
+                        const checked = selectedAvailabilityIds.includes(item.id);
+                        return (
+                          <label
+                            key={`${worker.id}-${item.id}`}
+                            className={checked ? 'flex items-center justify-between rounded-2xl border border-cyan-300 bg-cyan-50 px-3 py-3 text-xs font-extrabold text-cyan-800' : 'flex items-center justify-between rounded-2xl bg-emerald-50 px-3 py-3 text-xs font-extrabold text-emerald-700'}
+                          >
+                            <span>{formatAvailabilityDate(item.date)} {item.shiftType}</span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleAvailability(worker.id, item.id)}
+                              className="h-5 w-5"
+                            />
+                          </label>
+                        );
+                      })}
                     </div>
                   ) : date ? (
                     <p className="mt-3 text-xs font-bold text-amber-700">
@@ -337,13 +354,13 @@ export function PostShiftForm() {
                     </p>
                   ) : null}
 
-                  <p className="mt-2 text-xs font-extrabold text-slate-500">{selected ? 'Selected ✓' : 'Tap to select'}</p>
-                </button>
+                  <p className="mt-2 text-xs font-extrabold text-slate-500">{selectedCount > 0 ? `${selectedCount} selected` : 'Select one or more slots'}</p>
+                </div>
               );
             })}
           </div>
 
-          <button type="button" onClick={inviteSelectedWorkers} disabled={loading || selectedWorkerIds.length === 0} className="mt-4 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60">
+          <button type="button" onClick={inviteSelectedWorkers} disabled={loading || selectedAvailabilityIds.length === 0} className="mt-4 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60">
             Send Invite{selectedWorkerIds.length ? ` (${selectedWorkerIds.length})` : ''}
           </button>
         </div>
