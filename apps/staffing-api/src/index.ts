@@ -724,6 +724,35 @@ function getCurrentDocumentsByCategory<T extends {
 }
 
 
+async function isDefaultInternalAdmin(userId?: string | null) {
+  if (!userId) return false;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, role: true, isActive: true },
+  });
+
+  return Boolean(
+    user &&
+      user.isActive &&
+      user.role === UserRole.INTERNAL_ADMIN &&
+      user.email.toLowerCase() === 'admin@wezenstaffing.com'
+  );
+}
+
+async function requireDefaultInternalAdmin(req: AuthedRequest, res: any) {
+  const allowed = await isDefaultInternalAdmin(req.authUser?.userId);
+
+  if (!allowed) {
+    res.status(403).json({
+      error: 'Only the default admin can perform delete/disable actions.',
+    });
+    return false;
+  }
+
+  return true;
+}
+
 async function sendPushToUser(userId: string, title: string, body: string, data?: Record<string, string>) {
   try {
     const tokens = await prisma.userDeviceToken.findMany({
@@ -2205,6 +2234,7 @@ app.get('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req:
 
 app.put('/api/admin/internal-admins/:userId/active', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const userId = String(req.params.userId || '');
     const active = Boolean(req.body?.active);
 
@@ -2246,6 +2276,7 @@ app.put('/api/admin/internal-admins/:userId/active', requireRole('INTERNAL_ADMIN
 
 app.delete('/api/admin/internal-admins/:userId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const userId = String(req.params.userId || '');
 
     if (userId === req.authUser!.userId) {
@@ -2272,6 +2303,8 @@ app.delete('/api/admin/internal-admins/:userId', requireRole('INTERNAL_ADMIN'), 
 });
 
 app.post('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  if (!(await requireDefaultInternalAdmin(req, res))) return;
+
   const parsed = createInternalAdminSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -6256,8 +6289,9 @@ app.post('/api/admin/workers/:professionalId/reject', requireRole('INTERNAL_ADMI
   }
 });
 
-app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const professionalId = String(req.params.professionalId || '');
 
     if (!professionalId) {
@@ -6367,6 +6401,8 @@ app.post('/api/shifts/:id/duplicate', async (req, res) => {
 
 app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
+
     const shiftId = String(req.params.shiftId || '');
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
@@ -7775,6 +7811,7 @@ app.get('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (_req: Aut
 
 app.delete('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const facilityId = String(req.params.facilityId || '');
 
     if (!facilityId) {
@@ -7983,6 +8020,7 @@ app.post('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (req: Aut
 
 app.post('/api/admin/facilities/:facilityId/deactivate', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const facilityId = String(req.params.facilityId || '');
 
     if (!facilityId) {
@@ -8320,6 +8358,7 @@ app.post(
 
 app.delete('/api/admin/shifts/:shiftId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
     const shiftId = String(req.params.shiftId || '');
 
     if (!shiftId) {
