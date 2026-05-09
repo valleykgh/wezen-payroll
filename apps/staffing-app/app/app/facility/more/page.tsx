@@ -7,6 +7,7 @@ import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 
 const adminItems = [
   { label: 'Profile & Settings', href: '/app/facility/settings/index.html' },
+  { label: 'Manage Staff', href: '/app/facility/staff/index.html' },
   { label: 'Favorites', href: '/app/facility/favorites/index.html' },
   { label: 'Alerts', href: '/app/facility/alerts/index.html' },
   { label: 'Compliance', href: '/app/facility/compliance/index.html' },
