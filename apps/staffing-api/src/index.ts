@@ -686,21 +686,25 @@ function isDocumentExpired(doc: { expiresAt?: Date | string | null }) {
 
 function getCurrentDocumentsByCategory<T extends {
   category: unknown;
+  name?: string | null;
   status: string;
   expiresAt?: Date | string | null;
   createdAt: Date | string;
 }>(documents: T[]) {
+  const activeDocuments = documents.filter(
+    (doc) => doc.status !== 'EXPIRED' && !(doc.name || '').includes('-old')
+  );
+
   const score = (doc: T) => {
     const expired = isDocumentExpired(doc);
     if (doc.status === 'APPROVED' && !expired) return 500;
     if (doc.status === 'PENDING') return 400;
     if (doc.status === 'REJECTED') return 300;
     if (doc.status === 'APPROVED' && expired) return 200;
-    if (doc.status === 'EXPIRED') return 100;
     return 0;
   };
 
-  const sorted = [...documents].sort((a, b) => {
+  const sorted = [...activeDocuments].sort((a, b) => {
     const scoreDiff = score(b) - score(a);
     if (scoreDiff !== 0) return scoreDiff;
 
@@ -5683,17 +5687,31 @@ app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('f
     });
 
     if (replaceExisting) {
-      await prisma.professionalDocument.updateMany({
+      const existingDocs = await prisma.professionalDocument.findMany({
         where: {
           professionalId,
           category: category as any,
           status: { notIn: ['REJECTED', 'EXPIRED'] },
         },
-        data: {
-          status: 'EXPIRED',
-          notes: `Superseded by newer upload on ${new Date().toLocaleDateString('en-US')}.`,
-        },
       });
+
+      await Promise.all(
+        existingDocs.map((existingDoc) => {
+          const parsedName = path.parse(existingDoc.name);
+          const oldName = existingDoc.name.includes('-old')
+            ? existingDoc.name
+            : `${parsedName.name}-old${parsedName.ext}`;
+
+          return prisma.professionalDocument.update({
+            where: { id: existingDoc.id },
+            data: {
+              name: oldName,
+              status: 'EXPIRED',
+              notes: `Superseded by newer upload on ${new Date().toLocaleDateString('en-US')}.`,
+            },
+          });
+        })
+      );
     }
 
     const document = await prisma.professionalDocument.create({
