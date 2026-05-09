@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { meRequest, logoutRequest, type AuthMeResponse } from '@/lib/auth-client';
+import { apiFetch } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 
 export function CurrentUserCard() {
@@ -25,6 +26,18 @@ export function CurrentUserCard() {
     };
   }, []);
 
+  async function toggleAppNotifications() {
+    if (!user) return;
+    const next = !user.appNotificationsEnabled;
+
+    await apiFetch('/api/users/me/app-notifications', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: next }),
+    });
+
+    setUser({ ...user, appNotificationsEnabled: next });
+  }
+
   async function handleLogout() {
     try {
       await logoutRequest();
@@ -47,6 +60,13 @@ export function CurrentUserCard() {
               {user.email} • {user.role}
             </div>
           </div>
+          <button
+            onClick={toggleAppNotifications}
+            className={user.appNotificationsEnabled ? 'inline-flex items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700' : 'inline-flex items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700'}
+          >
+            App Alerts {user.appNotificationsEnabled ? 'On' : 'Off'}
+          </button>
+
           <button
             onClick={handleLogout}
             className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 hover:border-slate-400 cursor-pointer"

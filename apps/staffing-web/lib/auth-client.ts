@@ -20,13 +20,15 @@ export type AuthMeResponse = {
   data: {
     userId: string;
     email: string;
-    role: 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN';
+    role: 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'FACILITY_STAFF' | 'INTERNAL_ADMIN';
     employeeId?: string | null;
     facilityId?: string | null;
     facilityName?: string | null;
     firstName?: string | null;
     lastName?: string | null;
     professionalId?: string | null;
+    notificationEmail?: string | null;
+    appNotificationsEnabled: boolean;
   };
   mustChangePassword?: boolean;
 };

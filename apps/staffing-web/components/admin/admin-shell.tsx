@@ -17,6 +17,7 @@ const adminNav = [
   { href: '/admin/shifts', label: 'Shifts' },
   { href: '/admin/shift-requests', label: 'Shift Requests' },
   { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/internal-admins', label: 'Internal Admins' },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

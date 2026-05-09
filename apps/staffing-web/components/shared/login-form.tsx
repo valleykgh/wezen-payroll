@@ -38,7 +38,7 @@ async function handleSubmit(e: React.FormEvent) {
         requestedNext && requestedNextLower.startsWith('/admin/')
           ? requestedNext
           : '/admin/workers';
-    } else if (role === 'FACILITY_ADMIN') {
+    } else if (['FACILITY_ADMIN', 'FACILITY_STAFF'].includes(role)) {
       target =
         requestedNext && requestedNextLower.startsWith('/facility/')
           ? requestedNext

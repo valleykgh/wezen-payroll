@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AppLogo } from '@/components/shared/app-logo';
 import { CurrentUserCard } from '@/components/shared/current-user-card';
 import { apiFetch } from '@/lib/api-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 
 type FacilityNavItem = {
   href: string;
@@ -17,6 +18,7 @@ const facilityNav: FacilityNavItem[] = [
   { href: '/facility/dashboard', label: 'Dashboard' },
   { href: '/facility/notifications', label: 'Alerts', badgeKey: 'alerts' },
   { href: '/facility/settings', label: 'Profile & Settings' },
+  { href: '/facility/staff', label: 'Manage Staff' },
   { href: '/facility/shifts', label: 'Shifts' },
   { href: '/facility/shifts/post', label: 'Post Shift' },
   { href: '/facility/availability', label: 'Available Workers' },
@@ -32,9 +34,12 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
   const [pendingRequests, setPendingRequests] = useState(0);
   const [alertCount, setAlertCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
   useEffect(() => {
     async function loadBadgeCounts() {
       try {
+        const me = await meRequest();
+        setCurrentUser(me.data);
         const res = await apiFetch<{
           data: {
             stats: {
@@ -56,6 +61,13 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
     loadBadgeCounts();
   }, []);
 
+  const visibleNav =
+    currentUser?.role === 'FACILITY_STAFF'
+      ? facilityNav.filter((item) =>
+          ['/facility/dashboard', '/facility/notifications', '/facility/shifts', '/facility/shifts/post', '/facility/availability', '/facility/applicants'].includes(item.href)
+        )
+      : facilityNav;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
@@ -63,7 +75,7 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
 	  <AppLogo />
 
           <nav className="mt-8 space-y-2">
-            {facilityNav.map((item) => {
+            {visibleNav.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -131,7 +143,7 @@ export function FacilityShell({ children }: { children: React.ReactNode }) {
 	   {mobileMenuOpen ? (
   <div className="border-b border-slate-200 bg-white px-4 py-4 lg:hidden">
     <nav className="grid gap-2">
-      {facilityNav.map((item) => (
+      {visibleNav.map((item) => (
         <Link
           key={item.href}
           href={item.href}
