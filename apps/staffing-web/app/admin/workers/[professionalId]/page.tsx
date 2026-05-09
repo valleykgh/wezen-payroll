@@ -927,44 +927,50 @@ const icaSignedStepLabel = isIcaSigned
         Approve by Wezen
       </button>
 
-      <button
-        onClick={() => updateWorkerApproval('unapprove')}
-        disabled={busy || !worker.approvedByWezen}
-        className="inline-flex items-center justify-center rounded-full bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 disabled:opacity-60"
-      >
-        Mark Under Review
-      </button>
+      {isDefaultAdmin ? (
+        <button
+          onClick={() => updateWorkerApproval('unapprove')}
+          disabled={busy || !worker.approvedByWezen}
+          className="inline-flex items-center justify-center rounded-full bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 disabled:opacity-60"
+        >
+          Mark Under Review
+        </button>
+      ) : null}
     </div>
 
-    <div className="mt-4">
-      <label className="mb-2 block text-sm font-medium text-slate-700">
-        Rejection reason
-      </label>
-      <TextArea
-        rows={3}
-        value={workerRejectReason}
-        onChange={(e) => setWorkerRejectReason(e.target.value)}
-        placeholder="Enter reason for rejecting this worker"
-      />
-    </div>
+    {isDefaultAdmin ? (
+      <>
+        <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-slate-700">
+            Rejection reason
+          </label>
+          <TextArea
+            rows={3}
+            value={workerRejectReason}
+            onChange={(e) => setWorkerRejectReason(e.target.value)}
+            placeholder="Enter reason for rejecting this worker"
+          />
+        </div>
 
-    <div className="mt-4 flex flex-wrap gap-3">
-      <button
-        onClick={rejectWorker}
-        disabled={busy}
-        className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-      >
-        Reject Worker
-      </button>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={rejectWorker}
+            disabled={busy}
+            className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+          >
+            Reject Worker
+          </button>
 
-      <button
-        onClick={deleteWorker}
-        disabled={busy}
-        className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:opacity-60"
-      >
-        Delete Worker
-      </button>
-    </div>
+          <button
+            onClick={deleteWorker}
+            disabled={busy}
+            className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:opacity-60"
+          >
+            Delete Worker
+          </button>
+        </div>
+      </>
+    ) : null}
   </>
 )}
           
