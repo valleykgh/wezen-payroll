@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { TextArea } from '@/components/ui/text-area';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
@@ -77,6 +78,7 @@ export default function AdminWorkerDetailPage({
   const [worker, setWorker] = useState<WorkerDetail | null>(null);
   const [message, setMessage] = useState('Loading worker detail...');
   const [busy, setBusy] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
   const [workerRejectReason, setWorkerRejectReason] = useState('');
@@ -115,7 +117,10 @@ setDoublePayRateDollars(
 );
   }
 
+  const isDefaultAdmin = currentUser?.email?.toLowerCase() === 'admin@wezenstaffing.com';
+
   useEffect(() => {
+    meRequest().then((res) => setCurrentUser(res.data)).catch(() => setCurrentUser(null));
     async function init() {
       try {
         const resolved = await params;

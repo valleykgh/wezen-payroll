@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type AdminShift = {
@@ -29,13 +30,17 @@ export default function AdminShiftsPage() {
   const [shifts, setShifts] = useState<AdminShift[]>([]);
   const [message, setMessage] = useState('Loading shifts...');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
 
   async function load() {
     const res = await apiFetch<{ data: AdminShift[] }>('/api/admin/shifts');
     setShifts(res.data);
   }
 
+  const isDefaultAdmin = currentUser?.email?.toLowerCase() === 'admin@wezenstaffing.com';
+
   useEffect(() => {
+    meRequest().then((res) => setCurrentUser(res.data)).catch(() => setCurrentUser(null));
     async function init() {
       try {
         await load();
