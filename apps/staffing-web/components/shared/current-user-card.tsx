@@ -62,9 +62,20 @@ export function CurrentUserCard() {
           </div>
           <button
             onClick={toggleAppNotifications}
-            className={user.appNotificationsEnabled ? 'inline-flex items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700' : 'inline-flex items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700'}
+            className={
+              user.appNotificationsEnabled
+                ? 'inline-flex items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 shadow-sm'
+                : 'inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 shadow-sm'
+            }
           >
-            App Alerts {user.appNotificationsEnabled ? 'On' : 'Off'}
+            <span
+              className={
+                user.appNotificationsEnabled
+                  ? 'mr-2 h-2.5 w-2.5 rounded-full bg-emerald-500'
+                  : 'mr-2 h-2.5 w-2.5 rounded-full bg-rose-500'
+              }
+            />
+            {user.appNotificationsEnabled ? 'Alerts ON' : 'Alerts OFF'}
           </button>
 
           <button
