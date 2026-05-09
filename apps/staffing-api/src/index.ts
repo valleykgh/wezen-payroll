@@ -6468,8 +6468,6 @@ app.post('/api/shifts/:id/duplicate', async (req, res) => {
 
 app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
-    if (!(await requireDefaultInternalAdmin(req, res))) return;
-
     const shiftId = String(req.params.shiftId || '');
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
