@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
-type AppRole = 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'INTERNAL_ADMIN';
+type AppRole = 'PROFESSIONAL' | 'FACILITY_ADMIN' | 'FACILITY_STAFF' | 'INTERNAL_ADMIN';
 
 export type AuthUser = {
   userId: string;
