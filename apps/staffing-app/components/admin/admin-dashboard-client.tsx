@@ -72,6 +72,12 @@ export function AdminDashboardClient() {
         <h2 className="mt-2 text-xl font-bold text-slate-950">Manage facilities</h2>
         <p className="mt-2 text-sm text-slate-600">Review facility setup and account status.</p>
       </Link>
+
+      <Link href="/app/admin/internal-admins/index.html" className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <p className="text-sm text-cyan-700">Admins</p>
+        <h2 className="mt-2 text-xl font-bold text-slate-950">Manage internal admins</h2>
+        <p className="mt-2 text-sm text-slate-600">Default admin controls admin access.</p>
+      </Link>
     </div>
   );
 }
