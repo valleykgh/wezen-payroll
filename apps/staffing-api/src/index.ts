@@ -5351,7 +5351,9 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
         lastName: worker.user.lastName,
         email: worker.user.email,
         phone: worker.user.phone,
-        documents: worker.documents.map((doc) => ({
+        documents: getCurrentDocumentsByCategory(worker.documents)
+          .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+          .map((doc) => ({
           id: doc.id,
           name: doc.name,
           category: doc.category,
@@ -9643,7 +9645,10 @@ app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('F
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    if (!worker.documents.length) {
+    const downloadableDocuments = getCurrentDocumentsByCategory(worker.documents)
+      .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'));
+
+    if (!downloadableDocuments.length) {
       return res.status(404).json({ error: 'No documents found' });
     }
 
@@ -9663,7 +9668,7 @@ app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('F
 
     archive.pipe(res);
 
-    for (const doc of worker.documents) {
+    for (const doc of downloadableDocuments) {
   try {
     if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
       const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
