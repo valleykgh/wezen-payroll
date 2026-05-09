@@ -8911,15 +8911,17 @@ app.get('/api/facility/workers/:professionalId', requireRole('FACILITY_ADMIN'), 
         role: worker.role,
         city: worker.city,
         state: worker.state,
-        documents: worker.documents.map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          category: doc.category,
-          status: doc.status,
-          expiresAt: doc.expiresAt,
-          notes: doc.notes,
-          createdAt: doc.createdAt,
-        })),
+        documents: getCurrentDocumentsByCategory(worker.documents)
+          .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+          .map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            category: doc.category,
+            status: doc.status,
+            expiresAt: doc.expiresAt,
+            notes: doc.notes,
+            createdAt: doc.createdAt,
+          })),
       },
     });
   } catch (error) {
