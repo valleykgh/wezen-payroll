@@ -3012,6 +3012,7 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
         COUNT(DISTINCT wa.date)::int AS "availableDateCount",
         json_agg(
           json_build_object(
+            'id', wa.id,
             'date', to_char(wa.date, 'YYYY-MM-DD'),
             'shiftType', wa."shiftType",
             'note', wa.note
@@ -3068,6 +3069,9 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
     const professionalIds = Array.isArray(req.body?.professionalIds)
       ? req.body.professionalIds.map((id: unknown) => String(id)).filter(Boolean)
       : [];
+    const availabilityIds = Array.isArray(req.body?.availabilityIds)
+      ? req.body.availabilityIds.map((id: unknown) => String(id)).filter(Boolean)
+      : [];
     const message = String(req.body?.message || '').trim() || null;
     const workersNeeded = Math.max(1, Number(req.body?.workersNeeded || 1));
 
@@ -3085,8 +3089,8 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
       return res.status(400).json({ error: 'At least one shift type is required' });
     }
 
-    if (!professionalIds.length) {
-      return res.status(400).json({ error: 'Select at least one worker' });
+    if (!professionalIds.length && !availabilityIds.length) {
+      return res.status(400).json({ error: 'Select at least one worker or availability slot' });
     }
 
     const facility = await prisma.facility.findUnique({
@@ -3111,9 +3115,51 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
       return res.status(404).json({ error: 'Facility not found' });
     }
 
+    let selectedAvailabilities: Array<{
+      id: string;
+      professionalId: string;
+      date: Date;
+      shiftType: string;
+    }> = [];
+
+    if (availabilityIds.length) {
+      selectedAvailabilities = await prisma.workerAvailability.findMany({
+        where: {
+          id: { in: availabilityIds },
+          date: {
+            gte: new Date(`${dates[0]}T00:00:00.000Z`),
+            lte: new Date(`${dates[dates.length - 1]}T23:59:59.999Z`),
+          },
+          shiftType: { in: shiftTypes as any },
+          professional: {
+            approvedByWezen: true,
+            role: role as any,
+            user: {
+              isActive: true,
+              isSystemUser: false,
+            },
+          },
+        },
+        select: {
+          id: true,
+          professionalId: true,
+          date: true,
+          shiftType: true,
+        },
+      });
+
+      if (!selectedAvailabilities.length) {
+        return res.status(400).json({ error: 'No valid selected availability slots found' });
+      }
+    }
+
+    const effectiveProfessionalIds = availabilityIds.length
+      ? [...new Set(selectedAvailabilities.map((item) => item.professionalId))]
+      : professionalIds;
+
     const workers = await prisma.professionalProfile.findMany({
       where: {
-        id: { in: professionalIds },
+        id: { in: effectiveProfessionalIds },
         approvedByWezen: true,
         role: role as any,
         user: {
@@ -3150,9 +3196,24 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
 
     const created: Array<{ shiftId: string; date: string; shiftType: string; invitationCount: number }> = [];
 
-    for (const date of dates) {
-      for (const shiftType of shiftTypes) {
-        const times = defaultTimesByShiftType[shiftType];
+    const slots = availabilityIds.length
+      ? selectedAvailabilities.map((item) => ({
+          date: item.date.toISOString().slice(0, 10),
+          shiftType: item.shiftType as 'AM' | 'PM' | 'NOC',
+          professionalIds: [item.professionalId],
+        }))
+      : dates.flatMap((date) =>
+          shiftTypes.map((shiftType) => ({
+            date,
+            shiftType,
+            professionalIds: effectiveProfessionalIds,
+          }))
+        );
+
+    for (const slot of slots) {
+      const date = slot.date;
+      const shiftType = slot.shiftType;
+      const times = defaultTimesByShiftType[shiftType];
 
         const shift = await prisma.shift.create({
           data: {
@@ -3171,7 +3232,7 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
 
         let invitationCount = 0;
 
-        for (const worker of workers) {
+        for (const worker of workers.filter((item) => slot.professionalIds.includes(item.id))) {
           const invitation = await prisma.shiftInvitation.upsert({
             where: {
               shiftId_professionalId: {
@@ -3231,7 +3292,6 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
         }
 
         created.push({ shiftId: shift.id, date, shiftType, invitationCount });
-      }
     }
 
     return res.status(201).json({ data: created });

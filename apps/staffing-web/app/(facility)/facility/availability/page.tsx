@@ -16,6 +16,7 @@ type AvailableWorker = {
   state?: string | null;
   availableDateCount: number;
   availabilities: Array<{
+    id: string;
     date: string;
     shiftType: ShiftType;
     note?: string | null;
@@ -40,6 +41,7 @@ export default function FacilityAvailableWorkersPage() {
   const [q, setQ] = useState('');
   const [workers, setWorkers] = useState<AvailableWorker[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [selectedAvailabilityIds, setSelectedAvailabilityIds] = useState<string[]>([]);
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [inviteMessage, setInviteMessage] = useState('');
   const [message, setMessage] = useState('');
@@ -53,11 +55,15 @@ export default function FacilityAvailableWorkersPage() {
     );
   }
 
-  function toggleWorker(workerId: string) {
+  function toggleAvailability(workerId: string, availabilityId: string) {
+    setSelectedAvailabilityIds((current) =>
+      current.includes(availabilityId)
+        ? current.filter((id) => id !== availabilityId)
+        : [...current, availabilityId]
+    );
+
     setSelectedWorkerIds((current) =>
-      current.includes(workerId)
-        ? current.filter((id) => id !== workerId)
-        : [...current, workerId]
+      current.includes(workerId) ? current : [...current, workerId]
     );
   }
 
@@ -66,6 +72,7 @@ export default function FacilityAvailableWorkersPage() {
       setBusy(true);
       setMessage('');
       setSelectedWorkerIds([]);
+      setSelectedAvailabilityIds([]);
 
       if (!startDate) throw new Error('Start date is required.');
       if (selectedTypes.length === 0) throw new Error('Choose at least one shift type.');
@@ -96,7 +103,7 @@ export default function FacilityAvailableWorkersPage() {
       setBusy(true);
       setMessage('');
 
-      if (selectedWorkerIds.length === 0) throw new Error('Select at least one worker.');
+      if (selectedAvailabilityIds.length === 0) throw new Error('Select at least one availability slot.');
 
       const res = await apiFetch<{ data: Array<{ shiftId: string }> }>('/api/facility/availability-invitations', {
         method: 'POST',
@@ -106,6 +113,7 @@ export default function FacilityAvailableWorkersPage() {
           role,
           shiftTypes: selectedTypes,
           professionalIds: selectedWorkerIds,
+          availabilityIds: selectedAvailabilityIds,
           workersNeeded,
           message: inviteMessage || undefined,
         }),
@@ -113,6 +121,7 @@ export default function FacilityAvailableWorkersPage() {
 
       setMessage(`Invitations sent. ${res.data.length} invite-only shift(s) created.`);
       setSelectedWorkerIds([]);
+      setSelectedAvailabilityIds([]);
       setInviteMessage('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to invite workers');
@@ -226,7 +235,7 @@ export default function FacilityAvailableWorkersPage() {
             <div>
               <h2 className="text-xl font-bold text-slate-950">Matching workers</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Select workers, then create invite-only shifts and send invitations.
+                Select exact worker availability slots, then create invite-only shifts and send invitations.
               </p>
             </div>
 
@@ -250,10 +259,10 @@ export default function FacilityAvailableWorkersPage() {
               <button
                 type="button"
                 onClick={inviteSelectedWorkers}
-                disabled={busy || selectedWorkerIds.length === 0}
+                disabled={busy || selectedAvailabilityIds.length === 0}
                 className="rounded-full bg-slate-900 px-6 py-3 text-sm font-bold text-white disabled:opacity-60"
               >
-                Invite Selected ({selectedWorkerIds.length})
+                Invite Selected ({selectedAvailabilityIds.length})
               </button>
             </div>
           </div>
@@ -262,17 +271,17 @@ export default function FacilityAvailableWorkersPage() {
             {workers.map((worker) => {
               const name =
                 [worker.firstName, worker.lastName].filter(Boolean).join(' ') || worker.email;
-              const selected = selectedWorkerIds.includes(worker.id);
+              const selectedCount = worker.availabilities.filter((item) =>
+                selectedAvailabilityIds.includes(item.id)
+              ).length;
 
               return (
-                <button
+                <div
                   key={worker.id}
-                  type="button"
-                  onClick={() => toggleWorker(worker.id)}
                   className={
-                    selected
+                    selectedCount > 0
                       ? 'rounded-3xl border-2 border-cyan-600 bg-cyan-50 p-5 text-left shadow-sm'
-                      : 'rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-cyan-200'
+                      : 'rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm'
                   }
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -284,22 +293,36 @@ export default function FacilityAvailableWorkersPage() {
                       <div className="mt-1 text-sm text-slate-500">{worker.email}</div>
                     </div>
 
-                    <span className={selected ? 'text-xl text-cyan-700' : 'text-xl text-slate-300'}>
-                      ✓
+                    <span className={selectedCount > 0 ? 'text-sm font-bold text-cyan-700' : 'text-sm font-bold text-slate-300'}>
+                      {selectedCount > 0 ? `${selectedCount} selected` : 'Select slots'}
                     </span>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {worker.availabilities.map((item, index) => (
-                      <span
-                        key={`${item.date}-${item.shiftType}-${index}`}
-                        className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
-                      >
-                        {formatDate(item.date)} {item.shiftType}
-                      </span>
-                    ))}
+                  <div className="mt-4 grid gap-2">
+                    {worker.availabilities.map((item) => {
+                      const checked = selectedAvailabilityIds.includes(item.id);
+
+                      return (
+                        <label
+                          key={item.id}
+                          className={
+                            checked
+                              ? 'flex cursor-pointer items-center justify-between rounded-2xl border border-cyan-300 bg-white px-4 py-3 text-sm font-bold text-cyan-800'
+                              : 'flex cursor-pointer items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700'
+                          }
+                        >
+                          <span>{formatDate(item.date)} {item.shiftType}</span>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAvailability(worker.id, item.id)}
+                            className="h-4 w-4"
+                          />
+                        </label>
+                      );
+                    })}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
