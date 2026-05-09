@@ -212,23 +212,25 @@ async function deleteFacility(facilityId: string, facilityName: string) {
               </div>
 
               <div className="flex w-full flex-col gap-3 lg:w-56">
-                {facility.isActive ? (
-                  <button
-                    onClick={() => updateFacility(facility.id, 'deactivate')}
-                    disabled={busyId === facility.id}
-                    className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-                  >
-                    {busyId === facility.id ? 'Working...' : 'Deactivate Facility'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => updateFacility(facility.id, 'reactivate')}
-                    disabled={busyId === facility.id}
-                    className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
-                  >
-                    {busyId === facility.id ? 'Working...' : 'Reactivate Facility'}
-                  </button>
-                )}
+                {isDefaultAdmin ? (
+                  facility.isActive ? (
+                    <button
+                      onClick={() => updateFacility(facility.id, 'deactivate')}
+                      disabled={busyId === facility.id}
+                      className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                    >
+                      {busyId === facility.id ? 'Working...' : 'Deactivate Facility'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => updateFacility(facility.id, 'reactivate')}
+                      disabled={busyId === facility.id}
+                      className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
+                    >
+                      {busyId === facility.id ? 'Working...' : 'Reactivate Facility'}
+                    </button>
+                  )
+                ) : null}
 
 		  <Link
     href={`/admin/facilities/${facility.id}`}
@@ -251,13 +253,15 @@ async function deleteFacility(facilityId: string, facilityName: string) {
   {busyId === facility.id ? 'Working...' : 'Send Invite'}
 </button>
 
-<button
-  onClick={() => deleteFacility(facility.id, facility.name)}
-  disabled={busyId === facility.id}
-  className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
->
-  {busyId === facility.id ? 'Working...' : 'Delete Facility'}
-</button>
+{isDefaultAdmin ? (
+  <button
+    onClick={() => deleteFacility(facility.id, facility.name)}
+    disabled={busyId === facility.id}
+    className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+  >
+    {busyId === facility.id ? 'Working...' : 'Delete Facility'}
+  </button>
+) : null}
               </div>
             </div>
           </div>
