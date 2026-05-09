@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type AdminShiftRequest = {
@@ -35,6 +36,7 @@ export default function AdminShiftRequestsPage() {
   const [requests, setRequests] = useState<AdminShiftRequest[]>([]);
   const [message, setMessage] = useState('Loading shift requests...');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthMeResponse['data'] | null>(null);
 
   async function load() {
     const res = await apiFetch<{ data: AdminShiftRequest[] }>('/api/admin/shift-requests');
@@ -181,15 +183,17 @@ export default function AdminShiftRequestsPage() {
                 ) : null}
               </div>
 
-              <div className="flex w-full flex-col gap-3 lg:w-56">
-                <button
-                  onClick={() => cancelRequest(request.id)}
-                  disabled={busyId === request.id || request.status === 'CANCELLED'}
-                  className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
-                >
-                  {busyId === request.id ? 'Working...' : 'Cancel Request'}
-                </button>
-              </div>
+              {isDefaultAdmin ? (
+                <div className="flex w-full flex-col gap-3 lg:w-56">
+                  <button
+                    onClick={() => cancelRequest(request.id)}
+                    disabled={busyId === request.id || request.status === 'CANCELLED'}
+                    className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    {busyId === request.id ? 'Working...' : 'Cancel Request'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
