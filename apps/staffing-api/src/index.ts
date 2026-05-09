@@ -664,6 +664,48 @@ function calculateDistanceMiles(
 }
 
 
+
+function isDocumentExpired(doc: { expiresAt?: Date | string | null }) {
+  if (!doc.expiresAt) return false;
+  return new Date(doc.expiresAt).getTime() < Date.now();
+}
+
+function getCurrentDocumentsByCategory<T extends {
+  category: unknown;
+  status: string;
+  expiresAt?: Date | string | null;
+  createdAt: Date | string;
+}>(documents: T[]) {
+  const score = (doc: T) => {
+    const expired = isDocumentExpired(doc);
+    if (doc.status === 'APPROVED' && !expired) return 500;
+    if (doc.status === 'PENDING') return 400;
+    if (doc.status === 'REJECTED') return 300;
+    if (doc.status === 'APPROVED' && expired) return 200;
+    if (doc.status === 'EXPIRED') return 100;
+    return 0;
+  };
+
+  const sorted = [...documents].sort((a, b) => {
+    const scoreDiff = score(b) - score(a);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const byCategory = new Map<string, T>();
+
+  for (const doc of sorted) {
+    const category = String(doc.category);
+    if (!byCategory.has(category)) {
+      byCategory.set(category, doc);
+    }
+  }
+
+  return Array.from(byCategory.values());
+}
+
+
 async function sendPushToUser(userId: string, title: string, body: string, data?: Record<string, string>) {
   try {
     const tokens = await prisma.userDeviceToken.findMany({
@@ -4825,7 +4867,7 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'),  a
 	  request.professional.facilityDnrs.find(
 	    (item) => item.facilityId === request.shift.facilityId
 	  )?.reason ?? null,
-          documents: request.professional.documents.map((doc) => ({
+          documents: getCurrentDocumentsByCategory(request.professional.documents).map((doc) => ({
             id: doc.id,
             name: doc.name,
             category: doc.category,
@@ -4885,7 +4927,7 @@ app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_A
     }
 
     res.json({
-      data: requestRecord.professional.documents.map((doc) => ({
+      data: getCurrentDocumentsByCategory(requestRecord.professional.documents).map((doc) => ({
         id: doc.id,
         name: doc.name,
         category: doc.category,
@@ -6027,17 +6069,17 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
             role: request.professional.role,
             city: request.professional.city,
             state: request.professional.state,
-            approvedDocCount: request.professional.documents.filter(
-              (doc) => doc.status === 'APPROVED'
+            approvedDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter(
+              (doc) => doc.status === 'APPROVED' && !isDocumentExpired(doc)
             ).length,
-            pendingDocCount: request.professional.documents.filter(
+            pendingDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter(
               (doc) => doc.status === 'PENDING'
             ).length,
-            rejectedDocCount: request.professional.documents.filter(
+            rejectedDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter(
               (doc) => doc.status === 'REJECTED'
             ).length,
-            expiredDocCount: request.professional.documents.filter(
-              (doc) => doc.status === 'EXPIRED'
+            expiredDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter(
+              (doc) => doc.status === 'EXPIRED' || isDocumentExpired(doc)
             ).length,
           },
         })),
