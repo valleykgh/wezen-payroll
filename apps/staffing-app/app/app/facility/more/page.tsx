@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app/app-shell';
 import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 
 const adminItems = [
+  { label: 'Available Workers', href: '/app/facility/availability/index.html' },
   { label: 'Profile & Settings', href: '/app/facility/settings/index.html' },
   { label: 'Manage Staff', href: '/app/facility/staff/index.html' },
   { label: 'Favorites', href: '/app/facility/favorites/index.html' },
@@ -17,6 +18,7 @@ const adminItems = [
 ];
 
 const staffItems = [
+  { label: 'Available Workers', href: '/app/facility/availability/index.html' },
   { label: 'Alerts', href: '/app/facility/alerts/index.html' },
   { label: 'Notifications', href: '/app/facility/notifications/index.html' },
 ];

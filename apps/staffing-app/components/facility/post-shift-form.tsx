@@ -361,7 +361,7 @@ export function PostShiftForm() {
           </div>
 
           <button type="button" onClick={inviteSelectedWorkers} disabled={loading || selectedAvailabilityIds.length === 0} className="mt-4 w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60">
-            Send Invite{selectedWorkerIds.length ? ` (${selectedWorkerIds.length})` : ''}
+            Send Invite{selectedAvailabilityIds.length ? ` (${selectedAvailabilityIds.length})` : ''}
           </button>
         </div>
       ) : null}
