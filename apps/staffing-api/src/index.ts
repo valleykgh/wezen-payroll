@@ -8601,7 +8601,7 @@ return res.send(csv);
   }
 });
 
-app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
