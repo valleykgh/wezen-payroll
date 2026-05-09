@@ -1767,6 +1767,57 @@ function getPasswordResetBaseUrl() {
   ).replace(/\/$/, '');
 }
 
+async function sendPasswordSetupEmail(params: {
+  userId: string;
+  email: string;
+  firstName?: string | null;
+  subject: string;
+  intro: string;
+}) {
+  await prisma.passwordResetToken.updateMany({
+    where: {
+      userId: params.userId,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: { usedAt: new Date() },
+  });
+
+  const token = randomBytes(32).toString('hex');
+  const tokenHash = hashResetToken(token);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: params.userId,
+      tokenHash,
+      expiresAt,
+    },
+  });
+
+  const resetUrl = `${getPasswordResetBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+  const appResetUrl = `${getPasswordResetBaseUrl()}/app/reset-password/index.html?token=${encodeURIComponent(token)}`;
+
+  await sendEmail({
+    to: params.email,
+    subject: params.subject,
+    html: `
+      <h2>Set up your Wezen Staffing password</h2>
+      <p>Hello ${params.firstName || 'there'},</p>
+      <p>${params.intro}</p>
+      <p>Use the link below to create your password. This link expires in 24 hours.</p>
+      <p><a href="${resetUrl}">Create Password</a></p>
+      <p>If you are using the iPhone app, open this link from your phone: <a href="${appResetUrl}">Create Password in App</a></p>
+    `,
+    text: [
+      'Set up your Wezen Staffing password',
+      params.intro,
+      `Create your password here. This link expires in 24 hours: ${resetUrl}`,
+      `iPhone app link: ${appResetUrl}`,
+    ].join('\n'),
+  });
+}
+
 app.post('/api/auth/forgot-password', async (req, res) => {
   const parsed = passwordResetRequestSchema.safeParse(req.body);
 
@@ -2123,6 +2174,14 @@ app.post('/api/facility/staff', requireRole('FACILITY_ADMIN'), async (req: Authe
       },
     });
 
+    await sendPasswordSetupEmail({
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      subject: 'Your Wezen Staffing facility staff account is ready',
+      intro: 'A facility staff account has been created for you. Please create your password to log in.',
+    });
+
     res.status(201).json({
       data: {
         id: user.facilityStaff?.id,
@@ -2344,6 +2403,14 @@ app.post('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req
         notificationEmail: true,
         appNotificationsEnabled: true,
       },
+    });
+
+    await sendPasswordSetupEmail({
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      subject: 'Your Wezen Staffing internal admin account is ready',
+      intro: 'An internal admin account has been created for you. Please create your password to log in.',
     });
 
     await createAdminAuditLog({
