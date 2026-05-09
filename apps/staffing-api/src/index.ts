@@ -1920,6 +1920,11 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
             facility: true,
           },
         },
+        facilityStaff: {
+          include: {
+            facility: true,
+          },
+        },
       },
     });
 
@@ -1929,10 +1934,14 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
     }
 
     if (
-      user.role === 'FACILITY_ADMIN' &&
-      user.facilityAdmin &&
-      user.facilityAdmin.facility &&
-      !user.facilityAdmin.facility.isActive
+      ((user.role === 'FACILITY_ADMIN' &&
+        user.facilityAdmin &&
+        user.facilityAdmin.facility &&
+        !user.facilityAdmin.facility.isActive) ||
+        (user.role === 'FACILITY_STAFF' &&
+          user.facilityStaff &&
+          user.facilityStaff.facility &&
+          !user.facilityStaff.facility.isActive))
     ) {
       clearAuthCookie(res);
       return res.status(403).json({
@@ -1948,8 +1957,9 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         notificationEmail: user.notificationEmail,
+        appNotificationsEnabled: user.appNotificationsEnabled,
         professionalId: user.professional?.id ?? null,
-        facilityId: user.facilityAdmin?.facilityId ?? null,
+        facilityId: user.facilityAdmin?.facilityId ?? user.facilityStaff?.facilityId ?? null,
       },
     });
   } catch (error) {
@@ -1957,6 +1967,242 @@ app.get('/api/auth/me', requireAuth, async (req: AuthedRequest, res) => {
     res.status(500).json({ error: 'Failed to fetch current user' });
   }
 });
+
+
+const createFacilityStaffSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  password: z.string().min(8),
+  title: z.string().optional(),
+  notificationEmail: z.string().email().optional().nullable(),
+});
+
+const createInternalAdminSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  password: z.string().min(8),
+  notificationEmail: z.string().email().optional().nullable(),
+});
+
+app.put('/api/users/me/app-notifications', requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled);
+
+    const updated = await prisma.user.update({
+      where: { id: req.authUser!.userId },
+      data: { appNotificationsEnabled: enabled },
+      select: {
+        id: true,
+        appNotificationsEnabled: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/users/me/app-notifications error:', error);
+    res.status(500).json({ error: 'Failed to update app notification setting' });
+  }
+});
+
+app.get('/api/facility/staff', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const staff = await prisma.facilityStaff.findMany({
+      where: { facilityId },
+      include: {
+        user: true,
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    res.json({
+      data: staff.map((item) => ({
+        id: item.id,
+        userId: item.userId,
+        title: item.title,
+        createdAt: item.createdAt,
+        email: item.user.email,
+        firstName: item.user.firstName,
+        lastName: item.user.lastName,
+        isActive: item.user.isActive,
+        notificationEmail: item.user.notificationEmail,
+        appNotificationsEnabled: item.user.appNotificationsEnabled,
+      })),
+    });
+  } catch (error) {
+    console.error('GET /api/facility/staff error:', error);
+    res.status(500).json({ error: 'Failed to fetch facility staff' });
+  }
+});
+
+app.post('/api/facility/staff', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = createFacilityStaffSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const email = parsed.data.email.toLowerCase().trim();
+
+    const existing = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    const passwordHash = await hashPassword(parsed.data.password);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: UserRole.FACILITY_STAFF,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        notificationEmail: parsed.data.notificationEmail || null,
+        appNotificationsEnabled: true,
+        facilityStaff: {
+          create: {
+            facilityId,
+            title: parsed.data.title || 'Scheduler',
+          },
+        },
+      },
+      include: {
+        facilityStaff: true,
+      },
+    });
+
+    res.status(201).json({
+      data: {
+        id: user.facilityStaff?.id,
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        title: user.facilityStaff?.title,
+        isActive: user.isActive,
+        notificationEmail: user.notificationEmail,
+        appNotificationsEnabled: user.appNotificationsEnabled,
+      },
+    });
+  } catch (error) {
+    console.error('POST /api/facility/staff error:', error);
+    res.status(500).json({ error: 'Failed to create facility staff user' });
+  }
+});
+
+app.put('/api/facility/staff/:staffId/active', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const staffId = String(req.params.staffId || '');
+    const active = Boolean(req.body?.active);
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const staff = await prisma.facilityStaff.findUnique({
+      where: { id: staffId },
+    });
+
+    if (!staff || staff.facilityId !== facilityId) {
+      return res.status(404).json({ error: 'Facility staff user not found' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: staff.userId },
+      data: { isActive: active },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/facility/staff/:staffId/active error:', error);
+    res.status(500).json({ error: 'Failed to update facility staff user' });
+  }
+});
+
+app.post('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  const parsed = createInternalAdminSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const email = parsed.data.email.toLowerCase().trim();
+
+    const existing = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    const passwordHash = await hashPassword(parsed.data.password);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: UserRole.INTERNAL_ADMIN,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        notificationEmail: parsed.data.notificationEmail || null,
+        appNotificationsEnabled: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        notificationEmail: true,
+        appNotificationsEnabled: true,
+      },
+    });
+
+    await createAdminAuditLog({
+      actorUserId: req.authUser!.userId,
+      action: 'INTERNAL_ADMIN_CREATED',
+      entityType: 'User',
+      entityId: user.id,
+      summary: `Internal admin created ${user.email}`,
+      detailsJson: { email: user.email },
+    });
+
+    res.status(201).json({ data: user });
+  } catch (error) {
+    console.error('POST /api/admin/internal-admins error:', error);
+    res.status(500).json({ error: 'Failed to create internal admin' });
+  }
+});
+
 
 app.get('/api/worker/dashboard', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
