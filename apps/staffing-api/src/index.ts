@@ -2150,6 +2150,127 @@ app.put('/api/facility/staff/:staffId/active', requireRole('FACILITY_ADMIN'), as
   }
 });
 
+app.delete('/api/facility/staff/:staffId', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const staffId = String(req.params.staffId || '');
+    const facilityId = await getFacilityIdForUser(req.authUser!.userId);
+
+    if (!facilityId) {
+      return res.status(404).json({ error: 'Facility admin not found' });
+    }
+
+    const staff = await prisma.facilityStaff.findUnique({
+      where: { id: staffId },
+    });
+
+    if (!staff || staff.facilityId !== facilityId) {
+      return res.status(404).json({ error: 'Facility staff user not found' });
+    }
+
+    await prisma.user.delete({
+      where: { id: staff.userId },
+    });
+
+    res.json({ data: { ok: true } });
+  } catch (error) {
+    console.error('DELETE /api/facility/staff/:staffId error:', error);
+    res.status(500).json({ error: 'Failed to delete facility staff user' });
+  }
+});
+
+app.get('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: UserRole.INTERNAL_ADMIN },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        isSystemUser: true,
+        notificationEmail: true,
+        appNotificationsEnabled: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ data: admins });
+  } catch (error) {
+    console.error('GET /api/admin/internal-admins error:', error);
+    res.status(500).json({ error: 'Failed to fetch internal admins' });
+  }
+});
+
+app.put('/api/admin/internal-admins/:userId/active', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = String(req.params.userId || '');
+    const active = Boolean(req.body?.active);
+
+    if (userId === req.authUser!.userId && !active) {
+      return res.status(400).json({ error: 'You cannot disable your own admin account.' });
+    }
+
+    const admin = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!admin || admin.role !== UserRole.INTERNAL_ADMIN) {
+      return res.status(404).json({ error: 'Internal admin not found' });
+    }
+
+    if (admin.isSystemUser && !active) {
+      return res.status(400).json({ error: 'System admin cannot be disabled.' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: active },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        isSystemUser: true,
+        notificationEmail: true,
+        appNotificationsEnabled: true,
+      },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /api/admin/internal-admins/:userId/active error:', error);
+    res.status(500).json({ error: 'Failed to update internal admin' });
+  }
+});
+
+app.delete('/api/admin/internal-admins/:userId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = String(req.params.userId || '');
+
+    if (userId === req.authUser!.userId) {
+      return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+    }
+
+    const admin = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!admin || admin.role !== UserRole.INTERNAL_ADMIN) {
+      return res.status(404).json({ error: 'Internal admin not found' });
+    }
+
+    if (admin.isSystemUser) {
+      return res.status(400).json({ error: 'System admin cannot be deleted.' });
+    }
+
+    await prisma.user.delete({ where: { id: userId } });
+
+    res.json({ data: { ok: true } });
+  } catch (error) {
+    console.error('DELETE /api/admin/internal-admins/:userId error:', error);
+    res.status(500).json({ error: 'Failed to delete internal admin' });
+  }
+});
+
 app.post('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   const parsed = createInternalAdminSchema.safeParse(req.body);
 

@@ -90,6 +90,26 @@ export default function FacilityStaffPage() {
     }
   }
 
+  async function deleteStaff(staffId: string, email: string) {
+    if (!window.confirm(`Delete facility staff user ${email}? This cannot be undone.`)) return;
+
+    try {
+      setBusy(true);
+      setMessage('');
+
+      await apiFetch(`/api/facility/staff/${staffId}`, {
+        method: 'DELETE',
+      });
+
+      await load();
+      setMessage('Staff user deleted.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete staff user');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="page-gradient rounded-[2rem] p-6">
@@ -144,13 +164,23 @@ export default function FacilityStaffPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setActive(item.id, !item.isActive)}
-                  disabled={busy}
-                  className={item.isActive ? 'rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60' : 'rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60'}
-                >
-                  {item.isActive ? 'Disable' : 'Activate'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setActive(item.id, !item.isActive)}
+                    disabled={busy}
+                    className={item.isActive ? 'rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60' : 'rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60'}
+                  >
+                    {item.isActive ? 'Disable' : 'Activate'}
+                  </button>
+
+                  <button
+                    onClick={() => deleteStaff(item.id, item.email)}
+                    disabled={busy}
+                    className="rounded-full border border-rose-300 bg-white px-5 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}

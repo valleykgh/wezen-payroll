@@ -83,6 +83,26 @@ export function FacilityStaffClient() {
     }
   }
 
+  async function deleteStaff(staffId: string, email: string) {
+    if (!window.confirm(`Delete facility staff user ${email}? This cannot be undone.`)) return;
+
+    setBusy(true);
+    setMessage('');
+
+    try {
+      await apiFetch(`/api/facility/staff/${staffId}`, {
+        method: 'DELETE',
+      });
+
+      setMessage('Staff user deleted.');
+      await loadStaff();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to delete staff user');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     loadStaff();
   }, []);
@@ -129,14 +149,25 @@ export function FacilityStaffClient() {
                 {item.title || 'Scheduler'} • {item.isActive ? 'Active' : 'Disabled'} • App Alerts {item.appNotificationsEnabled ? 'On' : 'Off'}
               </p>
 
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setActive(item.id, !item.isActive)}
-                className={item.isActive ? 'mt-3 rounded-full bg-rose-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60' : 'mt-3 rounded-full bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60'}
-              >
-                {item.isActive ? 'Disable' : 'Enable'}
-              </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setActive(item.id, !item.isActive)}
+                  className={item.isActive ? 'rounded-full bg-rose-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60' : 'rounded-full bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60'}
+                >
+                  {item.isActive ? 'Disable' : 'Enable'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => deleteStaff(item.id, item.email)}
+                  className="rounded-full border border-rose-300 bg-white px-4 py-2 text-xs font-extrabold text-rose-700 disabled:opacity-60"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
