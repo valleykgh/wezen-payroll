@@ -3123,30 +3123,36 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
     }> = [];
 
     if (availabilityIds.length) {
-      selectedAvailabilities = await prisma.workerAvailability.findMany({
-        where: {
-          id: { in: availabilityIds },
-          date: {
-            gte: new Date(`${dates[0]}T00:00:00.000Z`),
-            lte: new Date(`${dates[dates.length - 1]}T23:59:59.999Z`),
-          },
-          shiftType: { in: shiftTypes as any },
-          professional: {
-            approvedByWezen: true,
-            role: role as any,
-            user: {
-              isActive: true,
-              isSystemUser: false,
-            },
-          },
-        },
-        select: {
-          id: true,
-          professionalId: true,
-          date: true,
-          shiftType: true,
-        },
-      });
+      selectedAvailabilities = await prisma.$queryRawUnsafe<Array<{
+        id: string;
+        professionalId: string;
+        date: Date;
+        shiftType: string;
+      }>>(
+        `
+        SELECT
+          wa.id,
+          wa."professionalId",
+          wa.date,
+          wa."shiftType"
+        FROM "WorkerAvailability" wa
+        JOIN "ProfessionalProfile" p ON p.id = wa."professionalId"
+        JOIN "User" u ON u.id = p."userId"
+        WHERE wa.id = ANY($1::text[])
+          AND wa.date >= $2::date
+          AND wa.date <= $3::date
+          AND wa."shiftType" = ANY($4::text[])
+          AND p."approvedByWezen" = true
+          AND p.role = $5
+          AND u."isActive" = true
+          AND u."isSystemUser" = false
+        `,
+        availabilityIds,
+        dates[0],
+        dates[dates.length - 1],
+        shiftTypes,
+        role
+      );
 
       if (!selectedAvailabilities.length) {
         return res.status(400).json({ error: 'No valid selected availability slots found' });
