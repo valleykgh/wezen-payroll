@@ -69,22 +69,36 @@ const upload = multer({ storage });
 const ADMIN_ALERT_EMAIL = process.env.ADMIN_ALERT_EMAIL || '';
 
 async function getFacilityNotificationRecipients(facilityId: string): Promise<string[]> {
-  const admins = await prisma.facilityAdmin.findMany({
-    where: { facilityId },
-    include: {
-      user: {
-        select: {
-          email: true,
-          notificationEmail: true,
-          isActive: true,
+  const [admins, staff] = await Promise.all([
+    prisma.facilityAdmin.findMany({
+      where: { facilityId },
+      include: {
+        user: {
+          select: {
+            email: true,
+            notificationEmail: true,
+            isActive: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.facilityStaff.findMany({
+      where: { facilityId },
+      include: {
+        user: {
+          select: {
+            email: true,
+            notificationEmail: true,
+            isActive: true,
+          },
+        },
+      },
+    }),
+  ]);
 
-  const recipients = admins
-    .filter((admin) => admin.user?.isActive)
-    .map((admin) => admin.user.notificationEmail || admin.user.email)
+  const recipients = [...admins, ...staff]
+    .filter((item) => item.user?.isActive)
+    .map((item) => item.user.notificationEmail || item.user.email)
     .filter((email): email is string => Boolean(email));
 
   return [...new Set(recipients)];
@@ -720,6 +734,13 @@ async function sendPushToUser(userId: string, title: string, body: string, data?
       },
     });
 
+    const userPrefs = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { appNotificationsEnabled: true, isActive: true },
+    });
+
+    if (!userPrefs?.isActive || userPrefs.appNotificationsEnabled === false) return;
+
     const iosTokens = tokens.filter((item) => item.platform === 'ios' || item.platform === 'iphone' || !item.platform);
 
     if (iosTokens.length === 0) return;
@@ -839,13 +860,21 @@ async function sendPushToUser(userId: string, title: string, body: string, data?
 }
 
 async function sendPushToFacilityAdmins(facilityId: string, title: string, body: string, data?: Record<string, string>) {
-  const admins = await prisma.facilityAdmin.findMany({
-    where: { facilityId },
-    select: { userId: true },
-  });
+  const [admins, staff] = await Promise.all([
+    prisma.facilityAdmin.findMany({
+      where: { facilityId },
+      select: { userId: true },
+    }),
+    prisma.facilityStaff.findMany({
+      where: { facilityId },
+      select: { userId: true },
+    }),
+  ]);
+
+  const userIds = [...new Set([...admins, ...staff].map((item) => item.userId))];
 
   await Promise.all(
-    admins.map((admin) => sendPushToUser(admin.userId, title, body, data))
+    userIds.map((userId) => sendPushToUser(userId, title, body, data))
   );
 }
 
@@ -1066,7 +1095,14 @@ async function getFacilityIdForUser(userId: string) {
     select: { facilityId: true },
   });
 
-  return facilityAdmin?.facilityId ?? null;
+  if (facilityAdmin?.facilityId) return facilityAdmin.facilityId;
+
+  const facilityStaff = await prisma.facilityStaff.findUnique({
+    where: { userId },
+    select: { facilityId: true },
+  });
+
+  return facilityStaff?.facilityId ?? null;
 }
 
 function generateInviteCode(length = 10) {
@@ -2033,7 +2069,7 @@ const createShiftSchema = z.object({
   visibility: z.enum(['PUBLIC', 'INVITE_ONLY']).optional(),
 });
 
-app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shifts', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   const parsed = createShiftSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -2528,7 +2564,7 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
   }
 }
 
-app.get('/api/facility/available-workers', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/available-workers', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   return findAvailableWorkers(req, res, 'facility');
 });
 
@@ -2538,7 +2574,7 @@ app.get('/api/admin/available-workers', requireRole('INTERNAL_ADMIN'), async (re
 
 
 
-app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
@@ -3257,7 +3293,7 @@ if (shift.status !== 'OPEN') {
   }
 });
 
-app.get('/api/facility/requests', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/requests', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
 	
 	const userId = req.authUser!.userId;
@@ -3343,7 +3379,7 @@ if (!facilityStatus.ok) {
 
 
 
-app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
     const facilityId = await getFacilityIdForUser(userId);
@@ -3443,7 +3479,7 @@ app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN'), async (req:
 });
 
 
-app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -3491,7 +3527,7 @@ app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (r
   }
 });
 
-app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -3615,7 +3651,7 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
   }
 });
 
-app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -3847,7 +3883,7 @@ if (String(existing.reviewNotes || '').includes('Cancellation denied by facility
   }
 });
 
-app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -3959,7 +3995,7 @@ if (
   }
 });
 
-app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -4803,7 +4839,7 @@ app.post('/api/worker/change-password', requireRole('PROFESSIONAL'), async (req:
   }
 });
 
-app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'),  async (req, res) => {
+app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'),  async (req, res) => {
   try {
     const requestId = String(req.params.requestId || '');
 
@@ -4886,7 +4922,7 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'),  a
   }
 });
 
-app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const requestId = String(req.params.requestId || '');
     const userId = req.authUser!.userId;
@@ -5941,7 +5977,7 @@ app.post('/api/shifts/:id/duplicate', async (req, res) => {
   }
 });
 
-app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const shiftId = String(req.params.shiftId || '');
     const userId = req.authUser!.userId;
@@ -6096,7 +6132,7 @@ const facilityDnrSchema = z.object({
   reason: z.string().optional(),
 });
 
-app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const shiftId = String(req.params.id);
     const userId = req.authUser!.userId;
@@ -6507,7 +6543,7 @@ app.post('/api/worker/notifications/:id/read', requireRole('PROFESSIONAL'), asyn
   }
 });
 
-app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -6557,7 +6593,7 @@ app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN'), async (req: Aut
   }
 });
 
-app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -6618,7 +6654,7 @@ app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN'), async (req: Au
   }
 });
 
-app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -6753,7 +6789,7 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req: Au
 });
 
 
-app.delete('/api/shifts/:id', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.delete('/api/shifts/:id', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const userId = req.authUser!.userId;
@@ -6928,7 +6964,7 @@ app.post('/api/users/device-tokens', requireAuth, async (req: AuthedRequest, res
   }
 });
 
-app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const facilityId = await getFacilityIdForUser(req.authUser!.userId);
 
@@ -6949,7 +6985,7 @@ app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN'), async (req
   }
 });
 
-app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const facilityId = await getFacilityIdForUser(req.authUser!.userId);
 
@@ -6971,7 +7007,7 @@ app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN'
   }
 });
 
-app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const id = String(req.params.id || '');
     const facilityId = await getFacilityIdForUser(req.authUser!.userId);
@@ -6992,7 +7028,7 @@ app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN'), 
   }
 });
 
-app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const facilityId = await getFacilityIdForUser(req.authUser!.userId);
 
@@ -7120,7 +7156,7 @@ app.post('/api/admin/workers/:professionalId/message', requireRole('INTERNAL_ADM
   }
 });
 
-app.post('/api/facility/applicants/:requestId/message', requireRole('FACILITY_ADMIN'), async (req: AuthedRequest, res) => {
+app.post('/api/facility/applicants/:requestId/message', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   const parsed = sendApplicantMessageSchema.safeParse(req.body);
 
   if (!parsed.success) {
