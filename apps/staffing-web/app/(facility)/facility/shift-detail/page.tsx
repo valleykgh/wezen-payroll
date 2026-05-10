@@ -341,13 +341,13 @@ const remainingSlots = Math.max(detail.workersNeeded - detail.fillCount, 0);
         )}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      {isShiftFull ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          This shift is fully assigned. Additional applicants can be reviewed, but no further approvals are allowed unless an approved worker is changed.
+        </div>
+      ) : null}
 
-	{isShiftFull ? (
-  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-    This shift is fully assigned. Additional applicants can be reviewed, but no further approvals are allowed unless an approved worker is changed.
-  </div>
-) : null}      
+      <div className="grid gap-6">
 
         <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
           {detail.declinedInvitations && detail.declinedInvitations.length > 0 ? (
