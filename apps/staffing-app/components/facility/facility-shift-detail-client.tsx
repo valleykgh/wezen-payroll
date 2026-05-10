@@ -146,19 +146,19 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
     }
   }
 
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 2500);
-    async function dismissDeclinedInvitation(invitationId: string) {
+  async function dismissDeclinedInvitation(invitationId: string) {
     try {
       await apiFetch(`/api/facility/invitations/${invitationId}/dismiss`, { method: 'POST' });
-      await load();
+      await loadShift();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to dismiss invitation');
     }
   }
 
-  return () => clearTimeout(timer);
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 2500);
+    return () => clearTimeout(timer);
   }, [message]);
 
 
