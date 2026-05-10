@@ -3143,7 +3143,7 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
           AND wa.date <= $3::date
           AND wa."shiftType" = ANY($4::text[])
           AND p."approvedByWezen" = true
-          AND p.role = $5
+          AND p.role::text = $5
           AND u."isActive" = true
           AND u."isSystemUser" = false
         `,
@@ -3220,13 +3220,69 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN',
       const date = slot.date;
       const shiftType = slot.shiftType;
       const times = defaultTimesByShiftType[shiftType];
+      const shiftDate = new Date(`${date}T12:00:00.000Z`);
+
+      const duplicateInvite = await prisma.shiftInvitation.findFirst({
+        where: {
+          facilityId,
+          professionalId: { in: slot.professionalIds },
+          status: { in: ['SENT', 'ACCEPTED', 'DECLINED'] },
+          shift: {
+            facilityId,
+            date: shiftDate,
+            shiftType: shiftType as any,
+            status: { not: 'CANCELLED' },
+          },
+        },
+        include: {
+          professional: { include: { user: true } },
+        },
+      });
+
+      if (duplicateInvite) {
+        const workerName =
+          [duplicateInvite.professional.user.firstName, duplicateInvite.professional.user.lastName].filter(Boolean).join(' ') ||
+          duplicateInvite.professional.user.email ||
+          'This worker';
+
+        return res.status(409).json({
+          error: `${workerName} already has an invitation for ${role} ${shiftType} on ${date}.`,
+        });
+      }
+
+      const duplicateRequest = await prisma.shiftRequest.findFirst({
+        where: {
+          professionalId: { in: slot.professionalIds },
+          status: { in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'] },
+          shift: {
+            facilityId,
+            date: shiftDate,
+            shiftType: shiftType as any,
+            status: { not: 'CANCELLED' },
+          },
+        },
+        include: {
+          professional: { include: { user: true } },
+        },
+      });
+
+      if (duplicateRequest) {
+        const workerName =
+          [duplicateRequest.professional.user.firstName, duplicateRequest.professional.user.lastName].filter(Boolean).join(' ') ||
+          duplicateRequest.professional.user.email ||
+          'This worker';
+
+        return res.status(409).json({
+          error: `${workerName} already has an active request/approval for ${role} ${shiftType} on ${date}.`,
+        });
+      }
 
         const shift = await prisma.shift.create({
           data: {
             facilityId,
             role: role as any,
             shiftType: shiftType as any,
-            date: new Date(`${date}T12:00:00.000Z`),
+            date: shiftDate,
             startTimeLabel: times.start,
             endTimeLabel: times.end,
             workersNeeded,
@@ -9027,7 +9083,20 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF
       (request) => request.status === 'APPROVED'
     ).length;
 
-    const complianceAlerts = complianceDocs.length;
+    const docsByWorker = new Map<string, typeof complianceDocs>();
+
+    for (const doc of complianceDocs) {
+      const workerDocs = docsByWorker.get(doc.professionalId) || [];
+      workerDocs.push(doc);
+      docsByWorker.set(doc.professionalId, workerDocs);
+    }
+
+    const complianceAlerts = Array.from(docsByWorker.values())
+      .flatMap((docs) =>
+        getCurrentDocumentsByCategory(docs)
+          .filter((d) => !String(d.name || '').includes('-old'))
+          .filter((d) => d.status === 'PENDING' || d.status === 'REJECTED' || d.status === 'EXPIRED' || isDocumentExpired(d))
+      ).length;
 
     const activeWorkerIds = new Set(
       requests
