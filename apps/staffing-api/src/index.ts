@@ -2984,6 +2984,40 @@ async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facili
       `u."isSystemUser" = false`,
     ];
 
+    if (scope === 'facility' && facilityId) {
+      params.push(facilityId);
+      const facilityParam = params.length;
+
+      where.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM "ShiftInvitation" si
+          JOIN "Shift" s ON s.id = si."shiftId"
+          WHERE si."professionalId" = p.id
+            AND si."facilityId" = $${facilityParam}
+            AND s."facilityId" = $${facilityParam}
+            AND s.date::date = wa.date::date
+            AND s."shiftType"::text = wa."shiftType"::text
+            AND s.status::text <> 'CANCELLED'
+            AND si.status IN ('SENT', 'ACCEPTED', 'DECLINED')
+        )
+      `);
+
+      where.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM "ShiftRequest" sr
+          JOIN "Shift" s ON s.id = sr."shiftId"
+          WHERE sr."professionalId" = p.id
+            AND s."facilityId" = $${facilityParam}
+            AND s.date::date = wa.date::date
+            AND s."shiftType"::text = wa."shiftType"::text
+            AND s.status::text <> 'CANCELLED'
+            AND sr.status::text IN ('REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED')
+        )
+      `);
+    }
+
     if (role && ['CNA', 'LVN', 'RN'].includes(role)) {
       params.push(role);
       where.push(`p.role = $${params.length}`);

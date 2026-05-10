@@ -25,6 +25,20 @@ type AvailableWorker = {
 
 const shiftTypes: ShiftType[] = ['AM', 'PM', 'NOC'];
 
+
+function friendlyInviteError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+
+  const message = error.message || fallback;
+  const match = message.match(/"error"\s*:\s*"([^"]+)"/);
+
+  if (match?.[1]) return match[1];
+
+  return message
+    .replace(/^API request failed for .*?\| body:\s*/i, '')
+    .replace(/^\{"error":"|"}$/g, '') || fallback;
+}
+
 function formatDate(dateValue: string) {
   const [year, month, day] = dateValue.split('-').map(Number);
   return new Date(year, month - 1, day).toLocaleDateString(undefined, {
@@ -124,7 +138,7 @@ export default function FacilityAvailableWorkersPage() {
       setSelectedAvailabilityIds([]);
       setInviteMessage('');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to invite workers');
+      setMessage(friendlyInviteError(error, 'Failed to invite workers'));
     } finally {
       setBusy(false);
     }
