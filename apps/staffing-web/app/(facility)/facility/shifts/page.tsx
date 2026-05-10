@@ -529,7 +529,7 @@ export default function FacilityShiftsPage() {
                 {((shift.pendingCount ?? 0) > 0 || (shift.fillCount ?? 0) > 0) ? (
                   <Link
                     href={`/facility/applicants?shiftId=${shift.id}`}
-                    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                    className={(shift.pendingCount ?? 0) > 0 ? 'inline-flex animate-pulse items-center justify-center rounded-full bg-red-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm' : 'inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'}
                   >
                     Review Applicants
                   </Link>

@@ -267,15 +267,13 @@ export function PostShiftForm() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
-            Start date
-            <span>Start Date</span>
+          <label className="grid gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-cyan-700">Start Date</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="rounded-2xl border border-cyan-300 bg-cyan-50 px-3 py-4 text-sm font-semibold text-slate-950" />
           </label>
 
-          <label className="grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
-            End date optional
-            <span>End Date Optional</span>
+          <label className="grid gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-slate-600">End Date Optional</span>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-3 py-4 text-sm font-semibold text-slate-950" />
           </label>
         </div>

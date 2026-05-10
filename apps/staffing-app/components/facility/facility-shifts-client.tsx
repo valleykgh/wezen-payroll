@@ -346,10 +346,19 @@ export function FacilityShiftsClient() {
               </span>
             </div>
 
+            {(shift.pendingCount ?? 0) > 0 ? (
+              <Link
+                href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`}
+                className="mt-4 block animate-pulse rounded-2xl bg-red-600 px-4 py-3 text-center text-sm font-extrabold text-white"
+              >
+                Review Applicant
+              </Link>
+            ) : null}
+
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="rounded-2xl bg-slate-50 p-3">
-                <p className="font-bold text-slate-950">{shift.applicants}</p>
-                <p className="text-slate-500">Applicants</p>
+              <div className={(shift.pendingCount ?? 0) > 0 ? 'animate-pulse rounded-2xl bg-red-600 p-3 text-white' : 'rounded-2xl bg-slate-50 p-3'}>
+                <p className={(shift.pendingCount ?? 0) > 0 ? 'font-bold text-white' : 'font-bold text-slate-950'}>{shift.applicants}</p>
+                <p className={(shift.pendingCount ?? 0) > 0 ? 'text-white' : 'text-slate-500'}>Applicants</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="font-bold text-slate-950">{shift.fillLabel}</p>
