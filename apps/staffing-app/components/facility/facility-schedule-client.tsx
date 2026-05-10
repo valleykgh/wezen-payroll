@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
@@ -8,8 +9,9 @@ type Shift = {
   role: string;
   shiftType: string;
   date: string;
-  time: string;
+  time?: string;
   status: string;
+  approvedCount?: number;
   applicants: number;
 };
 
@@ -22,8 +24,8 @@ export function FacilityScheduleClient() {
   const [shiftType, setShiftType] = useState('ALL');
 
   useEffect(() => {
-    apiFetch<{ data: Shift[] }>('/api/shifts')
-      .then((res) => { setShifts(res.data || []); setMessage(''); })
+    apiFetch<{ data: { recentShifts: Shift[] } }>('/api/facility/dashboard')
+      .then((res) => { setShifts(res.data.recentShifts || []); setMessage(''); })
       .catch((error) => setMessage(error instanceof Error ? error.message : 'Failed to load schedule'));
   }, []);
 
@@ -54,12 +56,25 @@ export function FacilityScheduleClient() {
       {message ? <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">{message}</div> : null}
 
       {filtered.map((shift) => (
-        <div key={shift.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <Link
+          key={shift.id}
+          href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`}
+          className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200"
+        >
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-700">{shift.status}</p>
           <h2 className="mt-2 text-lg font-extrabold text-slate-950">{shift.role} • {shift.shiftType}</h2>
-          <p className="mt-1 text-sm font-semibold text-slate-600">{new Date(shift.date).toLocaleDateString()} • {shift.time}</p>
-          <p className="mt-2 text-xs font-bold text-slate-500">{shift.applicants} applicant(s)</p>
-        </div>
+          <p className="mt-1 text-sm font-semibold text-slate-600">{new Date(shift.date).toLocaleDateString()}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="font-extrabold text-slate-950">{shift.applicants}</p>
+              <p className="text-slate-500">Applicants</p>
+            </div>
+            <div className="rounded-2xl bg-emerald-50 p-3">
+              <p className="font-extrabold text-emerald-700">{shift.approvedCount ?? 0}</p>
+              <p className="text-emerald-700">Approved</p>
+            </div>
+          </div>
+        </Link>
       ))}
 
       {filtered.length === 0 && !message ? <div className="rounded-3xl bg-white p-5 text-sm text-slate-600">No shifts match the selected filters.</div> : null}

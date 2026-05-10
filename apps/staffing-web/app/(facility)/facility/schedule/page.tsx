@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
@@ -8,8 +9,9 @@ type Shift = {
   role: string;
   shiftType: string;
   date: string;
-  time: string;
+  time?: string;
   status: string;
+  approvedCount?: number;
   applicants: number;
 };
 
@@ -24,8 +26,8 @@ export default function FacilitySchedulePage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await apiFetch<{ data: Shift[] }>('/api/shifts');
-        setShifts(res.data);
+        const res = await apiFetch<{ data: { recentShifts: Shift[] } }>('/api/facility/dashboard');
+        setShifts(res.data.recentShifts || []);
         setMessage('');
       } catch (e) {
         setMessage('Failed to load schedule');
@@ -153,23 +155,31 @@ export default function FacilitySchedulePage() {
 
             <div className="mt-4 space-y-3">
               {shifts.map((shift) => (
-                <div
+                <Link
                   key={shift.id}
-                  className="flex items-center justify-between rounded-xl border p-4"
+                  href={`/facility/shift-detail?shiftId=${shift.id}`}
+                  className="flex items-center justify-between rounded-xl border p-4 transition hover:border-cyan-300 hover:bg-cyan-50"
                 >
                   <div>
                     <div className="font-semibold">
                       {shift.role} • {shift.shiftType}
                     </div>
                     <div className="text-sm text-slate-600">
-                      {shift.time}
+                      {shift.status} • {new Date(shift.date).toLocaleDateString()}
                     </div>
                   </div>
 
-                  <div className="text-sm text-slate-500">
-                    {shift.applicants} applicants
+                  <div className="grid grid-cols-2 gap-2 text-center text-sm">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-700">
+                      <div className="font-bold">{shift.applicants}</div>
+                      <div className="text-xs">Applicants</div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700">
+                      <div className="font-bold">{shift.approvedCount ?? 0}</div>
+                      <div className="text-xs">Approved</div>
+                    </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
