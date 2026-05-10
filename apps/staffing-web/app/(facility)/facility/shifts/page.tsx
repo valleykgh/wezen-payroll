@@ -495,6 +495,16 @@ export default function FacilityShiftsPage() {
                 {formatShiftDate(shift.date)}
 	        </div>
 
+                {((shift.pendingCount ?? 0) > 0 || (shift.fillCount ?? 0) > 0) ? (
+                  <Link
+                    href={`/facility/applicants?shiftId=${shift.id}`}
+                    className={(shift.pendingCount ?? 0) > 0 ? 'mt-4 inline-flex animate-pulse items-center justify-center rounded-full bg-red-600 px-6 py-3 text-sm font-extrabold text-white shadow-sm' : 'mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'}
+                  >
+                    Review Applicants
+                  </Link>
+                ) : null}
+
+
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -526,15 +536,6 @@ export default function FacilityShiftsPage() {
               </div>
 
               <div className="flex w-full flex-col gap-3 lg:w-56">
-                {((shift.pendingCount ?? 0) > 0 || (shift.fillCount ?? 0) > 0) ? (
-                  <Link
-                    href={`/facility/applicants?shiftId=${shift.id}`}
-                    className={(shift.pendingCount ?? 0) > 0 ? 'inline-flex animate-pulse items-center justify-center rounded-full bg-red-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm' : 'inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50'}
-                  >
-                    Review Applicants
-                  </Link>
-                ) : null}
-	    
 	        {['OPEN', 'FILLED', 'INVITE_ONLY'].includes(shift.status) && shift.fillCount === 0 ? (
   <Link
     href={`/facility/shifts/${shift.id}/edit`}

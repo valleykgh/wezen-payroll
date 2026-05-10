@@ -125,8 +125,15 @@ export function FacilityAvailableWorkersClient() {
 
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div className="grid gap-3">
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
+          <label className="rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-3">
+            <span className="block text-[10px] font-extrabold uppercase tracking-wide text-cyan-700">Start Date</span>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none" />
+          </label>
+
+          <label className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <span className="block text-[10px] font-extrabold uppercase tracking-wide text-slate-600">End Date Optional</span>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none" />
+          </label>
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm">
             <option value="CNA">CNA</option>
             <option value="LVN">LVN</option>
