@@ -155,7 +155,7 @@ export async function uploadFileToCandidateFolder(params: {
     `${params.firstName || ''} ${params.lastName || ''}`.trim() || params.professionalId;
 
   const candidateFolder = sanitizeFolderSegment(displayName);
-  const folderPath = await ensureFolderByPath(`Candidate Documents/${candidateFolder}`);
+  const folderPath = await ensureFolderByPath(`Candidate-Documents - New/${candidateFolder}`);
 
   const safeFileName = sanitizeFileName(params.originalFileName);
   const fileBuffer = await fs.promises.readFile(params.localFilePath);

@@ -333,9 +333,16 @@ const chartData = report
                   Compliance alerts
                 </h2>
                 <div className="mt-5 space-y-3 text-sm text-slate-600">
-                  <div className="rounded-2xl bg-rose-50 px-4 py-3 text-rose-700">
-                    {dashboard.stats.complianceAlerts} active compliance alert(s).
-                  </div>
+                  <Link
+                    href="/facility/compliance"
+                    className={dashboard.stats.complianceAlerts > 0
+                      ? 'block animate-pulse rounded-2xl bg-rose-600 px-4 py-3 font-bold text-white'
+                      : 'block rounded-2xl bg-emerald-50 px-4 py-3 font-bold text-emerald-700'}
+                  >
+                    {dashboard.stats.complianceAlerts > 0
+                      ? `${dashboard.stats.complianceAlerts} active compliance alert(s). Tap to review details.`
+                      : 'No active compliance alerts.'}
+                  </Link>
                   <div className="rounded-2xl bg-cyan-50 px-4 py-3 text-cyan-700">
                     {dashboard.stats.pendingRequests} shift request(s) awaiting facility review.
                   </div>
