@@ -42,19 +42,11 @@ export function FacilityAlertsCard() {
 
   if (items.length === 0) return null;
 
-  const href =
-    items.length === 1
-      ? items[0].route
-      : '/app/facility/notifications/index.html';
-
   const requestedCount = items.filter((item) => item.type === 'REQUEST').length;
   const declinedCount = items.filter((item) => item.type === 'DECLINED_INVITATION').length;
 
   return (
-    <Link
-      href={href}
-      className="block rounded-3xl border-2 border-red-600 bg-red-600 p-5 text-white shadow-xl"
-    >
+    <div className="rounded-3xl border-2 border-red-600 bg-red-600 p-5 text-white shadow-xl">
       <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-white/80">
         Urgent facility review
       </p>
@@ -74,17 +66,23 @@ export function FacilityAlertsCard() {
         </div>
       </div>
 
-      {items.length === 1 ? (
-        <div className="mt-4 rounded-2xl bg-white/15 p-3 text-sm font-bold">
-          {items[0].workerName} • {items[0].label}
-          <br />
-          {items[0].shift.role} {items[0].shift.shiftType} • {new Date(items[0].shift.date).toLocaleDateString()}
-        </div>
-      ) : null}
+      <div className="mt-4 grid gap-3">
+        {items.slice(0, 5).map((item) => (
+          <Link
+            key={item.id}
+            href={item.route}
+            className="block rounded-2xl bg-white/15 p-3 text-sm font-bold text-white"
+          >
+            {item.workerName} • {item.label}
+            <br />
+            {item.shift.role} {item.shift.shiftType} • {new Date(item.shift.date).toLocaleDateString()} • {item.shift.time}
+          </Link>
+        ))}
+      </div>
 
       <p className="mt-4 text-sm font-bold text-white">
-        Tap to review applicants and rejected invitations.
+        Tap an item to review its shift details.
       </p>
-    </Link>
+    </div>
   );
 }

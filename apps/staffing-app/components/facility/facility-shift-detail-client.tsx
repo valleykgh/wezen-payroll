@@ -149,7 +149,16 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => setMessage(''), 2500);
-    return () => clearTimeout(timer);
+    async function dismissDeclinedInvitation(invitationId: string) {
+    try {
+      await apiFetch(`/api/facility/invitations/${invitationId}/dismiss`, { method: 'POST' });
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to dismiss invitation');
+    }
+  }
+
+  return () => clearTimeout(timer);
   }, [message]);
 
 
@@ -218,6 +227,9 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
                 return (
                   <div key={invite.id} className="rounded-2xl bg-white p-4 ring-1 ring-rose-100">
                     <div className="font-extrabold text-slate-950">{workerName}</div>
+                    <div className="mt-1 rounded-xl bg-rose-50 px-3 py-2 text-xs font-extrabold text-rose-800">
+                      {detail.role} {detail.shiftType} • {new Date(detail.date).toLocaleDateString()} • {detail.time}
+                    </div>
                     <div className="mt-1 text-sm font-semibold text-slate-600">
                       {invite.professional.role} • {invite.professional.email}
                     </div>
@@ -229,6 +241,14 @@ export function FacilityShiftDetailClient({ shiftId }: { shiftId: string }) {
                         Declined: {new Date(invite.respondedAt).toLocaleString()}
                       </div>
                     ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => dismissDeclinedInvitation(invite.id)}
+                      className="mt-3 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-extrabold text-white"
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 );
               })}

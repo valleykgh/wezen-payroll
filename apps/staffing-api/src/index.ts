@@ -3917,6 +3917,42 @@ if (!facilityStatus.ok) {
 
 
 
+
+app.post('/api/facility/invitations/:invitationId/dismiss', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.authUser!.userId;
+    const facilityId = await getFacilityIdForUser(userId);
+
+    if (!facilityId) {
+      return res.status(403).json({ error: 'Facility account not found' });
+    }
+
+    const invitationId = String(req.params.invitationId || '');
+
+    const invitation = await prisma.shiftInvitation.findUnique({
+      where: { id: invitationId },
+    });
+
+    if (!invitation || invitation.facilityId !== facilityId) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    if (invitation.status !== 'DECLINED') {
+      return res.status(400).json({ error: 'Only declined invitations can be dismissed' });
+    }
+
+    const updated = await prisma.shiftInvitation.update({
+      where: { id: invitationId },
+      data: { status: 'DISMISSED' },
+    });
+
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('POST /api/facility/invitations/:invitationId/dismiss error:', error);
+    res.status(500).json({ error: 'Failed to dismiss invitation' });
+  }
+});
+
 app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req: AuthedRequest, res) => {
   try {
     const userId = req.authUser!.userId;
