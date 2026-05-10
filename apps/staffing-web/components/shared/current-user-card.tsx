@@ -75,7 +75,7 @@ export function CurrentUserCard() {
                   : 'mr-2 h-2.5 w-2.5 rounded-full bg-rose-500'
               }
             />
-            {user.appNotificationsEnabled ? 'Alerts ON' : 'Alerts OFF'}
+            {user.appNotificationsEnabled ? 'App Alerts ON' : 'App Alerts OFF'}
           </button>
 
           <button

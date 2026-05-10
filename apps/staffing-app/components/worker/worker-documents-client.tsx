@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 
 type DocumentItem = {
   id: string;
@@ -86,7 +86,7 @@ export function WorkerDocumentsClient() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Upload failed');
+        throw new Error(formatApiErrorText(text, 'Upload failed'));
       }
 
       setMessage('Document uploaded. It is pending admin approval.');

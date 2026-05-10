@@ -1,5 +1,6 @@
 'use client';
 
+import { formatApiErrorText } from '@/lib/api-client';
 import { useMemo, useState } from 'react';
 import { SelectInput } from '@/components/ui/select-input';
 import { TextInput } from '@/components/ui/text-input';
@@ -65,7 +66,7 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Upload failed');
+        throw new Error(formatApiErrorText(text, 'Upload failed'));
       }
 
       setMessage('Document uploaded successfully.');

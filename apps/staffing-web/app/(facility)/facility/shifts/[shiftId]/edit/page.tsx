@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { FormField } from '@/components/ui/form-field';
 import { SelectInput } from '@/components/ui/select-input';
 import { TextArea } from '@/components/ui/text-area';
@@ -166,7 +166,7 @@ export default function EditShiftPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to update shift');
+        throw new Error(formatApiErrorText(text, 'Failed to update shift'));
       }
 
       setMessage('Shift updated successfully.');

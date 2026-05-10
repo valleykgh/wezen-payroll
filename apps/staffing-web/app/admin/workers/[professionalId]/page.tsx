@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { TextArea } from '@/components/ui/text-area';
@@ -143,7 +143,7 @@ setDoublePayRateDollars(
         credentials: 'include',
       });
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to approve document');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to approve document'));
       await load(professionalId);
       setMessage('Document approved successfully.');
     } catch (error) {
@@ -167,7 +167,7 @@ setDoublePayRateDollars(
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to reject document');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to reject document'));
 
       await load(professionalId);
       setMessage('Document rejected successfully.');
@@ -205,7 +205,7 @@ async function uploadAdminDocument() {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(text || 'Failed to upload document');
+      throw new Error(formatApiErrorText(text, 'Failed to upload document'));
     }
 
     setAdminUploadFile(null);
@@ -233,7 +233,7 @@ async function uploadAdminDocument() {
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || `Failed to ${action} worker`);
+      if (!res.ok) throw new Error(formatApiErrorText(text, `Failed to ${action} worker`));
 
       await load(professionalId);
       setMessage(
@@ -268,7 +268,7 @@ async function uploadAdminDocument() {
       );
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to reject worker');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to reject worker'));
 
       await load(professionalId);
       setWorkerRejectReason('');
@@ -307,7 +307,7 @@ async function savePayRates() {
     );
 
     const text = await res.text();
-    if (!res.ok) throw new Error(text || 'Failed to save pay rates');
+    if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to save pay rates'));
 
     await load(professionalId);
     setMessage('Worker pay rates saved successfully.');
@@ -331,7 +331,7 @@ async function markIcaSent() {
     );
 
     const text = await res.text();
-    if (!res.ok) throw new Error(text || 'Failed to mark ICA as sent');
+    if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to mark ICA as sent'));
 
     await load(professionalId);
     setMessage('ICA marked as sent. Worker has been notified to complete Adobe eSign.');
@@ -355,7 +355,7 @@ async function markIcaSigned() {
     );
 
     const text = await res.text();
-    if (!res.ok) throw new Error(text || 'Failed to mark ICA as signed');
+    if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to mark ICA as signed'));
 
     await load(professionalId);
     setMessage('ICA has been marked as signed. If all documents are approved and the worker is approved by Wezen, shift requests can proceed.');
@@ -414,7 +414,7 @@ async function downloadAllDocuments() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to reset worker password');
+        throw new Error(formatApiErrorText(text, 'Failed to reset worker password'));
       }
 
       setResetPassword('');
@@ -458,7 +458,7 @@ async function downloadAllDocuments() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to send message');
+        throw new Error(formatApiErrorText(text, 'Failed to send message'));
       }
 
       setMessageSubject('');
@@ -490,7 +490,7 @@ async function downloadAllDocuments() {
       );
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to delete worker');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to delete worker'));
 
       setMessage('Worker deleted successfully.');
       window.location.href = '/admin/workers';

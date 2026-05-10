@@ -1,5 +1,6 @@
 'use client';
 
+import { formatApiErrorText } from '@/lib/api-client';
 import { useState } from 'react';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
@@ -94,7 +95,7 @@ export function WorkerProfileForm({ profile }: Props) {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to update profile');
+        throw new Error(formatApiErrorText(text, 'Failed to update profile'));
       }
 
       setMessage('Profile updated successfully.');

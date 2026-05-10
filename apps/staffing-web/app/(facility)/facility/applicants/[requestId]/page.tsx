@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest } from '@/lib/auth-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { TextArea } from '@/components/ui/text-area';
@@ -120,7 +120,7 @@ export default function ApplicantDetailPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to send message');
+        throw new Error(formatApiErrorText(text, 'Failed to send message'));
       }
 
       setMessage('Message sent to applicant by email and app notification.');
@@ -149,7 +149,7 @@ export default function ApplicantDetailPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} request`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} request`));
       }
 
       await load(requestId);
@@ -233,7 +233,7 @@ export default function ApplicantDetailPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to add worker to DNR list');
+        throw new Error(formatApiErrorText(text, 'Failed to add worker to DNR list'));
       }
 
       await load(requestId);
@@ -265,7 +265,7 @@ export default function ApplicantDetailPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to remove worker from DNR list');
+        throw new Error(formatApiErrorText(text, 'Failed to remove worker from DNR list'));
       }
 
       await load(requestId);

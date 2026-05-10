@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
@@ -59,7 +59,7 @@ export default function AdminFacilitiesPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} facility`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} facility`));
       }
 
       await load();
@@ -97,7 +97,7 @@ async function sendInvite(facilityId: string, facilityName: string) {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(text || 'Failed to send invite');
+      throw new Error(formatApiErrorText(text, 'Failed to send invite'));
     }
 
     setMessage(`Invite sent to ${email}.`);
@@ -127,7 +127,7 @@ async function deleteFacility(facilityId: string, facilityName: string) {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(text || 'Failed to delete facility');
+      throw new Error(formatApiErrorText(text, 'Failed to delete facility'));
     }
 
     await load();

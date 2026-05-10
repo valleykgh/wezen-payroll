@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 
 type Facility = {
   id: string;
@@ -70,7 +70,7 @@ export default function AdminFacilityInvitesPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to create facility invite');
+        throw new Error(formatApiErrorText(text, 'Failed to create facility invite'));
       }
 
       const parsed = text ? JSON.parse(text) : null;

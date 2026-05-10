@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 
 function formatDateOnly(value?: string | null) {
   if (!value) return '';
@@ -129,7 +129,7 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to upload document');
+        throw new Error(formatApiErrorText(text, 'Failed to upload document'));
       }
 
       setAdminUploadFile(null);

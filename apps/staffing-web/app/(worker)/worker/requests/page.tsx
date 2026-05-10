@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest } from '@/lib/auth-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PAYROLL_PORTAL_URL } from '@/lib/payroll';
@@ -86,7 +86,7 @@ async function requestCancellation(requestId: string) {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(text || 'Failed to request cancellation');
+      throw new Error(formatApiErrorText(text, 'Failed to request cancellation'));
     }
 
     const me = await meRequest();

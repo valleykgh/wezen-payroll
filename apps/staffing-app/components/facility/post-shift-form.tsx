@@ -21,18 +21,6 @@ type WorkerSearchResult = {
 };
 
 
-function friendlyInviteError(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-
-  const message = error.message || fallback;
-  const match = message.match(/"error"\s*:\s*"([^"]+)"/);
-
-  if (match?.[1]) return match[1];
-
-  return message
-    .replace(/^API request failed for .*?\| body:\s*/i, '')
-    .replace(/^\{"error":"|"}$/g, '') || fallback;
-}
 
 function formatAvailabilityDate(dateValue: string) {
   const [year, month, day] = dateValue.split('-').map(Number);
@@ -218,7 +206,7 @@ export function PostShiftForm() {
       setSelectedAvailabilityIds([]);
       setInviteMessage('');
     } catch (error) {
-      setMessage(friendlyInviteError(error, 'Failed to send invitations'));
+      setMessage(error instanceof Error ? error.message : 'Failed to send invitations');
     } finally {
       setLoading(false);
     }

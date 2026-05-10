@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { FormField } from '@/components/ui/form-field';
 import { SelectInput } from '@/components/ui/select-input';
 import { TextArea } from '@/components/ui/text-area';
@@ -38,18 +38,6 @@ type WorkerSearchResult = {
 
 
 
-function friendlyInviteError(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-
-  const message = error.message || fallback;
-  const match = message.match(/"error"\s*:\s*"([^"]+)"/);
-
-  if (match?.[1]) return match[1];
-
-  return message
-    .replace(/^API request failed for .*?\| body:\s*/i, '')
-    .replace(/^\{"error":"|"}$/g, '') || fallback;
-}
 
 function getDateRange(startDate: string, endDate?: string) {
   if (!startDate) return [];
@@ -203,7 +191,7 @@ export function PostShiftForm() {
           const text = await res.text();
 
           if (!res.ok) {
-            throw new Error(text || 'Failed to create shift');
+            throw new Error(formatApiErrorText(text, 'Failed to create shift'));
           }
 
           const payload = text ? JSON.parse(text) : null;
@@ -291,7 +279,7 @@ export function PostShiftForm() {
       setSelectedWorkerIds([]);
       setInviteMessage('');
     } catch (error) {
-      setMessage(friendlyInviteError(error, 'Failed to send invitations'));
+      setMessage(error instanceof Error ? error.message : 'Failed to send invitations');
     } finally {
       setSubmitting(false);
     }

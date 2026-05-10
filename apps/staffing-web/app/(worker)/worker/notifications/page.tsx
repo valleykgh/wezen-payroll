@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type Notification = {
@@ -49,7 +49,7 @@ export default function WorkerNotificationsPage() {
 
       const text = await res.text();
       if (!res.ok) {
-        throw new Error(text || 'Failed to mark notification as read');
+        throw new Error(formatApiErrorText(text, 'Failed to mark notification as read'));
       }
 
       await load();
@@ -71,7 +71,7 @@ export default function WorkerNotificationsPage() {
 
       const text = await res.text();
       if (!res.ok) {
-        throw new Error(text || 'Failed to mark all notifications as read');
+        throw new Error(formatApiErrorText(text, 'Failed to mark all notifications as read'));
       }
 
       await load();

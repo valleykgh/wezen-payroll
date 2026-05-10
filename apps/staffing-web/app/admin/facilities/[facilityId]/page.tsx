@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 
 type FacilityDetail = {
   id: string;
@@ -109,7 +109,7 @@ export default function AdminFacilityDetailPage({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to save facility');
+        throw new Error(formatApiErrorText(text, 'Failed to save facility'));
       }
 
       await load(facilityId);

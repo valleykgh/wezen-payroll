@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest, type AuthMeResponse } from '@/lib/auth-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
@@ -78,7 +78,7 @@ export default function AdminShiftsPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to cancel shift');
+        throw new Error(formatApiErrorText(text, 'Failed to cancel shift'));
       }
 
       await load();
@@ -109,7 +109,7 @@ export default function AdminShiftsPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to delete shift');
+        throw new Error(formatApiErrorText(text, 'Failed to delete shift'));
       }
 
       await load();

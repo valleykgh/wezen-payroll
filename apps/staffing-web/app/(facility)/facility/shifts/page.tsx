@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { meRequest } from '@/lib/auth-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
@@ -116,7 +116,7 @@ export default function FacilityShiftsPage() {
         const text = await res.text();
 
         if (!res.ok) {
-          throw new Error(text || 'Failed to delete one or more selected shifts');
+          throw new Error(formatApiErrorText(text, 'Failed to delete one or more selected shifts'));
         }
       }
 
@@ -143,7 +143,7 @@ export default function FacilityShiftsPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to duplicate shift');
+        throw new Error(formatApiErrorText(text, 'Failed to duplicate shift'));
       }
 
       await loadShifts(facilityId);
@@ -169,7 +169,7 @@ export default function FacilityShiftsPage() {
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to delete shift');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to delete shift'));
 
       await loadShifts(facilityId);
       setMessage('Shift deleted successfully.');
@@ -193,7 +193,7 @@ export default function FacilityShiftsPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} shift`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} shift`));
       }
 
       await loadShifts(facilityId);

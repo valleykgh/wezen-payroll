@@ -1,5 +1,6 @@
 'use client';
 
+import { formatApiErrorText } from '@/lib/api-client';
 import { useEffect, useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
@@ -107,7 +108,7 @@ export function ShiftResultsClient({ shifts }: Props) {
         const text = await res.text();
 
         if (!res.ok) {
-          throw new Error(text || 'Failed to load shift details');
+          throw new Error(formatApiErrorText(text, 'Failed to load shift details'));
         }
 
         const parsed = text ? JSON.parse(text) : null;

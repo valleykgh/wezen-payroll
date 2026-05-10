@@ -1,5 +1,6 @@
 'use client';
 
+import { formatApiErrorText } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/shared/navbar';
@@ -27,7 +28,7 @@ export default function ContactPage() {
       });
 
       const text = await res.text();
-      if (!res.ok) throw new Error(text || 'Failed to send message');
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to send message'));
 
       setName('');
       setEmail('');

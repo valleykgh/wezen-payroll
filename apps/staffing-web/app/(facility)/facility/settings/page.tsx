@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type FacilitySettings = {
@@ -160,7 +160,7 @@ export default function FacilitySettingsPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to save settings');
+        throw new Error(formatApiErrorText(text, 'Failed to save settings'));
       }
 
       await load();
@@ -208,7 +208,7 @@ async function changePassword() {
     const text = await res.text();
 
     if (!res.ok) {
-      throw new Error(text || 'Failed to change password');
+      throw new Error(formatApiErrorText(text, 'Failed to change password'));
     }
 
     setCurrentPassword('');

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatApiErrorText } from '@/lib/api-client';
 import { useState } from 'react';
 import Link from 'next/link';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
@@ -68,7 +69,7 @@ export default function AdminCreateFacilityPage() {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || 'Failed to create facility');
+        throw new Error(formatApiErrorText(text, 'Failed to create facility'));
       }
 
       const parsed = text ? JSON.parse(text) : null;

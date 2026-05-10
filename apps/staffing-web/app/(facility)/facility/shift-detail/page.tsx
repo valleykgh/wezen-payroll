@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
@@ -119,7 +119,7 @@ export default function FacilityShiftDetailPage() {
 
       const text = await res.text();
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} request`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} request`));
       }
 
       if (shiftId) {
@@ -196,7 +196,7 @@ export default function FacilityShiftDetailPage() {
 
       const text = await res.text();
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} shift`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} shift`));
       }
 
       await load(shiftId);

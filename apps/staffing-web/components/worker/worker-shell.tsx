@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppLogo } from '@/components/shared/app-logo';
 import { CurrentUserCard } from '@/components/shared/current-user-card';
@@ -22,6 +23,7 @@ const workerNav = [
 ];
 
 export function WorkerShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -63,21 +65,30 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
 	  <AppLogo />
 
           <nav className="mt-8 space-y-2">
-            {workerNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
-              >
-                <span>{item.label}</span>
+            {workerNav.map((item) => {
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-                {item.badgeKey === 'notifications' && unreadCount > 0 ? (
-                  <span className="inline-flex min-w-[24px] items-center justify-center rounded-full bg-rose-600 px-2 py-1 text-xs font-bold text-white">
-                    {unreadCount}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={
+                    isActive
+                      ? 'flex items-center justify-between rounded-2xl border-2 border-blue-600 bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-50'
+                      : 'flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950'
+                  }
+                >
+                  <span>{item.label}</span>
+
+                  {item.badgeKey === 'notifications' && unreadCount > 0 ? (
+                    <span className="inline-flex min-w-[24px] items-center justify-center rounded-full bg-rose-600 px-2 py-1 text-xs font-bold text-white">
+                      {unreadCount}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="mt-8 rounded-[1.5rem] bg-gradient-to-br from-slate-900 to-cyan-700 p-5 text-white shadow-sm">
@@ -147,16 +158,25 @@ export function WorkerShell({ children }: { children: React.ReactNode }) {
 	   {mobileMenuOpen ? (
   <div className="border-b border-slate-200 bg-white px-4 py-4 lg:hidden">
     <nav className="grid gap-2">
-      {workerNav.map((item) => (  
-	<Link
-          key={item.href}
-          href={item.href}
-          onClick={() => setMobileMenuOpen(false)}
-          className="rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-        >
-          {item.label}
-        </Link>
-      ))}
+      {workerNav.map((item) => {
+        const isActive =
+          pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={() => setMobileMenuOpen(false)}
+            className={
+              isActive
+                ? 'rounded-2xl border-2 border-blue-600 bg-white px-4 py-3 text-sm font-semibold text-slate-950'
+                : 'rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100'
+            }
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   </div>
 ) : null}

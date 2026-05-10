@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, formatApiErrorText } from '@/lib/api-client';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type FacilityRequest = {
@@ -135,7 +135,7 @@ export function ApplicantsClient({ requests }: Props) {
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(text || `Failed to ${action} applicant`);
+        throw new Error(formatApiErrorText(text, `Failed to ${action} applicant`));
       }
 
       setItems((prev) =>

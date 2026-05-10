@@ -5,6 +5,32 @@ function getAuthToken() {
   return window.localStorage.getItem('wezen_auth_token');
 }
 
+export function formatApiErrorText(text: string, fallback = 'Request failed') {
+  if (!text) return fallback;
+
+  try {
+    const parsed = JSON.parse(text);
+
+    const base =
+      typeof parsed?.error === 'string'
+        ? parsed.error
+        : typeof parsed?.message === 'string'
+          ? parsed.message
+          : fallback;
+
+    if (Array.isArray(parsed?.reasons) && parsed.reasons.length > 0) {
+      return `${base}\n\n${parsed.reasons.map((reason: string) => `• ${reason}`).join('\n')}`;
+    }
+
+    return base;
+  } catch {
+    return text
+      .replace(/^API request failed for .*?\| body:\s*/i, '')
+      .replace(/^{"error":"|"}$/g, '')
+      .trim() || fallback;
+  }
+}
+
 function buildErrorMessage(url: string, status: number, statusText: string, text: string) {
   try {
     const parsed = JSON.parse(text);
@@ -20,7 +46,7 @@ function buildErrorMessage(url: string, status: number, statusText: string, text
 
     return base;
   } catch {
-    return `API request failed for ${url}: ${status} ${statusText}${text ? ` | body: ${text}` : ''}`;
+    return formatApiErrorText(text, `Request failed (${status} ${statusText || ''})`.trim());
   }
 }
 
