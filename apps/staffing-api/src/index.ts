@@ -9297,9 +9297,12 @@ app.get('/api/facility/compliance', requireRole('FACILITY_ADMIN'), async (req: A
         severity: 'HIGH' | 'MEDIUM';
       }> = [];
 
-      const pendingDocs = worker.documents.filter((d) => d.status === 'PENDING');
-      const rejectedDocs = worker.documents.filter((d) => d.status === 'REJECTED');
-      const expiredDocs = worker.documents.filter((d) => d.status === 'EXPIRED');
+      const currentDocs = getCurrentDocumentsByCategory(worker.documents)
+        .filter((d) => !String(d.name || '').includes('-old'));
+
+      const pendingDocs = currentDocs.filter((d) => d.status === 'PENDING');
+      const rejectedDocs = currentDocs.filter((d) => d.status === 'REJECTED');
+      const expiredDocs = currentDocs.filter((d) => d.status === 'EXPIRED' || isDocumentExpired(d));
 
       if (pendingDocs.length > 0) {
         items.push({
