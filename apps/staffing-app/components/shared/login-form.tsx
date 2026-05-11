@@ -30,7 +30,7 @@ export function LoginForm({ next = '' }: LoginFormProps) {
         } else if ((role === 'FACILITY_ADMIN' || role === 'FACILITY_STAFF')) {
           window.location.replace('/app/facility/index.html');
         } else if (role === 'PROFESSIONAL') {
-          window.location.replace('/app/worker/index.html');
+          window.location.replace('/app/worker/documents/index.html');
         }
       } catch {
         // Stay on login page if no valid saved session exists.
@@ -65,7 +65,7 @@ async function handleSubmit(e: React.FormEvent) {
 } else if ((role === 'FACILITY_ADMIN' || role === 'FACILITY_STAFF')) {
   target = '/app/facility/index.html';
 } else if (role === 'PROFESSIONAL') {
-  target = '/app/worker/index.html';
+  target = '/app/worker/documents/index.html';
 }
     window.location.href = target;
     return;

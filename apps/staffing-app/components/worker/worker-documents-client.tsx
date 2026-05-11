@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 import { apiFetch, formatApiErrorText } from '@/lib/api-client';
+import { getAuthToken } from '@/lib/auth-client';
 
 type DocumentItem = {
   id: string;
@@ -77,9 +78,14 @@ export function WorkerDocumentsClient() {
       if (expiresAt) formData.append('expiresAt', expiresAt);
       formData.append('file', file);
 
+      const token = getAuthToken();
+
       const res = await fetch(`${STAFFING_API_BASE_URL}/api/worker/documents/upload`, {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: formData,
       });
 

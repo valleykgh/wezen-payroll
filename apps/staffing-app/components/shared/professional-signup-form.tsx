@@ -51,9 +51,9 @@ export function ProfessionalSignupForm() {
         zipCode: form.zipCode || undefined,
       });
 
-      setMessage('Success! Your professional account has been created. Opening your worker profile...');
+      setMessage('Success! Your professional account has been created. Opening document upload...');
       setTimeout(() => {
-        window.location.href = '/app/worker/profile/index.html';
+        window.location.href = '/app/worker/documents/index.html';
       }, 2200);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signup failed');
