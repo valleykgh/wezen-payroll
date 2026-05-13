@@ -254,6 +254,28 @@ export function WorkerAvailabilityClient() {
           );
         })}
       </div>
+
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={saveAvailability}
+            disabled={busy}
+            className="rounded-2xl bg-cyan-700 px-4 py-4 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {busy ? 'Saving...' : `Save Availability (${selectedCount})`}
+          </button>
+
+          <button
+            type="button"
+            onClick={clearMonth}
+            disabled={busy}
+            className="rounded-2xl border border-rose-300 px-4 py-3 text-sm font-bold text-rose-700 disabled:opacity-60"
+          >
+            Clear Month
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

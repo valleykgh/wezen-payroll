@@ -105,7 +105,7 @@ export async function uploadFileToCandidateFolder(params) {
     const rootPrefix = await getDriveRootPathPrefix();
     const displayName = `${params.firstName || ''} ${params.lastName || ''}`.trim() || params.professionalId;
     const candidateFolder = sanitizeFolderSegment(displayName);
-    const folderPath = await ensureFolderByPath(`Candidate Documents/${candidateFolder}`);
+    const folderPath = await ensureFolderByPath(`Candidate Documents - New/${candidateFolder}`);
     const safeFileName = sanitizeFileName(params.originalFileName);
     const fileBuffer = await fs.promises.readFile(params.localFilePath);
     const uploadUrl = `${GRAPH_BASE_URL}${rootPrefix}:/${encodeURIComponent(folderPath)}/${encodeURIComponent(safeFileName)}:/content`

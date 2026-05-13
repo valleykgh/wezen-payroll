@@ -44,21 +44,35 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 const ADMIN_ALERT_EMAIL = process.env.ADMIN_ALERT_EMAIL || '';
 async function getFacilityNotificationRecipients(facilityId) {
-    const admins = await prisma.facilityAdmin.findMany({
-        where: { facilityId },
-        include: {
-            user: {
-                select: {
-                    email: true,
-                    notificationEmail: true,
-                    isActive: true,
+    const [admins, staff] = await Promise.all([
+        prisma.facilityAdmin.findMany({
+            where: { facilityId },
+            include: {
+                user: {
+                    select: {
+                        email: true,
+                        notificationEmail: true,
+                        isActive: true,
+                    },
                 },
             },
-        },
-    });
-    const recipients = admins
-        .filter((admin) => admin.user?.isActive)
-        .map((admin) => admin.user.notificationEmail || admin.user.email)
+        }),
+        prisma.facilityStaff.findMany({
+            where: { facilityId },
+            include: {
+                user: {
+                    select: {
+                        email: true,
+                        notificationEmail: true,
+                        isActive: true,
+                    },
+                },
+            },
+        }),
+    ]);
+    const recipients = [...admins, ...staff]
+        .filter((item) => item.user?.isActive)
+        .map((item) => item.user.notificationEmail || item.user.email)
         .filter((email) => Boolean(email));
     return [...new Set(recipients)];
 }
@@ -557,7 +571,63 @@ function calculateDistanceMiles(lat1, lon1, lat2, lon2) {
             Math.sin(dLon / 2) ** 2;
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
-async function sendPushToUser(userId, title, body) {
+function isDocumentExpired(doc) {
+    if (!doc.expiresAt)
+        return false;
+    return new Date(doc.expiresAt).getTime() < Date.now();
+}
+function getCurrentDocumentsByCategory(documents) {
+    const activeDocuments = documents.filter((doc) => doc.status !== 'EXPIRED' && !(doc.name || '').includes('-old'));
+    const score = (doc) => {
+        const expired = isDocumentExpired(doc);
+        if (doc.status === 'APPROVED' && !expired)
+            return 500;
+        if (doc.status === 'PENDING')
+            return 400;
+        if (doc.status === 'REJECTED')
+            return 300;
+        if (doc.status === 'APPROVED' && expired)
+            return 200;
+        return 0;
+    };
+    const sorted = [...activeDocuments].sort((a, b) => {
+        const scoreDiff = score(b) - score(a);
+        if (scoreDiff !== 0)
+            return scoreDiff;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    const byCategory = new Map();
+    for (const doc of sorted) {
+        const category = String(doc.category);
+        if (!byCategory.has(category)) {
+            byCategory.set(category, doc);
+        }
+    }
+    return Array.from(byCategory.values());
+}
+async function isDefaultInternalAdmin(userId) {
+    if (!userId)
+        return false;
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, role: true, isActive: true },
+    });
+    return Boolean(user &&
+        user.isActive &&
+        user.role === UserRole.INTERNAL_ADMIN &&
+        user.email.toLowerCase() === 'admin@wezenstaffing.com');
+}
+async function requireDefaultInternalAdmin(req, res) {
+    const allowed = await isDefaultInternalAdmin(req.authUser?.userId);
+    if (!allowed) {
+        res.status(403).json({
+            error: 'Only the default admin can perform delete/disable actions.',
+        });
+        return false;
+    }
+    return true;
+}
+async function sendPushToUser(userId, title, body, data) {
     try {
         const tokens = await prisma.userDeviceToken.findMany({
             where: {
@@ -570,6 +640,12 @@ async function sendPushToUser(userId, title, body) {
                 platform: true,
             },
         });
+        const userPrefs = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { appNotificationsEnabled: true, isActive: true },
+        });
+        if (!userPrefs?.isActive || userPrefs.appNotificationsEnabled === false)
+            return;
         const iosTokens = tokens.filter((item) => item.platform === 'ios' || item.platform === 'iphone' || !item.platform);
         if (iosTokens.length === 0)
             return;
@@ -638,6 +714,8 @@ async function sendPushToUser(userId, title, body) {
                         },
                         sound: 'default',
                     },
+                    ...(data || {}),
+                    data: data || {},
                 }));
             });
             if (result.status < 200 || result.status >= 300) {
@@ -667,12 +745,19 @@ async function sendPushToUser(userId, title, body) {
         console.error('sendPushToUser error:', error);
     }
 }
-async function sendPushToFacilityAdmins(facilityId, title, body) {
-    const admins = await prisma.facilityAdmin.findMany({
-        where: { facilityId },
-        select: { userId: true },
-    });
-    await Promise.all(admins.map((admin) => sendPushToUser(admin.userId, title, body)));
+async function sendPushToFacilityAdmins(facilityId, title, body, data) {
+    const [admins, staff] = await Promise.all([
+        prisma.facilityAdmin.findMany({
+            where: { facilityId },
+            select: { userId: true },
+        }),
+        prisma.facilityStaff.findMany({
+            where: { facilityId },
+            select: { userId: true },
+        }),
+    ]);
+    const userIds = [...new Set([...admins, ...staff].map((item) => item.userId))];
+    await Promise.all(userIds.map((userId) => sendPushToUser(userId, title, body, data)));
 }
 async function createWorkerNotification(params) {
     await prisma.workerNotification.create({
@@ -700,7 +785,7 @@ async function createFacilityNotification(params) {
             message: params.message,
         },
     });
-    await sendPushToFacilityAdmins(params.facilityId, params.title, params.message);
+    await sendPushToFacilityAdmins(params.facilityId, params.title, params.message, params.pushData);
 }
 async function createAdminAuditLog(params) {
     try {
@@ -761,10 +846,11 @@ async function getWorkerDashboardData(userId) {
     if (!professional) {
         return null;
     }
-    const approvedDocs = professional.documents.filter((doc) => doc.status === 'APPROVED').length;
-    const pendingDocs = professional.documents.filter((doc) => doc.status === 'PENDING').length;
-    const rejectedDocs = professional.documents.filter((doc) => doc.status === 'REJECTED').length;
-    const expiredDocs = professional.documents.filter((doc) => doc.status === 'EXPIRED').length;
+    const currentDocuments = getCurrentDocumentsByCategory(professional.documents);
+    const approvedDocs = currentDocuments.filter((doc) => doc.status === 'APPROVED' && !isDocumentExpired(doc)).length;
+    const pendingDocs = currentDocuments.filter((doc) => doc.status === 'PENDING').length;
+    const rejectedDocs = currentDocuments.filter((doc) => doc.status === 'REJECTED').length;
+    const expiredDocs = currentDocuments.filter((doc) => doc.status === 'EXPIRED' || isDocumentExpired(doc)).length;
     const ica = professional.agreements.find((agreement) => agreement.agreementType === 'ICA');
     const eligibility = await getWorkerEligibility(professional.id);
     const requestedCount = professional.requests.length;
@@ -814,7 +900,7 @@ async function getWorkerDashboardData(userId) {
                 pending: pendingDocs,
                 rejected: rejectedDocs,
                 expired: expiredDocs,
-                total: professional.documents.length,
+                total: currentDocuments.length,
             },
             agreementStatus: ica?.status ?? 'NOT_STARTED',
             requests: {
@@ -842,7 +928,13 @@ async function getFacilityIdForUser(userId) {
         where: { userId },
         select: { facilityId: true },
     });
-    return facilityAdmin?.facilityId ?? null;
+    if (facilityAdmin?.facilityId)
+        return facilityAdmin.facilityId;
+    const facilityStaff = await prisma.facilityStaff.findUnique({
+        where: { userId },
+        select: { facilityId: true },
+    });
+    return facilityStaff?.facilityId ?? null;
 }
 function generateInviteCode(length = 10) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1369,6 +1461,46 @@ function getPasswordResetBaseUrl() {
         process.env.FRONTEND_BASE_URL ||
         'https://wezenstaffing.com').replace(/\/$/, '');
 }
+async function sendPasswordSetupEmail(params) {
+    await prisma.passwordResetToken.updateMany({
+        where: {
+            userId: params.userId,
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+        },
+        data: { usedAt: new Date() },
+    });
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(token);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await prisma.passwordResetToken.create({
+        data: {
+            userId: params.userId,
+            tokenHash,
+            expiresAt,
+        },
+    });
+    const resetUrl = `${getPasswordResetBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+    const appResetUrl = `${getPasswordResetBaseUrl()}/app/reset-password/index.html?token=${encodeURIComponent(token)}`;
+    await sendEmail({
+        to: params.email,
+        subject: params.subject,
+        html: `
+      <h2>Set up your Wezen Staffing password</h2>
+      <p>Hello ${params.firstName || 'there'},</p>
+      <p>${params.intro}</p>
+      <p>Use the link below to create your password. This link expires in 24 hours.</p>
+      <p><a href="${resetUrl}">Create Password</a></p>
+      <p>If you are using the iPhone app, open this link from your phone: <a href="${appResetUrl}">Create Password in App</a></p>
+    `,
+        text: [
+            'Set up your Wezen Staffing password',
+            params.intro,
+            `Create your password here. This link expires in 24 hours: ${resetUrl}`,
+            `iPhone app link: ${appResetUrl}`,
+        ].join('\n'),
+    });
+}
 app.post('/api/auth/forgot-password', async (req, res) => {
     const parsed = passwordResetRequestSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1528,16 +1660,25 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
                         facility: true,
                     },
                 },
+                facilityStaff: {
+                    include: {
+                        facility: true,
+                    },
+                },
             },
         });
         if (!user) {
             clearAuthCookie(res);
             return res.status(404).json({ error: 'User not found' });
         }
-        if (user.role === 'FACILITY_ADMIN' &&
+        if (((user.role === 'FACILITY_ADMIN' &&
             user.facilityAdmin &&
             user.facilityAdmin.facility &&
-            !user.facilityAdmin.facility.isActive) {
+            !user.facilityAdmin.facility.isActive) ||
+            (user.role === 'FACILITY_STAFF' &&
+                user.facilityStaff &&
+                user.facilityStaff.facility &&
+                !user.facilityStaff.facility.isActive))) {
             clearAuthCookie(res);
             return res.status(403).json({
                 error: 'Facility access has been deactivated. Please contact Wezen Staffing support.',
@@ -1551,14 +1692,343 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 notificationEmail: user.notificationEmail,
+                appNotificationsEnabled: user.appNotificationsEnabled,
                 professionalId: user.professional?.id ?? null,
-                facilityId: user.facilityAdmin?.facilityId ?? null,
+                facilityId: user.facilityAdmin?.facilityId ?? user.facilityStaff?.facilityId ?? null,
             },
         });
     }
     catch (error) {
         console.error('GET /api/auth/me error:', error);
         res.status(500).json({ error: 'Failed to fetch current user' });
+    }
+});
+const createFacilityStaffSchema = z.object({
+    email: z.string().email(),
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    password: z.string().min(8),
+    title: z.string().optional(),
+    notificationEmail: z.string().email().optional().nullable(),
+});
+const createInternalAdminSchema = z.object({
+    email: z.string().email(),
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    password: z.string().min(8),
+    notificationEmail: z.string().email().optional().nullable(),
+});
+app.put('/api/users/me/app-notifications', requireAuth, async (req, res) => {
+    try {
+        const enabled = Boolean(req.body?.enabled);
+        const updated = await prisma.user.update({
+            where: { id: req.authUser.userId },
+            data: { appNotificationsEnabled: enabled },
+            select: {
+                id: true,
+                appNotificationsEnabled: true,
+            },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('PUT /api/users/me/app-notifications error:', error);
+        res.status(500).json({ error: 'Failed to update app notification setting' });
+    }
+});
+app.get('/api/facility/staff', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const facilityId = await getFacilityIdForUser(req.authUser.userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const staff = await prisma.facilityStaff.findMany({
+            where: { facilityId },
+            include: {
+                user: true,
+            },
+            orderBy: [{ createdAt: 'desc' }],
+        });
+        res.json({
+            data: staff.map((item) => ({
+                id: item.id,
+                userId: item.userId,
+                title: item.title,
+                createdAt: item.createdAt,
+                email: item.user.email,
+                firstName: item.user.firstName,
+                lastName: item.user.lastName,
+                isActive: item.user.isActive,
+                notificationEmail: item.user.notificationEmail,
+                appNotificationsEnabled: item.user.appNotificationsEnabled,
+            })),
+        });
+    }
+    catch (error) {
+        console.error('GET /api/facility/staff error:', error);
+        res.status(500).json({ error: 'Failed to fetch facility staff' });
+    }
+});
+app.post('/api/facility/staff', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    const parsed = createFacilityStaffSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const facilityId = await getFacilityIdForUser(req.authUser.userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const email = parsed.data.email.toLowerCase().trim();
+        const existing = await prisma.user.findUnique({
+            where: { email },
+        });
+        if (existing) {
+            return res.status(409).json({ error: 'Email already in use' });
+        }
+        const passwordHash = await hashPassword(parsed.data.password);
+        const user = await prisma.user.create({
+            data: {
+                email,
+                passwordHash,
+                role: UserRole.FACILITY_STAFF,
+                firstName: parsed.data.firstName,
+                lastName: parsed.data.lastName,
+                notificationEmail: parsed.data.notificationEmail || null,
+                appNotificationsEnabled: true,
+                facilityStaff: {
+                    create: {
+                        facilityId,
+                        title: parsed.data.title || 'Scheduler',
+                    },
+                },
+            },
+            include: {
+                facilityStaff: true,
+            },
+        });
+        await sendPasswordSetupEmail({
+            userId: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            subject: 'Your Wezen Staffing facility staff account is ready',
+            intro: 'A facility staff account has been created for you. Please create your password to log in.',
+        });
+        res.status(201).json({
+            data: {
+                id: user.facilityStaff?.id,
+                userId: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                title: user.facilityStaff?.title,
+                isActive: user.isActive,
+                notificationEmail: user.notificationEmail,
+                appNotificationsEnabled: user.appNotificationsEnabled,
+            },
+        });
+    }
+    catch (error) {
+        console.error('POST /api/facility/staff error:', error);
+        res.status(500).json({ error: 'Failed to create facility staff user' });
+    }
+});
+app.put('/api/facility/staff/:staffId/active', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const staffId = String(req.params.staffId || '');
+        const active = Boolean(req.body?.active);
+        const facilityId = await getFacilityIdForUser(req.authUser.userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const staff = await prisma.facilityStaff.findUnique({
+            where: { id: staffId },
+        });
+        if (!staff || staff.facilityId !== facilityId) {
+            return res.status(404).json({ error: 'Facility staff user not found' });
+        }
+        const updated = await prisma.user.update({
+            where: { id: staff.userId },
+            data: { isActive: active },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                isActive: true,
+            },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('PUT /api/facility/staff/:staffId/active error:', error);
+        res.status(500).json({ error: 'Failed to update facility staff user' });
+    }
+});
+app.delete('/api/facility/staff/:staffId', requireRole('FACILITY_ADMIN'), async (req, res) => {
+    try {
+        const staffId = String(req.params.staffId || '');
+        const facilityId = await getFacilityIdForUser(req.authUser.userId);
+        if (!facilityId) {
+            return res.status(404).json({ error: 'Facility admin not found' });
+        }
+        const staff = await prisma.facilityStaff.findUnique({
+            where: { id: staffId },
+        });
+        if (!staff || staff.facilityId !== facilityId) {
+            return res.status(404).json({ error: 'Facility staff user not found' });
+        }
+        await prisma.user.delete({
+            where: { id: staff.userId },
+        });
+        res.json({ data: { ok: true } });
+    }
+    catch (error) {
+        console.error('DELETE /api/facility/staff/:staffId error:', error);
+        res.status(500).json({ error: 'Failed to delete facility staff user' });
+    }
+});
+app.get('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    try {
+        const admins = await prisma.user.findMany({
+            where: { role: UserRole.INTERNAL_ADMIN },
+            orderBy: [{ createdAt: 'desc' }],
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                isActive: true,
+                isSystemUser: true,
+                notificationEmail: true,
+                appNotificationsEnabled: true,
+                createdAt: true,
+            },
+        });
+        res.json({ data: admins });
+    }
+    catch (error) {
+        console.error('GET /api/admin/internal-admins error:', error);
+        res.status(500).json({ error: 'Failed to fetch internal admins' });
+    }
+});
+app.put('/api/admin/internal-admins/:userId/active', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
+        const userId = String(req.params.userId || '');
+        const active = Boolean(req.body?.active);
+        if (userId === req.authUser.userId && !active) {
+            return res.status(400).json({ error: 'You cannot disable your own admin account.' });
+        }
+        const admin = await prisma.user.findUnique({ where: { id: userId } });
+        if (!admin || admin.role !== UserRole.INTERNAL_ADMIN) {
+            return res.status(404).json({ error: 'Internal admin not found' });
+        }
+        if (admin.isSystemUser && !active) {
+            return res.status(400).json({ error: 'System admin cannot be disabled.' });
+        }
+        const updated = await prisma.user.update({
+            where: { id: userId },
+            data: { isActive: active },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                isActive: true,
+                isSystemUser: true,
+                notificationEmail: true,
+                appNotificationsEnabled: true,
+            },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('PUT /api/admin/internal-admins/:userId/active error:', error);
+        res.status(500).json({ error: 'Failed to update internal admin' });
+    }
+});
+app.delete('/api/admin/internal-admins/:userId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
+        const userId = String(req.params.userId || '');
+        if (userId === req.authUser.userId) {
+            return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+        }
+        const admin = await prisma.user.findUnique({ where: { id: userId } });
+        if (!admin || admin.role !== UserRole.INTERNAL_ADMIN) {
+            return res.status(404).json({ error: 'Internal admin not found' });
+        }
+        if (admin.isSystemUser) {
+            return res.status(400).json({ error: 'System admin cannot be deleted.' });
+        }
+        await prisma.user.delete({ where: { id: userId } });
+        res.json({ data: { ok: true } });
+    }
+    catch (error) {
+        console.error('DELETE /api/admin/internal-admins/:userId error:', error);
+        res.status(500).json({ error: 'Failed to delete internal admin' });
+    }
+});
+app.post('/api/admin/internal-admins', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    if (!(await requireDefaultInternalAdmin(req, res)))
+        return;
+    const parsed = createInternalAdminSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+        const email = parsed.data.email.toLowerCase().trim();
+        const existing = await prisma.user.findUnique({
+            where: { email },
+        });
+        if (existing) {
+            return res.status(409).json({ error: 'Email already in use' });
+        }
+        const passwordHash = await hashPassword(parsed.data.password);
+        const user = await prisma.user.create({
+            data: {
+                email,
+                passwordHash,
+                role: UserRole.INTERNAL_ADMIN,
+                firstName: parsed.data.firstName,
+                lastName: parsed.data.lastName,
+                notificationEmail: parsed.data.notificationEmail || null,
+                appNotificationsEnabled: true,
+            },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                isActive: true,
+                notificationEmail: true,
+                appNotificationsEnabled: true,
+            },
+        });
+        await sendPasswordSetupEmail({
+            userId: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            subject: 'Your Wezen Staffing internal admin account is ready',
+            intro: 'An internal admin account has been created for you. Please create your password to log in.',
+        });
+        await createAdminAuditLog({
+            actorUserId: req.authUser.userId,
+            action: 'INTERNAL_ADMIN_CREATED',
+            entityType: 'User',
+            entityId: user.id,
+            summary: `Internal admin created ${user.email}`,
+            detailsJson: { email: user.email },
+        });
+        res.status(201).json({ data: user });
+    }
+    catch (error) {
+        console.error('POST /api/admin/internal-admins error:', error);
+        res.status(500).json({ error: 'Failed to create internal admin' });
     }
 });
 app.get('/api/worker/dashboard', requireRole('PROFESSIONAL'), async (req, res) => {
@@ -1659,7 +2129,7 @@ const createShiftSchema = z.object({
     payRateCents: z.number().int().nonnegative().optional(),
     visibility: z.enum(['PUBLIC', 'INVITE_ONLY']).optional(),
 });
-app.post('/api/shifts', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shifts', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     const parsed = createShiftSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.flatten() });
@@ -1995,7 +2465,7 @@ async function findAvailableWorkers(req, res, scope) {
                 return res.status(403).json({ error: facilityStatus.error });
             }
         }
-        const params = [startDate, endDate, shiftTypes, datesInRange.length];
+        const params = [startDate, endDate, shiftTypes];
         const where = [
             `wa.date >= $1::date`,
             `wa.date <= $2::date`,
@@ -2004,13 +2474,49 @@ async function findAvailableWorkers(req, res, scope) {
             `u."isActive" = true`,
             `u."isSystemUser" = false`,
         ];
+        if (scope === 'facility' && facilityId) {
+            params.push(facilityId);
+            const facilityParam = params.length;
+            where.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM "ShiftInvitation" si
+          JOIN "Shift" s ON s.id = si."shiftId"
+          WHERE si."professionalId" = p.id
+            AND si."facilityId" = $${facilityParam}
+            AND s."facilityId" = $${facilityParam}
+            AND s.date::date = wa.date::date
+            AND s."shiftType"::text = wa."shiftType"::text
+            AND s.status::text <> 'CANCELLED'
+            AND si.status IN ('SENT', 'ACCEPTED', 'DECLINED')
+        )
+      `);
+            where.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM "ShiftRequest" sr
+          JOIN "Shift" s ON s.id = sr."shiftId"
+          WHERE sr."professionalId" = p.id
+            AND s."facilityId" = $${facilityParam}
+            AND s.date::date = wa.date::date
+            AND s."shiftType"::text = wa."shiftType"::text
+            AND s.status::text <> 'CANCELLED'
+            AND sr.status::text IN ('REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED')
+        )
+      `);
+        }
         if (role && ['CNA', 'LVN', 'RN'].includes(role)) {
             params.push(role);
             where.push(`p.role = $${params.length}`);
         }
         if (q) {
             params.push(`%${q}%`);
-            where.push(`(u.email ILIKE $${params.length} OR u."firstName" ILIKE $${params.length} OR u."lastName" ILIKE $${params.length})`);
+            where.push(`(
+        u.email ILIKE $${params.length}
+        OR u."firstName" ILIKE $${params.length}
+        OR u."lastName" ILIKE $${params.length}
+        OR CONCAT_WS(' ', u."firstName", u."lastName") ILIKE $${params.length}
+      )`);
         }
         const rows = await prisma.$queryRawUnsafe(`
       SELECT
@@ -2024,6 +2530,7 @@ async function findAvailableWorkers(req, res, scope) {
         COUNT(DISTINCT wa.date)::int AS "availableDateCount",
         json_agg(
           json_build_object(
+            'id', wa.id,
             'date', to_char(wa.date, 'YYYY-MM-DD'),
             'shiftType', wa."shiftType",
             'note', wa.note
@@ -2035,7 +2542,7 @@ async function findAvailableWorkers(req, res, scope) {
       JOIN "User" u ON u.id = p."userId"
       WHERE ${where.join(' AND ')}
       GROUP BY p.id, u."firstName", u."lastName", u.email, p.role, p.city, p.state
-      HAVING COUNT(DISTINCT wa.date) >= $4
+      HAVING COUNT(DISTINCT wa.date) > 0
       ORDER BY u."lastName" ASC NULLS LAST, u."firstName" ASC NULLS LAST, u.email ASC
       `, ...params);
         res.json({ data: rows });
@@ -2045,13 +2552,13 @@ async function findAvailableWorkers(req, res, scope) {
         res.status(500).json({ error: 'Failed to fetch available workers' });
     }
 }
-app.get('/api/facility/available-workers', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/available-workers', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     return findAvailableWorkers(req, res, 'facility');
 });
 app.get('/api/admin/available-workers', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     return findAvailableWorkers(req, res, 'admin');
 });
-app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const userId = req.authUser.userId;
         const facilityId = await getFacilityIdForUser(userId);
@@ -2070,6 +2577,9 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN')
         const professionalIds = Array.isArray(req.body?.professionalIds)
             ? req.body.professionalIds.map((id) => String(id)).filter(Boolean)
             : [];
+        const availabilityIds = Array.isArray(req.body?.availabilityIds)
+            ? req.body.availabilityIds.map((id) => String(id)).filter(Boolean)
+            : [];
         const message = String(req.body?.message || '').trim() || null;
         const workersNeeded = Math.max(1, Number(req.body?.workersNeeded || 1));
         const dates = availabilityDateRange(startDate, endDate);
@@ -2082,8 +2592,8 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN')
         if (!shiftTypes.length) {
             return res.status(400).json({ error: 'At least one shift type is required' });
         }
-        if (!professionalIds.length) {
-            return res.status(400).json({ error: 'Select at least one worker' });
+        if (!professionalIds.length && !availabilityIds.length) {
+            return res.status(400).json({ error: 'Select at least one worker or availability slot' });
         }
         const facility = await prisma.facility.findUnique({
             where: { id: facilityId },
@@ -2105,9 +2615,36 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN')
         if (!facility) {
             return res.status(404).json({ error: 'Facility not found' });
         }
+        let selectedAvailabilities = [];
+        if (availabilityIds.length) {
+            selectedAvailabilities = await prisma.$queryRawUnsafe(`
+        SELECT
+          wa.id,
+          wa."professionalId",
+          wa.date,
+          wa."shiftType"
+        FROM "WorkerAvailability" wa
+        JOIN "ProfessionalProfile" p ON p.id = wa."professionalId"
+        JOIN "User" u ON u.id = p."userId"
+        WHERE wa.id = ANY($1::text[])
+          AND wa.date >= $2::date
+          AND wa.date <= $3::date
+          AND wa."shiftType" = ANY($4::text[])
+          AND p."approvedByWezen" = true
+          AND p.role::text = $5
+          AND u."isActive" = true
+          AND u."isSystemUser" = false
+        `, availabilityIds, dates[0], dates[dates.length - 1], shiftTypes, role);
+            if (!selectedAvailabilities.length) {
+                return res.status(400).json({ error: 'No valid selected availability slots found' });
+            }
+        }
+        const effectiveProfessionalIds = availabilityIds.length
+            ? [...new Set(selectedAvailabilities.map((item) => item.professionalId))]
+            : professionalIds;
         const workers = await prisma.professionalProfile.findMany({
             where: {
-                id: { in: professionalIds },
+                id: { in: effectiveProfessionalIds },
                 approvedByWezen: true,
                 role: role,
                 user: {
@@ -2142,59 +2679,119 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN')
         if (role === 'RN')
             payRateCents = facility.defaultRnRateCents ?? undefined;
         const created = [];
-        for (const date of dates) {
-            for (const shiftType of shiftTypes) {
-                const times = defaultTimesByShiftType[shiftType];
-                const shift = await prisma.shift.create({
-                    data: {
+        const slots = availabilityIds.length
+            ? selectedAvailabilities.map((item) => ({
+                date: item.date.toISOString().slice(0, 10),
+                shiftType: item.shiftType,
+                professionalIds: [item.professionalId],
+            }))
+            : dates.flatMap((date) => shiftTypes.map((shiftType) => ({
+                date,
+                shiftType,
+                professionalIds: effectiveProfessionalIds,
+            })));
+        for (const slot of slots) {
+            const date = slot.date;
+            const shiftType = slot.shiftType;
+            const times = defaultTimesByShiftType[shiftType];
+            const shiftDate = new Date(`${date}T12:00:00.000Z`);
+            const duplicateInvite = await prisma.shiftInvitation.findFirst({
+                where: {
+                    facilityId,
+                    professionalId: { in: slot.professionalIds },
+                    status: { in: ['SENT', 'ACCEPTED', 'DECLINED'] },
+                    shift: {
                         facilityId,
-                        role: role,
+                        date: shiftDate,
                         shiftType: shiftType,
-                        date: new Date(`${date}T12:00:00.000Z`),
-                        startTimeLabel: times.start,
-                        endTimeLabel: times.end,
-                        workersNeeded,
-                        specialInstructions: message || undefined,
-                        payRateCents,
-                        status: 'INVITE_ONLY',
+                        status: { not: 'CANCELLED' },
                     },
+                },
+                include: {
+                    professional: { include: { user: true } },
+                },
+            });
+            if (duplicateInvite) {
+                const workerName = [duplicateInvite.professional.user.firstName, duplicateInvite.professional.user.lastName].filter(Boolean).join(' ') ||
+                    duplicateInvite.professional.user.email ||
+                    'This worker';
+                return res.status(409).json({
+                    error: `${workerName} already has an invitation for ${role} ${shiftType} on ${date}.`,
                 });
-                let invitationCount = 0;
-                for (const worker of workers) {
-                    const invitation = await prisma.shiftInvitation.upsert({
-                        where: {
-                            shiftId_professionalId: {
-                                shiftId: shift.id,
-                                professionalId: worker.id,
-                            },
-                        },
-                        update: {
-                            status: 'SENT',
-                            message,
-                            respondedAt: null,
-                        },
-                        create: {
+            }
+            const duplicateRequest = await prisma.shiftRequest.findFirst({
+                where: {
+                    professionalId: { in: slot.professionalIds },
+                    status: { in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'CANCELLATION_REQUESTED'] },
+                    shift: {
+                        facilityId,
+                        date: shiftDate,
+                        shiftType: shiftType,
+                        status: { not: 'CANCELLED' },
+                    },
+                },
+                include: {
+                    professional: { include: { user: true } },
+                },
+            });
+            if (duplicateRequest) {
+                const workerName = [duplicateRequest.professional.user.firstName, duplicateRequest.professional.user.lastName].filter(Boolean).join(' ') ||
+                    duplicateRequest.professional.user.email ||
+                    'This worker';
+                return res.status(409).json({
+                    error: `${workerName} already has an active request/approval for ${role} ${shiftType} on ${date}.`,
+                });
+            }
+            const shift = await prisma.shift.create({
+                data: {
+                    facilityId,
+                    role: role,
+                    shiftType: shiftType,
+                    date: shiftDate,
+                    startTimeLabel: times.start,
+                    endTimeLabel: times.end,
+                    workersNeeded,
+                    specialInstructions: message || undefined,
+                    payRateCents,
+                    status: 'INVITE_ONLY',
+                },
+            });
+            let invitationCount = 0;
+            for (const worker of workers.filter((item) => slot.professionalIds.includes(item.id))) {
+                const invitation = await prisma.shiftInvitation.upsert({
+                    where: {
+                        shiftId_professionalId: {
                             shiftId: shift.id,
                             professionalId: worker.id,
-                            facilityId,
-                            status: 'SENT',
-                            message,
                         },
-                    });
-                    invitationCount += 1;
-                    const inviteMessage = `${facility.name} invited you to a ${role} ${shiftType} shift on ${date} from ${times.start} to ${times.end}.`;
-                    await createWorkerNotification({
+                    },
+                    update: {
+                        status: 'SENT',
+                        message,
+                        respondedAt: null,
+                    },
+                    create: {
+                        shiftId: shift.id,
                         professionalId: worker.id,
-                        type: 'GENERAL',
-                        title: 'Shift invitation',
-                        message: message ? `${inviteMessage} Message: ${message}` : inviteMessage,
-                    });
-                    if (worker.user.email) {
-                        try {
-                            await sendEmail({
-                                to: worker.user.email,
-                                subject: `Shift invitation from ${facility.name}`,
-                                html: `
+                        facilityId,
+                        status: 'SENT',
+                        message,
+                    },
+                });
+                invitationCount += 1;
+                const inviteMessage = `${facility.name} invited you to a ${role} ${shiftType} shift on ${date} from ${times.start} to ${times.end}.`;
+                await createWorkerNotification({
+                    professionalId: worker.id,
+                    type: 'GENERAL',
+                    title: 'Shift invitation',
+                    message: message ? `${inviteMessage} Message: ${message}` : inviteMessage,
+                });
+                if (worker.user.email) {
+                    try {
+                        await sendEmail({
+                            to: worker.user.email,
+                            subject: `Shift invitation from ${facility.name}`,
+                            html: `
                   <h2>Shift invitation</h2>
                   <p>${inviteMessage}</p>
                   ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
@@ -2202,21 +2799,20 @@ app.post('/api/facility/availability-invitations', requireRole('FACILITY_ADMIN')
                     <a href="https://wezenstaffing.com/worker/shifts?invitationId=${invitation.id}" style="display:inline-block;padding:12px 18px;background:#0891b2;color:white;text-decoration:none;border-radius:999px;font-weight:bold;">Accept / Decline Invitation</a>
                   </p>
                 `,
-                                text: [
-                                    'Shift invitation',
-                                    inviteMessage,
-                                    message ? `Message: ${message}` : '',
-                                    `Open this link to accept or decline: https://wezenstaffing.com/worker/shifts?invitationId=${invitation.id}`,
-                                ].filter(Boolean).join('\n'),
-                            });
-                        }
-                        catch (emailError) {
-                            console.error('Availability invitation email failed:', emailError);
-                        }
+                            text: [
+                                'Shift invitation',
+                                inviteMessage,
+                                message ? `Message: ${message}` : '',
+                                `Open this link to accept or decline: https://wezenstaffing.com/worker/shifts?invitationId=${invitation.id}`,
+                            ].filter(Boolean).join('\n'),
+                        });
+                    }
+                    catch (emailError) {
+                        console.error('Availability invitation email failed:', emailError);
                     }
                 }
-                created.push({ shiftId: shift.id, date, shiftType, invitationCount });
             }
+            created.push({ shiftId: shift.id, date, shiftType, invitationCount });
         }
         return res.status(201).json({ data: created });
     }
@@ -2520,9 +3116,7 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
             .join(' ') || invitation.professional.user.email || 'Worker';
         const shiftDate = invitation.shift.date.toISOString().slice(0, 10);
         const shiftSummary = `${invitation.shift.role} ${invitation.shift.shiftType} on ${shiftDate} from ${invitation.shift.startTimeLabel} to ${invitation.shift.endTimeLabel}`;
-        const relatedPath = action === 'ACCEPTED'
-            ? `/facility/applicants?shiftId=${invitation.shiftId}`
-            : '/facility/shifts';
+        const relatedPath = `/facility/shift-detail/?shiftId=${invitation.shiftId}`;
         const title = action === 'ACCEPTED'
             ? 'Worker accepted shift invitation'
             : 'Worker declined shift invitation';
@@ -2534,6 +3128,12 @@ app.post('/api/worker/shift-invitations/:id/respond', requireRole('PROFESSIONAL'
             type: 'GENERAL',
             title,
             message: `${body}\nLink: ${relatedPath}`,
+            pushData: {
+                route: action === 'ACCEPTED'
+                    ? `/app/facility/shift-detail/index.html?shiftId=${invitation.shiftId}`
+                    : `/app/facility/shift-detail/index.html?shiftId=${invitation.shiftId}`,
+                shiftId: invitation.shiftId,
+            },
         });
         try {
             const recipients = await getFacilityNotificationRecipients(invitation.facilityId);
@@ -2673,7 +3273,7 @@ app.post('/api/shift-requests', requireRole('PROFESSIONAL'), async (req, res) =>
         res.status(500).json({ error: 'Failed to create shift request' });
     }
 });
-app.get('/api/facility/requests', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/requests', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const userId = req.authUser.userId;
         const facilityId = await getFacilityIdForUser(userId);
@@ -2751,7 +3351,121 @@ app.get('/api/facility/requests', requireRole('FACILITY_ADMIN'), async (req, res
         res.status(500).json({ error: 'Failed to fetch facility requests' });
     }
 });
-app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/facility/invitations/:invitationId/dismiss', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
+    try {
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId) {
+            return res.status(403).json({ error: 'Facility account not found' });
+        }
+        const invitationId = String(req.params.invitationId || '');
+        const invitation = await prisma.shiftInvitation.findUnique({
+            where: { id: invitationId },
+        });
+        if (!invitation || invitation.facilityId !== facilityId) {
+            return res.status(404).json({ error: 'Invitation not found' });
+        }
+        if (invitation.status !== 'DECLINED') {
+            return res.status(400).json({ error: 'Only declined invitations can be dismissed' });
+        }
+        const updated = await prisma.shiftInvitation.update({
+            where: { id: invitationId },
+            data: { status: 'DISMISSED' },
+        });
+        res.json({ data: updated });
+    }
+    catch (error) {
+        console.error('POST /api/facility/invitations/:invitationId/dismiss error:', error);
+        res.status(500).json({ error: 'Failed to dismiss invitation' });
+    }
+});
+app.get('/api/facility/review-items', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
+    try {
+        const userId = req.authUser.userId;
+        const facilityId = await getFacilityIdForUser(userId);
+        if (!facilityId) {
+            return res.status(403).json({ error: 'Facility account not found' });
+        }
+        const facilityStatus = await ensureFacilityIsActive(facilityId);
+        if (!facilityStatus.ok) {
+            clearAuthCookie(res);
+            return res.status(403).json({ error: facilityStatus.error });
+        }
+        const requests = await prisma.shiftRequest.findMany({
+            where: {
+                status: { in: ['REQUESTED', 'UNDER_REVIEW', 'CANCELLATION_REQUESTED'] },
+                shift: { facilityId },
+            },
+            include: {
+                shift: { include: { facility: true } },
+                professional: { include: { user: true } },
+            },
+            orderBy: [{ requestedAt: 'desc' }],
+        });
+        const declinedInvites = await prisma.shiftInvitation.findMany({
+            where: {
+                facilityId,
+                status: 'DECLINED',
+            },
+            include: {
+                shift: { include: { facility: true } },
+                professional: { include: { user: true } },
+            },
+            orderBy: [{ respondedAt: 'desc' }],
+        });
+        const requestItems = requests.map((request) => ({
+            id: request.id,
+            type: 'REQUEST',
+            label: request.status === 'CANCELLATION_REQUESTED'
+                ? 'Cancellation Requested'
+                : request.reviewNotes === 'Worker accepted facility invitation.'
+                    ? 'Accepted Invite / Requested'
+                    : 'Requested',
+            status: request.status,
+            route: `/app/facility/applicant-detail/index.html?requestId=${request.id}`,
+            createdAt: request.requestedAt,
+            workerName: [request.professional.user.firstName, request.professional.user.lastName].filter(Boolean).join(' ') ||
+                request.professional.user.email,
+            workerEmail: request.professional.user.email,
+            workerRole: request.professional.role,
+            shift: {
+                id: request.shift.id,
+                role: request.shift.role,
+                shiftType: request.shift.shiftType,
+                date: request.shift.date,
+                time: `${request.shift.startTimeLabel} - ${request.shift.endTimeLabel}`,
+                facilityName: request.shift.facility.name,
+            },
+        }));
+        const declinedItems = declinedInvites.map((invite) => ({
+            id: invite.id,
+            type: 'DECLINED_INVITATION',
+            label: 'Rejected Invitation',
+            status: 'DECLINED',
+            route: `/app/facility/shift-detail/index.html?shiftId=${invite.shift.id}`,
+            createdAt: invite.respondedAt || invite.createdAt,
+            workerName: [invite.professional.user.firstName, invite.professional.user.lastName].filter(Boolean).join(' ') ||
+                invite.professional.user.email,
+            workerEmail: invite.professional.user.email,
+            workerRole: invite.professional.role,
+            shift: {
+                id: invite.shift.id,
+                role: invite.shift.role,
+                shiftType: invite.shift.shiftType,
+                date: invite.shift.date,
+                time: `${invite.shift.startTimeLabel} - ${invite.shift.endTimeLabel}`,
+                facilityName: invite.shift.facility.name,
+            },
+        }));
+        const data = [...requestItems, ...declinedItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        res.json({ data });
+    }
+    catch (error) {
+        console.error('GET /api/facility/review-items error:', error);
+        res.status(500).json({ error: 'Failed to fetch facility review items' });
+    }
+});
+app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -2792,7 +3506,7 @@ app.put('/api/shift-requests/:id/notes', requireRole('FACILITY_ADMIN'), async (r
         res.status(500).json({ error: 'Failed to update facility notes' });
     }
 });
-app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -2894,7 +3608,7 @@ app.post('/api/shift-requests/:id/approve', requireRole('FACILITY_ADMIN'), async
         res.status(500).json({ error: 'Failed to approve request' });
     }
 });
-app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shift-requests/:id/reject', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -3090,7 +3804,7 @@ app.post('/api/shift-requests/:id/request-cancellation', requireRole('PROFESSION
         res.status(500).json({ error: 'Failed to request cancellation' });
     }
 });
-app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -3189,7 +3903,7 @@ app.post('/api/shift-requests/:id/approve-cancellation', requireRole('FACILITY_A
         res.status(500).json({ error: 'Failed to approve cancellation request' });
     }
 });
-app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shift-requests/:id/deny-cancellation', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -3926,7 +4640,7 @@ app.post('/api/worker/change-password', requireRole('PROFESSIONAL'), async (req,
         res.status(500).json({ error: 'Failed to change password' });
     }
 });
-app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const requestId = String(req.params.requestId || '');
         if (!requestId) {
@@ -3980,7 +4694,7 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'), as
                     phone: request.professional.user.phone,
                     isDnr: request.professional.facilityDnrs.some((item) => item.facilityId === request.shift.facilityId),
                     dnrReason: request.professional.facilityDnrs.find((item) => item.facilityId === request.shift.facilityId)?.reason ?? null,
-                    documents: request.professional.documents.map((doc) => ({
+                    documents: getCurrentDocumentsByCategory(request.professional.documents).map((doc) => ({
                         id: doc.id,
                         name: doc.name,
                         category: doc.category,
@@ -3999,7 +4713,7 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN'), as
         res.status(500).json({ error: 'Failed to fetch applicant detail' });
     }
 });
-app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const requestId = String(req.params.requestId || '');
         const userId = req.authUser.userId;
@@ -4034,7 +4748,7 @@ app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_A
             return res.status(403).json({ error: 'Forbidden' });
         }
         res.json({
-            data: requestRecord.professional.documents.map((doc) => ({
+            data: getCurrentDocumentsByCategory(requestRecord.professional.documents).map((doc) => ({
                 id: doc.id,
                 name: doc.name,
                 category: doc.category,
@@ -4161,7 +4875,9 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
                 lastName: worker.user.lastName,
                 email: worker.user.email,
                 phone: worker.user.phone,
-                documents: worker.documents.map((doc) => ({
+                documents: getCurrentDocumentsByCategory(worker.documents)
+                    .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+                    .map((doc) => ({
                     id: doc.id,
                     name: doc.name,
                     category: doc.category,
@@ -4454,17 +5170,27 @@ app.post('/api/admin/workers/:professionalId/documents/upload', upload.single('f
             mimeType: req.file.mimetype,
         });
         if (replaceExisting) {
-            await prisma.professionalDocument.updateMany({
+            const existingDocs = await prisma.professionalDocument.findMany({
                 where: {
                     professionalId,
                     category: category,
                     status: { notIn: ['REJECTED', 'EXPIRED'] },
                 },
-                data: {
-                    status: 'EXPIRED',
-                    notes: `Superseded by newer upload on ${new Date().toLocaleDateString('en-US')}.`,
-                },
             });
+            await Promise.all(existingDocs.map((existingDoc) => {
+                const parsedName = path.parse(existingDoc.name);
+                const oldName = existingDoc.name.includes('-old')
+                    ? existingDoc.name
+                    : `${parsedName.name}-old${parsedName.ext}`;
+                return prisma.professionalDocument.update({
+                    where: { id: existingDoc.id },
+                    data: {
+                        name: oldName,
+                        status: 'EXPIRED',
+                        notes: `Superseded by newer upload on ${new Date().toLocaleDateString('en-US')}.`,
+                    },
+                });
+            }));
         }
         const document = await prisma.professionalDocument.create({
             data: {
@@ -4840,6 +5566,8 @@ app.post('/api/admin/workers/:professionalId/reject', requireRole('INTERNAL_ADMI
 });
 app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
         const professionalId = String(req.params.professionalId || '');
         if (!professionalId) {
             return res.status(400).json({ error: 'professionalId is required' });
@@ -4932,7 +5660,7 @@ app.post('/api/shifts/:id/duplicate', async (req, res) => {
         res.status(500).json({ error: 'Failed to duplicate shift' });
     }
 });
-app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const shiftId = String(req.params.shiftId || '');
         const userId = req.authUser.userId;
@@ -4962,6 +5690,17 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
                         },
                     },
                     orderBy: [{ requestedAt: 'desc' }],
+                },
+                invitations: {
+                    where: { status: 'DECLINED' },
+                    include: {
+                        professional: {
+                            include: {
+                                user: true,
+                            },
+                        },
+                    },
+                    orderBy: [{ respondedAt: 'desc' }],
                 },
             },
         });
@@ -5002,6 +5741,20 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
                     ? `$${(shift.payRateCents / 100).toFixed(2)}/hr`
                     : 'Rate not listed',
                 specialInstructions: shift.specialInstructions,
+                declinedInvitations: shift.invitations.map((invitation) => ({
+                    id: invitation.id,
+                    respondedAt: invitation.respondedAt,
+                    message: invitation.message,
+                    professional: {
+                        id: invitation.professional.id,
+                        firstName: invitation.professional.user.firstName,
+                        lastName: invitation.professional.user.lastName,
+                        email: invitation.professional.user.email,
+                        role: invitation.professional.role,
+                        city: invitation.professional.city,
+                        state: invitation.professional.state,
+                    },
+                })),
                 applicants: shift.requests.map((request) => ({
                     id: request.id,
                     status: request.status,
@@ -5015,10 +5768,10 @@ app.get('/api/facility/shifts/:shiftId', requireRole('FACILITY_ADMIN'), async (r
                         role: request.professional.role,
                         city: request.professional.city,
                         state: request.professional.state,
-                        approvedDocCount: request.professional.documents.filter((doc) => doc.status === 'APPROVED').length,
-                        pendingDocCount: request.professional.documents.filter((doc) => doc.status === 'PENDING').length,
-                        rejectedDocCount: request.professional.documents.filter((doc) => doc.status === 'REJECTED').length,
-                        expiredDocCount: request.professional.documents.filter((doc) => doc.status === 'EXPIRED').length,
+                        approvedDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter((doc) => doc.status === 'APPROVED' && !isDocumentExpired(doc)).length,
+                        pendingDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter((doc) => doc.status === 'PENDING').length,
+                        rejectedDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter((doc) => doc.status === 'REJECTED').length,
+                        expiredDocCount: getCurrentDocumentsByCategory(request.professional.documents).filter((doc) => doc.status === 'EXPIRED' || isDocumentExpired(doc)).length,
                     },
                 })),
             },
@@ -5033,7 +5786,7 @@ const facilityDnrSchema = z.object({
     professionalId: z.string().min(1),
     reason: z.string().optional(),
 });
-app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.put('/api/facility/shifts/:id', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const shiftId = String(req.params.id);
         const userId = req.authUser.userId;
@@ -5374,7 +6127,7 @@ app.post('/api/worker/notifications/:id/read', requireRole('PROFESSIONAL'), asyn
         res.status(500).json({ error: 'Failed to mark notification as read' });
     }
 });
-app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -5416,7 +6169,7 @@ app.post('/api/shifts/:id/close', requireRole('FACILITY_ADMIN'), async (req, res
         res.status(500).json({ error: 'Failed to close shift' });
     }
 });
-app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -5467,7 +6220,7 @@ app.post('/api/shifts/:id/reopen', requireRole('FACILITY_ADMIN'), async (req, re
         res.status(500).json({ error: 'Failed to reopen shift' });
     }
 });
-app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -5584,7 +6337,7 @@ app.post('/api/shifts/:id/cancel', requireRole('FACILITY_ADMIN'), async (req, re
         res.status(500).json({ error: 'Failed to cancel shift' });
     }
 });
-app.delete('/api/shifts/:id', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.delete('/api/shifts/:id', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const userId = req.authUser.userId;
@@ -5738,7 +6491,7 @@ app.post('/api/users/device-tokens', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Failed to save device token' });
     }
 });
-app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const facilityId = await getFacilityIdForUser(req.authUser.userId);
         if (!facilityId) {
@@ -5756,7 +6509,7 @@ app.get('/api/facility/notifications', requireRole('FACILITY_ADMIN'), async (req
         res.status(500).json({ error: 'Failed to fetch facility notifications' });
     }
 });
-app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const facilityId = await getFacilityIdForUser(req.authUser.userId);
         if (!facilityId) {
@@ -5775,7 +6528,7 @@ app.get('/api/facility/notifications/unread-count', requireRole('FACILITY_ADMIN'
         res.status(500).json({ error: 'Failed to fetch facility unread count' });
     }
 });
-app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const id = String(req.params.id || '');
         const facilityId = await getFacilityIdForUser(req.authUser.userId);
@@ -5793,7 +6546,7 @@ app.post('/api/facility/notifications/:id/read', requireRole('FACILITY_ADMIN'), 
         res.status(500).json({ error: 'Failed to mark facility notification read' });
     }
 });
-app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/facility/notifications/mark-all-read', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const facilityId = await getFacilityIdForUser(req.authUser.userId);
         if (!facilityId) {
@@ -5893,7 +6646,7 @@ app.post('/api/admin/workers/:professionalId/message', requireRole('INTERNAL_ADM
         return res.status(500).json({ error: 'Failed to send message' });
     }
 });
-app.post('/api/facility/applicants/:requestId/message', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.post('/api/facility/applicants/:requestId/message', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     const parsed = sendApplicantMessageSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.flatten() });
@@ -6090,6 +6843,8 @@ app.get('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (_req, res
 });
 app.delete('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
         const facilityId = String(req.params.facilityId || '');
         if (!facilityId) {
             return res.status(400).json({ error: 'facilityId is required' });
@@ -6271,6 +7026,8 @@ app.post('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (req, res
 });
 app.post('/api/admin/facilities/:facilityId/deactivate', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
         const facilityId = String(req.params.facilityId || '');
         if (!facilityId) {
             return res.status(400).json({ error: 'facilityId is required' });
@@ -6558,6 +7315,8 @@ app.post('/api/admin/shift-requests/:id/cancel', requireRole('INTERNAL_ADMIN'), 
 });
 app.delete('/api/admin/shifts/:shiftId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
     try {
+        if (!(await requireDefaultInternalAdmin(req, res)))
+            return;
         const shiftId = String(req.params.shiftId || '');
         if (!shiftId) {
             return res.status(400).json({ error: 'shiftId is required' });
@@ -6914,7 +7673,7 @@ app.get('/api/facility/reports/shifts/export', requireRole('FACILITY_ADMIN'), as
         return res.status(500).json({ error: 'Failed to export facility shift report' });
     }
 });
-app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req, res) => {
+app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN', 'FACILITY_STAFF'), async (req, res) => {
     try {
         const userId = req.authUser.userId;
         const facilityId = await getFacilityIdForUser(userId);
@@ -7000,7 +7759,16 @@ app.get('/api/facility/dashboard', requireRole('FACILITY_ADMIN'), async (req, re
         const openShifts = shifts.filter((shift) => shift.status === 'OPEN').length;
         const pendingRequests = requests.filter((request) => request.status === 'REQUESTED' || request.status === 'UNDER_REVIEW').length;
         const approvedRequests = requests.filter((request) => request.status === 'APPROVED').length;
-        const complianceAlerts = complianceDocs.length;
+        const docsByWorker = new Map();
+        for (const doc of complianceDocs) {
+            const workerDocs = docsByWorker.get(doc.professionalId) || [];
+            workerDocs.push(doc);
+            docsByWorker.set(doc.professionalId, workerDocs);
+        }
+        const complianceAlerts = Array.from(docsByWorker.values())
+            .flatMap((docs) => getCurrentDocumentsByCategory(docs)
+            .filter((d) => !String(d.name || '').includes('-old'))
+            .filter((d) => d.status === 'PENDING' || d.status === 'REJECTED' || d.status === 'EXPIRED' || isDocumentExpired(d))).length;
         const activeWorkerIds = new Set(requests
             .filter((request) => request.status === 'APPROVED' &&
             request.shift.status === 'OPEN')
@@ -7168,7 +7936,9 @@ app.get('/api/facility/workers/:professionalId', requireRole('FACILITY_ADMIN'), 
                 role: worker.role,
                 city: worker.city,
                 state: worker.state,
-                documents: worker.documents.map((doc) => ({
+                documents: getCurrentDocumentsByCategory(worker.documents)
+                    .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+                    .map((doc) => ({
                     id: doc.id,
                     name: doc.name,
                     category: doc.category,
@@ -7214,9 +7984,11 @@ app.get('/api/facility/compliance', requireRole('FACILITY_ADMIN'), async (req, r
         });
         const alerts = workers.flatMap((worker) => {
             const items = [];
-            const pendingDocs = worker.documents.filter((d) => d.status === 'PENDING');
-            const rejectedDocs = worker.documents.filter((d) => d.status === 'REJECTED');
-            const expiredDocs = worker.documents.filter((d) => d.status === 'EXPIRED');
+            const currentDocs = getCurrentDocumentsByCategory(worker.documents)
+                .filter((d) => !String(d.name || '').includes('-old'));
+            const pendingDocs = currentDocs.filter((d) => d.status === 'PENDING');
+            const rejectedDocs = currentDocs.filter((d) => d.status === 'REJECTED');
+            const expiredDocs = currentDocs.filter((d) => d.status === 'EXPIRED' || isDocumentExpired(d));
             if (pendingDocs.length > 0) {
                 items.push({
                     workerId: worker.id,
@@ -7797,7 +8569,9 @@ app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('F
         if (!belongsToFacility) {
             return res.status(403).json({ error: 'Forbidden' });
         }
-        if (!worker.documents.length) {
+        const downloadableDocuments = getCurrentDocumentsByCategory(worker.documents)
+            .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'));
+        if (!downloadableDocuments.length) {
             return res.status(404).json({ error: 'No documents found' });
         }
         const fullName = [worker.user.firstName, worker.user.lastName].filter(Boolean).join('_') ||
@@ -7810,7 +8584,7 @@ app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('F
             throw err;
         });
         archive.pipe(res);
-        for (const doc of worker.documents) {
+        for (const doc of downloadableDocuments) {
             try {
                 if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
                     const fileBuffer = await downloadOneDriveFileBuffer(doc.oneDriveItemId);
