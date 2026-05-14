@@ -548,12 +548,21 @@ const icaSignedStepLabel = isIcaSigned
             </p>
           </div>
 
-          <Link
-            href="/admin/workers"
-            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-          >
-            Back to Workers
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href={`/admin/workers/${professionalId}/availability`}
+              className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-400"
+            >
+              View Availability Calendar
+            </Link>
+
+            <Link
+              href="/admin/workers"
+              className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Back to Workers
+            </Link>
+          </div>
         </div>
       </div>
 

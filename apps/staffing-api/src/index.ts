@@ -2938,6 +2938,77 @@ app.put('/api/worker/availability', requireRole('PROFESSIONAL'), async (req: Aut
     console.error('PUT /api/worker/availability error:', error);
     res.status(500).json({ error: 'Failed to save availability' });
   }
+
+app.get('/api/admin/workers/:professionalId/availability', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || startDate || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    if (!startDate) {
+      return res.status(400).json({ error: 'startDate is required' });
+    }
+
+    const worker = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT
+        id,
+        "professionalId",
+        to_char(date, 'YYYY-MM-DD') AS date,
+        "shiftType",
+        note,
+        "createdAt",
+        "updatedAt"
+      FROM "WorkerAvailability"
+      WHERE "professionalId" = $1
+        AND date >= $2::date
+        AND date <= $3::date
+      ORDER BY date ASC, "shiftType" ASC
+      `,
+      professionalId,
+      startDate,
+      endDate
+    );
+
+    return res.json({
+      data: {
+        professional: {
+          id: professionalId,
+          firstName: worker.user.firstName,
+          lastName: worker.user.lastName,
+          email: worker.user.email,
+          role: worker.role,
+        },
+        availability: rows,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/admin/workers/:professionalId/availability error:', error);
+    return res.status(500).json({ error: 'Failed to fetch worker availability' });
+  }
+});
+
 });
 
 async function findAvailableWorkers(req: AuthedRequest, res: any, scope: 'facility' | 'admin') {

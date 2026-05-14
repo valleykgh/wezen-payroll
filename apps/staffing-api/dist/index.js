@@ -2438,6 +2438,65 @@ app.put('/api/worker/availability', requireRole('PROFESSIONAL'), async (req, res
         console.error('PUT /api/worker/availability error:', error);
         res.status(500).json({ error: 'Failed to save availability' });
     }
+    app.get('/api/admin/workers/:professionalId/availability', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+        try {
+            const professionalId = String(req.params.professionalId || '');
+            const startDate = String(req.query.startDate || '');
+            const endDate = String(req.query.endDate || startDate || '');
+            if (!professionalId) {
+                return res.status(400).json({ error: 'professionalId is required' });
+            }
+            if (!startDate) {
+                return res.status(400).json({ error: 'startDate is required' });
+            }
+            const worker = await prisma.professionalProfile.findUnique({
+                where: { id: professionalId },
+                include: {
+                    user: {
+                        select: {
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                        },
+                    },
+                },
+            });
+            if (!worker) {
+                return res.status(404).json({ error: 'Worker not found' });
+            }
+            const rows = await prisma.$queryRawUnsafe(`
+      SELECT
+        id,
+        "professionalId",
+        to_char(date, 'YYYY-MM-DD') AS date,
+        "shiftType",
+        note,
+        "createdAt",
+        "updatedAt"
+      FROM "WorkerAvailability"
+      WHERE "professionalId" = $1
+        AND date >= $2::date
+        AND date <= $3::date
+      ORDER BY date ASC, "shiftType" ASC
+      `, professionalId, startDate, endDate);
+            return res.json({
+                data: {
+                    professional: {
+                        id: professionalId,
+                        firstName: worker.user.firstName,
+                        lastName: worker.user.lastName,
+                        email: worker.user.email,
+                        role: worker.role,
+                    },
+                    availability: rows,
+                },
+            });
+        }
+        catch (error) {
+            console.error('GET /api/admin/workers/:professionalId/availability error:', error);
+            return res.status(500).json({ error: 'Failed to fetch worker availability' });
+        }
+    });
 });
 async function findAvailableWorkers(req, res, scope) {
     try {
@@ -7121,6 +7180,99 @@ app.get('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), asyn
     catch (error) {
         console.error('GET /api/admin/facilities/:facilityId error:', error);
         res.status(500).json({ error: 'Failed to fetch facility detail' });
+    }
+});
+app.get('/api/admin/facilities/:facilityId/calendar', requireRole('INTERNAL_ADMIN'), async (req, res) => {
+    try {
+        const facilityId = String(req.params.facilityId || '');
+        const month = Number(req.query.month || 0);
+        const year = Number(req.query.year || 0);
+        if (!facilityId) {
+            return res.status(400).json({ error: 'facilityId is required' });
+        }
+        if (!month || !year) {
+            return res.status(400).json({ error: 'month and year are required' });
+        }
+        const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+        const endDate = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+        const facility = await prisma.facility.findUnique({
+            where: { id: facilityId },
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+        if (!facility) {
+            return res.status(404).json({ error: 'Facility not found' });
+        }
+        const shifts = await prisma.shift.findMany({
+            where: {
+                facilityId,
+                date: {
+                    gte: startDate,
+                    lt: endDate,
+                },
+            },
+            include: {
+                requests: {
+                    include: {
+                        professional: {
+                            include: {
+                                user: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: [
+                { date: 'asc' },
+                { shiftType: 'asc' },
+            ],
+        });
+        const grouped = shifts.reduce((acc, shift) => {
+            const dateKey = shift.date.toISOString().slice(0, 10);
+            let existing = acc.find((d) => d.date === dateKey);
+            if (!existing) {
+                existing = {
+                    date: dateKey,
+                    shifts: [],
+                };
+                acc.push(existing);
+            }
+            existing.shifts.push({
+                id: shift.id,
+                role: shift.role,
+                shiftType: shift.shiftType,
+                status: shift.status,
+                approvedWorkers: shift.requests
+                    .filter((r) => r.status === 'APPROVED')
+                    .map((r) => ({
+                    professionalId: r.professional.id,
+                    firstName: r.professional.user.firstName,
+                    lastName: r.professional.user.lastName,
+                })),
+                pendingWorkers: shift.requests
+                    .filter((r) => ['REQUESTED', 'UNDER_REVIEW'].includes(r.status))
+                    .map((r) => ({
+                    professionalId: r.professional.id,
+                    firstName: r.professional.user.firstName,
+                    lastName: r.professional.user.lastName,
+                })),
+                approvedCount: shift.requests.filter((r) => r.status === 'APPROVED').length,
+                pendingCount: shift.requests.filter((r) => ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)).length,
+            });
+            return acc;
+        }, []);
+        return res.json({
+            data: {
+                facility,
+                calendar: grouped,
+            },
+        });
+    }
+    catch (error) {
+        console.error('GET /api/admin/facilities/:facilityId/calendar error:', error);
+        return res.status(500).json({ error: 'Failed to fetch facility calendar' });
     }
 });
 app.put('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req, res) => {
