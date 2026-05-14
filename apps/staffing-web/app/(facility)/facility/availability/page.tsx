@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
 
 type ShiftType = 'AM' | 'PM' | 'NOC';
@@ -36,6 +37,7 @@ function formatDate(dateValue: string) {
 }
 
 export default function FacilityAvailableWorkersPage() {
+  const searchParams = useSearchParams();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [role, setRole] = useState<Role>('CNA');
@@ -48,6 +50,42 @@ export default function FacilityAvailableWorkersPage() {
   const [inviteMessage, setInviteMessage] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  
+    useEffect(() => {
+    const date = searchParams.get('date');
+    const shiftType = searchParams.get('shiftType');
+    const roleParam = searchParams.get('role');
+    const qParam = searchParams.get('q');
+
+    if (date) {
+      setStartDate(date);
+      setEndDate(date);
+    }
+
+    if (shiftType && ['AM', 'PM', 'NOC'].includes(shiftType)) {
+      setSelectedTypes([shiftType as ShiftType]);
+    }
+
+    if (roleParam && ['CNA', 'LVN', 'RN'].includes(roleParam)) {
+      setRole(roleParam as Role);
+    }
+
+    if (qParam) {
+      setQ(qParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const date = searchParams.get('date');
+
+    if (!date) return;
+
+    const timeout = setTimeout(() => {
+      searchAvailableWorkers();
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [startDate, role, selectedTypes]);
 
   function toggleShiftType(type: ShiftType) {
     setSelectedTypes((current) =>
@@ -213,6 +251,12 @@ export default function FacilityAvailableWorkersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+		    if (e.key === 'Enter') {
+	            	e.preventDefault();
+      		    	searchAvailableWorkers();
+   		    }
+		  }}
               className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
               placeholder="Optional"
             />

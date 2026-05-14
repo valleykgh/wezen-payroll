@@ -29,18 +29,36 @@ export default function AdminWorkersPage() {
   const [workers, setWorkers] = useState<AdminWorker[]>([]);
   const [message, setMessage] = useState('Loading workers...');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiFetch<{ data: AdminWorker[] }>('/api/admin/workers');
-        setWorkers(res.data);
-        setMessage('');
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Failed to load workers');
-      }
-    }
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
-    load();
+  async function loadWorkers() {
+    try {
+      const params = new URLSearchParams();
+
+      if (search.trim()) {
+        params.set('q', search.trim());
+      }
+
+      if (roleFilter) {
+        params.set('role', roleFilter);
+      }
+
+      const qs = params.toString();
+
+      const res = await apiFetch<{ data: AdminWorker[] }>(
+        `/api/admin/workers${qs ? `?${qs}` : ''}`
+      );
+
+      setWorkers(res.data);
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to load workers');
+    }
+  }
+
+  useEffect(() => {
+    loadWorkers();
   }, []);
 
   return (
@@ -56,6 +74,56 @@ export default function AdminWorkersPage() {
           Review workers, verify compliance documents, monitor agreement completion,
           and control marketplace approval status.
         </p>
+      </div>
+
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-[1fr_220px_180px]">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Search worker
+            </label>
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  loadWorkers();
+                }
+              }}
+              placeholder="Search by name or email"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Role
+            </label>
+
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+            >
+              <option value="">All roles</option>
+              <option value="CNA">CNA</option>
+              <option value="LVN">LVN</option>
+              <option value="RN">RN</option>
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={loadWorkers}
+              className="w-full rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-cyan-700"
+            >
+              Search
+            </button>
+          </div>
+        </div>
       </div>
 
       {message && workers.length === 0 ? (
@@ -141,12 +209,19 @@ export default function AdminWorkersPage() {
                     </div>
                   </div>
 
-                  <div className="w-full lg:w-56">
+                  <div className="w-full lg:w-64 space-y-3">
                     <Link
                       href={`/admin/workers/${worker.id}`}
                       className="inline-flex w-full items-center justify-center rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white no-underline shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"
                     >
                       Review Worker
+                    </Link>
+
+                    <Link
+                      href={`/admin/workers/${worker.id}/availability`}
+                      className="inline-flex w-full items-center justify-center rounded-full border border-cyan-600 bg-white px-5 py-3 text-sm font-semibold text-cyan-700 no-underline transition hover:bg-cyan-50"
+                    >
+                      View Availability Calendar
                     </Link>
                   </div>
                 </div>

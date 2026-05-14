@@ -5777,14 +5777,51 @@ app.get('/api/worker/eligibility', requireRole('PROFESSIONAL'), async (req: Auth
   }
 });
 
-app.get('/api/admin/workers', requireRole('INTERNAL_ADMIN'), async (_req, res) => {
+app.get('/api/admin/workers', requireRole('INTERNAL_ADMIN'), async (req, res) => {
   try {
+    const q = String(req.query.q || '').trim();
+    const role = String(req.query.role || '').trim();
+
     const workers = await prisma.professionalProfile.findMany({
+      where: {
+        ...(role && ['CNA', 'LVN', 'RN'].includes(role)
+          ? { role: role as any }
+          : {}),
+
+        ...(q
+          ? {
+              user: {
+                OR: [
+                  {
+                    firstName: {
+                      contains: q,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    lastName: {
+                      contains: q,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    email: {
+                      contains: q,
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              },
+            }
+          : {}),
+      },
+
       include: {
         user: true,
         documents: true,
         agreements: true,
       },
+
       orderBy: [{ updatedAt: 'desc' }],
     });
 

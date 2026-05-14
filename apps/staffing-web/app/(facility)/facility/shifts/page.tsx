@@ -45,6 +45,7 @@ export default function FacilityShiftsPage() {
   const [fillFilter, setFillFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState<SortValue>('date-asc');
+  const [calendarView, setCalendarView] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
@@ -220,6 +221,29 @@ export default function FacilityShiftsPage() {
     };
   }, [shifts]);
 
+  const calendarDays = useMemo(() => {
+    const grouped: Record<string, Partial<Record<string, Shift>>> = {};
+
+    for (const shift of shifts) {
+      const date = shift.date.split('T')[0];
+
+      if (!grouped[date]) {
+        grouped[date] = {};
+      }
+
+      grouped[date][shift.shiftType] = shift;
+    }
+
+    return Object.entries(grouped)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({
+        date,
+        AM: data.AM,
+        PM: data.PM,
+        NOC: data.NOC,
+      }));
+  }, [shifts]);
+
   const filteredShifts = useMemo(() => {
     let items = [...shifts];
 
@@ -304,6 +328,32 @@ export default function FacilityShiftsPage() {
           </div>
           <div className="mt-2 text-2xl font-bold text-rose-700">{counts.cancelled}</div>
         </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setCalendarView(false)}
+          className={
+            !calendarView
+              ? 'rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white'
+              : 'rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900'
+          }
+        >
+          List View
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCalendarView(true)}
+          className={
+            calendarView
+              ? 'rounded-full bg-cyan-600 px-5 py-3 text-sm font-bold text-white'
+              : 'rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900'
+          }
+        >
+          Calendar View
+        </button>
       </div>
 
       <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -443,6 +493,109 @@ export default function FacilityShiftsPage() {
         </div>
       ) : null}
 
+      {calendarView ? (
+        <div className="overflow-x-auto rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-left">
+                <th className="px-4 py-4 text-sm font-bold text-slate-900">Date</th>
+                <th className="px-4 py-4 text-sm font-bold text-slate-900">AM</th>
+                <th className="px-4 py-4 text-sm font-bold text-slate-900">PM</th>
+                <th className="px-4 py-4 text-sm font-bold text-slate-900">NOC</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {calendarDays.map((day) => (
+                <tr key={day.date} className="border-t border-slate-200 align-top">
+                  <td className="px-4 py-4 text-sm font-bold text-slate-900 whitespace-nowrap">
+                    {formatShiftDate(day.date)}
+                  </td>
+
+                  {(['AM', 'PM', 'NOC'] as const).map((type) => {
+                    const shift = day[type];
+
+                    return (
+                      <td key={type} className="px-4 py-4">
+                        {!shift ? (
+                          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-400">
+                            —
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-slate-200 p-4">
+                            <div className="text-sm font-bold text-slate-950">
+                              {shift.role}
+                            </div>
+
+                            <div className="mt-2 text-xs font-semibold text-slate-500">
+                              {shift.status}
+                            </div>
+
+                            <div
+                              className={
+                                shift.fillStatus === 'FILLED'
+                                  ? 'mt-3 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 inline-block'
+                                  : shift.fillStatus === 'PARTIAL'
+                                    ? 'mt-3 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 inline-block'
+                                    : 'mt-3 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 inline-block'
+                              }
+                            >
+                              {shift.fillLabel}
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                                Filled: {shift.fillCount}/{shift.workersNeeded}
+                              </div>
+
+                              {(shift.pendingCount ?? 0) > 0 ? (
+                                <div className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                                  {shift.pendingCount} Pending
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-4 flex flex-col gap-2">
+                              {((shift.pendingCount ?? 0) > 0 || (shift.fillCount ?? 0) > 0) ? (
+                                <Link
+                                  href={`/facility/applicants?shiftId=${shift.id}`}
+                                  className={
+                                    (shift.pendingCount ?? 0) > 0
+                                      ? 'inline-flex items-center justify-center rounded-full bg-red-600 px-4 py-2 text-xs font-extrabold text-white shadow-sm animate-pulse'
+                                      : 'inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-900'
+                                  }
+                                >
+                                  Review Applicants
+                                </Link>
+                              ) : null}
+
+                              <Link
+                                href={`/facility/availability?role=${shift.role}&startDate=${shift.date.split('T')[0]}&endDate=${shift.date.split('T')[0]}`}
+                                className="inline-flex items-center justify-center rounded-full border border-cyan-300 bg-cyan-50 px-4 py-2 text-xs font-bold text-cyan-800 transition hover:bg-cyan-100"
+                              >
+                                Invite Workers
+                              </Link>
+
+                              <Link
+                                href={`/facility/shift-detail?shiftId=${shift.id}`}
+                                className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                              >
+                                Open Shift
+                              </Link>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {!calendarView ? (
       <div className="space-y-4">
         {filteredShifts.map((shift) => (
           <div
@@ -595,6 +748,8 @@ export default function FacilityShiftsPage() {
           </div>
         ))}
       </div>
+
+      ) : null}
 
       {filteredShifts.length === 0 && shifts.length > 0 ? (
         <div className="rounded-[1.75rem] border border-slate-200 bg-white p-8 text-slate-600 shadow-sm">
