@@ -11,6 +11,12 @@ function formatDateOnly(value?: string | null) {
   return `${Number(month)}/${Number(day)}/${year}`;
 }
 
+type AvailabilityRow = {
+  id: string;
+  date: string;
+  shiftType: 'AM' | 'PM' | 'NOC';
+};
+
 type WorkerDetail = {
   id: string;
   role: string;
@@ -54,6 +60,40 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
   const [adminUploadName, setAdminUploadName] = useState('');
   const [adminUploadExpiresAt, setAdminUploadExpiresAt] = useState('');
   const [replaceExisting, setReplaceExisting] = useState(true);
+
+  const today = new Date();
+  const defaultMonth = `${today.getFullYear()}-${String(
+    today.getMonth() + 1
+  ).padStart(2, '0')}`;
+
+  const [availabilityMonth, setAvailabilityMonth] = useState(defaultMonth);
+  const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
+
+
+  async function loadAvailability(monthValue?: string) {
+    try {
+      const targetMonth = monthValue || availabilityMonth;
+
+      const [year, month] = targetMonth.split('-');
+
+      const endDate = new Date(Number(year), Number(month), 0)
+        .getDate()
+        .toString()
+        .padStart(2, '0');
+
+      const res = await apiFetch<{
+        data: {
+          availability: AvailabilityRow[];
+        };
+      }>(
+        `/api/admin/workers/${professionalId}/availability?startDate=${year}-${month}-01&endDate=${year}-${month}-${endDate}`
+      );
+
+      setAvailability(res.data.availability || []);
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function loadWorker() {
     setLoading(true);
@@ -196,8 +236,14 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
 
   useEffect(() => {
     loadWorker();
+    loadAvailability();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [professionalId]);
+
+  useEffect(() => {
+    loadAvailability(availabilityMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availabilityMonth]);
 
   if (loading) {
     return <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">Loading worker...</div>;
@@ -313,6 +359,78 @@ export function AdminWorkerDetailClient({ professionalId }: { professionalId: st
         <p className="mt-3 text-xs font-semibold text-slate-500">
           Temporary password must be at least 8 characters. Give it directly to the worker.
         </p>
+      </div>
+
+
+      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-slate-950">
+              Worker Availability
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Monthly AM / PM / NOC availability calendar.
+            </p>
+          </div>
+
+          <input
+            type="month"
+            value={availabilityMonth}
+            onChange={(e) => setAvailabilityMonth(e.target.value)}
+            className="rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {Array.from(
+            new Set(availability.map((a) => a.date))
+          ).map((date) => {
+            const dayItems = availability.filter((a) => a.date === date);
+
+            return (
+              <div
+                key={date}
+                className="rounded-2xl border border-slate-200 p-4"
+              >
+                <div className="font-bold text-slate-950">
+                  {new Date(date).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {['AM', 'PM', 'NOC'].map((type) => {
+                    const active = dayItems.some(
+                      (item) => item.shiftType === type
+                    );
+
+                    return (
+                      <div
+                        key={type}
+                        className={
+                          active
+                            ? 'rounded-xl bg-cyan-700 px-4 py-2 text-xs font-extrabold text-white'
+                            : 'rounded-xl border border-slate-200 px-4 py-2 text-xs font-extrabold text-slate-400'
+                        }
+                      >
+                        {type}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {availability.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
+              No availability submitted for this month.
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-cyan-200">

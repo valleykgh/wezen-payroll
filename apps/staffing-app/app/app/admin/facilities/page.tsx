@@ -45,7 +45,7 @@ export default function AdminFacilitiesPage() {
         {facilities.map((facility) => (
           <Link
             key={facility.id}
-            href={`/app/admin/facilities/${facility.id}/calendar/index.html`}
+            href={`/app/admin/facility-calendar/index.html?facilityId=${facility.id}`}
             className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200"
           >
             <div className="flex items-start justify-between gap-3">
