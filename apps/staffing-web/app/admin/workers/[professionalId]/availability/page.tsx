@@ -1,193 +1,179 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { use, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 type AvailabilityRow = {
   id: string;
   date: string;
-  shiftType: 'AM' | 'PM' | 'NOC';
+  shiftType: string;
 };
 
 type WorkerAvailabilityResponse = {
-  professional: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-    role?: string | null;
-  };
-  availability: AvailabilityRow[];
+  data: AvailabilityRow[];
 };
 
-function monthValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthBounds(month: string) {
-  const [year, m] = month.split('-').map(Number);
-
-  const start = `${year}-${String(m).padStart(2, '0')}-01`;
-
-  const endDate = new Date(year, m, 0);
-
-  const end = `${year}-${String(m).padStart(2, '0')}-${String(
-    endDate.getDate()
-  ).padStart(2, '0')}`;
-
-  return { start, end };
-}
-
-function daysInMonth(month: string) {
-  const [year, m] = month.split('-').map(Number);
-
-  const last = new Date(year, m, 0).getDate();
-
-  return Array.from({ length: last }, (_, i) => {
-    return `${year}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
-  });
-}
-
-function labelDate(value: string) {
-  const [y, m, d] = value.split('-').map(Number);
-
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-export default function AdminWorkerAvailabilityPage({
+export default function WorkerAvailabilityPage({
   params,
 }: {
   params: Promise<{ professionalId: string }>;
 }) {
+  const resolved = use(params);
+  const professionalId = resolved.professionalId;
+
   const today = new Date();
 
-  const [professionalId, setProfessionalId] = useState('');
-  const [month, setMonth] = useState(monthValue(today));
-  const [data, setData] = useState<WorkerAvailabilityResponse | null>(null);
-  const [message, setMessage] = useState('Loading availability...');
+  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [year, setYear] = useState(today.getFullYear());
 
-  const days = useMemo(() => daysInMonth(month), [month]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+
+  const [rows, setRows] = useState<AvailabilityRow[]>([]);
+
+  async function loadAvailability() {
+    try {
+      setLoading(true);
+      setMessage('');
+
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+
+      const res = await apiFetch<WorkerAvailabilityResponse>(
+        `/api/admin/workers/${professionalId}/availability?startDate=${startDate}&endDate=${endDate}`
+      );
+
+      setRows(res.data || []);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load availability'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const resolved = await params;
+    loadAvailability();
+  }, [month, year]);
 
-        setProfessionalId(resolved.professionalId);
+  const grouped = useMemo(() => {
+    const map: Record<string, string[]> = {};
 
-        const [year, monthNum] = month.split('-');
-
-        const res = await apiFetch<{ data: WorkerAvailabilityResponse }>(
-          `/api/admin/workers/${resolved.professionalId}/availability?startDate=${year}-${monthNum}-01&endDate=${monthBounds(month).end}`
-        );
-
-        setData(res.data);
-        setMessage('');
-      } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : 'Failed to load worker availability'
-        );
-      }
+    for (const row of rows) {
+      map[row.date] = map[row.date] || [];
+      map[row.date].push(row.shiftType);
     }
 
-    load();
-  }, [params, month]);
-
-  const selected: Record<string, string[]> = {};
-
-  for (const item of data?.availability || []) {
-    selected[item.date] = selected[item.date] || [];
-    selected[item.date].push(item.shiftType);
-  }
+    return Object.entries(map).sort((a, b) =>
+      new Date(a[0]).getTime() - new Date(b[0]).getTime()
+    );
+  }, [rows]);
 
   return (
     <div className="space-y-8">
-      <div className="rounded-[2rem] bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-800 p-8 text-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-200">
-              Worker Availability
-            </div>
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <Link
+          href={`/admin/workers/${professionalId}`}
+          className="text-sm font-semibold text-cyan-700"
+        >
+          ← Back to Worker
+        </Link>
 
-            <h1 className="mt-3 text-4xl font-bold tracking-tight">
-              {data?.professional.firstName} {data?.professional.lastName}
-            </h1>
+        <h1 className="mt-4 text-3xl font-bold text-slate-950">
+          Worker Availability Calendar
+        </h1>
 
-            <p className="mt-2 text-slate-200">
-              {data?.professional.role} • {data?.professional.email}
-            </p>
-          </div>
-
-          <Link
-            href={`/admin/workers/${professionalId}`}
-            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-          >
-            Back to Worker
-          </Link>
-        </div>
+        <p className="mt-2 text-slate-600">
+          Review worker availability by shift type.
+        </p>
       </div>
 
-      {message ? (
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-          {message}
-        </div>
-      ) : null}
-
-      <section className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-end gap-4">
+      <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Month
             </label>
 
-            <input
-              type="month"
+            <select
               value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+            >
+              {Array.from({ length: 12 }).map((_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {new Date(2026, i, 1).toLocaleString(undefined, {
+                    month: 'long',
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Year
+            </label>
+
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
             />
           </div>
         </div>
-      </section>
-
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {days.map((date) => {
-          const activeTypes = selected[date] || [];
-
-          return (
-            <div
-              key={date}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-            >
-              <div className="font-bold text-slate-950">
-                {labelDate(date)}
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {['AM', 'PM', 'NOC'].map((type) => (
-                  <div
-                    key={type}
-                    className={
-                      activeTypes.includes(type)
-                        ? 'rounded-xl bg-cyan-600 px-3 py-2 text-center text-xs font-bold text-white'
-                        : 'rounded-xl border border-slate-200 px-3 py-2 text-center text-xs font-bold text-slate-400'
-                    }
-                  >
-                    {type}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
       </div>
+
+      {loading ? (
+        <div className="rounded-2xl border bg-white p-6 text-slate-600">
+          Loading availability...
+        </div>
+      ) : null}
+
+      {message ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {grouped.map(([date, shifts]) => (
+          <div
+            key={date}
+            className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div className="text-lg font-bold text-slate-950">
+              {new Date(date).toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {shifts.map((shift) => (
+                <div
+                  key={`${date}-${shift}`}
+                  className="rounded-full bg-cyan-100 px-4 py-2 text-sm font-bold text-cyan-800"
+                >
+                  {shift}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!loading && grouped.length === 0 ? (
+        <div className="rounded-2xl border bg-white p-6 text-slate-600">
+          No availability found for this month.
+        </div>
+      ) : null}
     </div>
   );
 }

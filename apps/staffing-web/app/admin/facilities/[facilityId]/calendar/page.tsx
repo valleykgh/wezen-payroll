@@ -191,26 +191,28 @@ export default function FacilityCalendarPage({
                   </div>
 
                   <div className="mt-4">
-                    <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                      Approved
-                    </div>
-
-                    <div className="mt-2 space-y-1">
-                      {shift.approvedWorkers.length === 0 ? (
-                        <div className="text-sm text-rose-600">
-                          OPEN
+                    {shift.approvedWorkers.length === 0 ? (
+                      <div className="text-sm font-bold text-rose-600">
+                        OPEN
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                          Approved
                         </div>
-                      ) : (
-                        shift.approvedWorkers.map((worker) => (
-                          <div
-                            key={worker.professionalId}
-                            className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
-                          >
-                            {worker.firstName} {worker.lastName}
-                          </div>
-                        ))
-                      )}
-                    </div>
+
+                        <div className="mt-2 space-y-1">
+                          {shift.approvedWorkers.map((worker) => (
+                            <div
+                              key={worker.professionalId}
+                              className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+                            >
+                              {worker.firstName} {worker.lastName}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {shift.pendingWorkers.length > 0 ? (
