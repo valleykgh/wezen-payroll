@@ -28,6 +28,12 @@ function toInputDate(value: string) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function formatShiftDate(dateValue: string) {
+  const dateOnly = dateValue.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
+}
+
 export function FacilityShiftsClient() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [message, setMessage] = useState('');
@@ -42,6 +48,7 @@ export function FacilityShiftsClient() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortBy, setSortBy] = useState('date-asc');
+  const [calendarView, setCalendarView] = useState(false);
 
   async function loadShifts() {
     setLoading(true);
@@ -171,6 +178,29 @@ export function FacilityShiftsClient() {
   }
 
 
+  const calendarDays = useMemo(() => {
+    const grouped: Record<string, Partial<Record<string, Shift>>> = {};
+
+    for (const shift of shifts) {
+      const date = shift.date.split('T')[0];
+
+      if (!grouped[date]) {
+        grouped[date] = {};
+      }
+
+      grouped[date][shift.shiftType] = shift;
+    }
+
+    return Object.entries(grouped)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({
+        date,
+        AM: data.AM,
+        PM: data.PM,
+        NOC: data.NOC,
+      }));
+  }, [shifts]);
+
   const filteredShifts = useMemo(() => {
     let items = [...shifts];
 
@@ -227,6 +257,32 @@ export function FacilityShiftsClient() {
         </div>
       ) : null}
 
+
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setCalendarView(false)}
+          className={
+            !calendarView
+              ? 'rounded-2xl bg-slate-950 px-4 py-3 text-sm font-extrabold text-white'
+              : 'rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900'
+          }
+        >
+          List View
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCalendarView(true)}
+          className={
+            calendarView
+              ? 'rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-extrabold text-white'
+              : 'rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900'
+          }
+        >
+          Calendar View
+        </button>
+      </div>
 
       <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h2 className="text-base font-extrabold text-slate-950">Filters</h2>
@@ -314,10 +370,79 @@ export function FacilityShiftsClient() {
         </button>
       ) : null}
 
-      {filteredShifts.map((shift) => {
-        const [start = '', end = ''] = shift.time.split(' - ');
-        const isEditing = editingId === shift.id;
+      {calendarView ? (
+        <div className="grid gap-4">
+          {calendarDays.map((day) => (
+            <div
+              key={day.date}
+              className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200"
+            >
+              <div className="mb-4 text-base font-extrabold text-slate-950">
+                {formatShiftDate(day.date)}
+              </div>
 
+              <div className="grid grid-cols-3 gap-3">
+                {(['AM', 'PM', 'NOC'] as const).map((type) => {
+                  const shift = day[type];
+
+                  return (
+                    <div
+                      key={type}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                    >
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        {type}
+                      </div>
+
+                      {!shift ? (
+                        <div className="mt-4 text-center text-xs text-slate-400">
+                          —
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mt-2 text-sm font-extrabold text-slate-950">
+                            {shift.role}
+                          </div>
+
+                          <div className="mt-1 text-[11px] font-bold text-slate-500">
+                            {shift.status}
+                          </div>
+
+                          <div
+                            className={
+                              shift.fillStatus === 'FILLED'
+                                ? 'mt-2 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700'
+                                : shift.fillStatus === 'PARTIAL'
+                                  ? 'mt-2 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700'
+                                  : 'mt-2 rounded-full bg-slate-200 px-2 py-1 text-[10px] font-black text-slate-700'
+                            }
+                          >
+                            {shift.fillLabel}
+                          </div>
+
+                          {(shift.pendingCount ?? 0) > 0 ? (
+                            <div className="mt-2 text-[10px] font-black text-red-600">
+                              {shift.pendingCount} pending
+                            </div>
+                          ) : null}
+
+                          <Link
+                            href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`}
+                            className="mt-3 block text-xs font-black text-cyan-700 underline"
+                          >
+                            Open Shift
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        filteredShifts.map((shift) => {
         return (
           <div key={shift.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-start justify-between gap-3">
@@ -328,16 +453,22 @@ export function FacilityShiftsClient() {
                   onChange={() => toggleSelected(shift.id)}
                   className="mt-1 h-5 w-5"
                 />
+
                 <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">
-                  {shift.role} • {shift.shiftType}
-                </p>
-                <Link href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`} className="mt-2 block text-lg font-bold text-slate-950 underline decoration-slate-300 underline-offset-4">
-                  {new Date(shift.date).toLocaleDateString()} • {shift.time}
-                </Link>
-                <p className="mt-1 text-sm text-slate-600">
-                  {[shift.city, shift.state].filter(Boolean).join(', ') || shift.facilityName}
-                </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">
+                    {shift.role} • {shift.shiftType}
+                  </p>
+
+                  <Link
+                    href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`}
+                    className="mt-2 block text-lg font-bold text-slate-950 underline decoration-slate-300 underline-offset-4"
+                  >
+                    {new Date(shift.date).toLocaleDateString()} • {shift.time}
+                  </Link>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    {[shift.city, shift.state].filter(Boolean).join(', ') || shift.facilityName}
+                  </p>
                 </div>
               </div>
 
@@ -345,115 +476,10 @@ export function FacilityShiftsClient() {
                 {shift.status}
               </span>
             </div>
-
-            {(shift.pendingCount ?? 0) > 0 ? (
-              <Link
-                href={`/app/facility/shift-detail/index.html?shiftId=${shift.id}`}
-                className="mt-4 block animate-pulse rounded-2xl bg-red-600 px-4 py-3 text-center text-sm font-extrabold text-white"
-              >
-                Review Applicant
-              </Link>
-            ) : null}
-
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className={(shift.pendingCount ?? 0) > 0 ? 'animate-pulse rounded-2xl bg-red-600 p-3 text-white' : 'rounded-2xl bg-slate-50 p-3'}>
-                <p className={(shift.pendingCount ?? 0) > 0 ? 'font-bold text-white' : 'font-bold text-slate-950'}>{shift.applicants}</p>
-                <p className={(shift.pendingCount ?? 0) > 0 ? 'text-white' : 'text-slate-500'}>Applicants</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-3">
-                <p className="font-bold text-slate-950">{shift.fillLabel}</p>
-                <p className="text-slate-500">Filled</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-3">
-                <p className="font-bold text-slate-950">{shift.payRateLabel}</p>
-                <p className="text-slate-500">Rate</p>
-              </div>
-            </div>
-
-            {isEditing ? (
-              <form action={(formData) => updateShift(shift, formData)} className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-4">
-                <input name="date" type="date" defaultValue={toInputDate(shift.date)} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-
-                <select name="shiftType" defaultValue={shift.shiftType} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm">
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
-                  <option value="NOC">NOC</option>
-                </select>
-
-                <input name="startTimeLabel" defaultValue={start} placeholder="Start time" className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-                <input name="endTimeLabel" defaultValue={end} placeholder="End time" className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-                <input name="workersNeeded" type="number" min={1} defaultValue={shift.workersNeeded} className="rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-                <textarea name="specialInstructions" placeholder="Special instructions" className="min-h-20 rounded-2xl border border-slate-200 px-3 py-3 text-sm" />
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button type="submit" disabled={busyId === shift.id} className="rounded-2xl bg-cyan-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50">
-                    Save
-                  </button>
-                  <button type="button" onClick={() => setEditingId('')} className="rounded-2xl bg-slate-200 px-3 py-3 text-xs font-bold text-slate-800">
-                    Cancel Edit
-                  </button>
-                </div>
-              </form>
-            ) : null}
-
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setEditingId(shift.id)}
-                disabled={!['OPEN', 'INVITE_ONLY'].includes(shift.status) || shift.fillCount > 0}
-                className="rounded-2xl bg-cyan-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Edit
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runShiftAction(shift.id, 'cancel')}
-                disabled={busyId === shift.id || shift.status === 'CANCELLED'}
-                className="rounded-2xl bg-rose-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runShiftAction(shift.id, 'close')}
-                disabled={busyId === shift.id || ['COMPLETED', 'CLOSED', 'CANCELLED'].includes(shift.status)}
-                className="rounded-2xl bg-slate-950 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Close
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runShiftAction(shift.id, 'reopen')}
-                disabled={busyId === shift.id || !['CLOSED', 'CANCELLED', 'UNFILLED'].includes(shift.status)}
-                className="rounded-2xl bg-cyan-700 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Reopen
-              </button>
-
-              <button
-                type="button"
-                onClick={() => duplicateShift(shift.id)}
-                disabled={busyId === shift.id}
-                className="rounded-2xl bg-emerald-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Duplicate
-              </button>
-
-              <button
-                type="button"
-                onClick={() => deleteShift(shift.id)}
-                disabled={busyId === shift.id}
-                className="rounded-2xl bg-red-600 px-3 py-3 text-xs font-bold text-white disabled:opacity-50"
-              >
-                Delete
-              </button>
-            </div>
           </div>
         );
-      })}
+      })
+      )}
     </div>
   );
 }
