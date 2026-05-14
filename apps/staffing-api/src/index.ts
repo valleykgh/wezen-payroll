@@ -2863,6 +2863,51 @@ app.get('/api/worker/availability', requireRole('PROFESSIONAL'), async (req: Aut
   }
 });
 
+
+
+app.get('/api/admin/workers/:professionalId/availability', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || startDate || '');
+
+    if (!professionalId) {
+      return res.status(400).json({ error: 'professionalId is required' });
+    }
+
+    if (!startDate) {
+      return res.status(400).json({ error: 'startDate is required' });
+    }
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT
+        id,
+        "professionalId",
+        to_char(date, 'YYYY-MM-DD') AS date,
+        "shiftType",
+        note,
+        "createdAt",
+        "updatedAt"
+      FROM "WorkerAvailability"
+      WHERE "professionalId" = $1
+        AND date >= $2::date
+        AND date <= $3::date
+      ORDER BY date ASC, "shiftType" ASC
+      `,
+      professionalId,
+      startDate,
+      endDate
+    );
+
+    return res.json({ data: rows });
+  } catch (error) {
+    console.error('GET /api/admin/workers/:professionalId/availability error:', error);
+    return res.status(500).json({ error: 'Failed to fetch worker availability' });
+  }
+});
+
+
 app.put('/api/worker/availability', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
     const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
