@@ -143,12 +143,21 @@ export default function AdminFacilityDetailPage({
             </p>
           </div>
 
-          <Link
-            href="/admin/facilities"
-            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
-          >
-            Back to Facilities
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href={`/admin/facilities/${facilityId}/calendar`}
+              className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-400"
+            >
+              View Staffing Calendar
+            </Link>
+
+            <Link
+              href="/admin/facilities"
+              className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Back to Facilities
+            </Link>
+          </div>
         </div>
       </div>
 

@@ -370,6 +370,26 @@ export default function WorkerAvailabilityPage() {
           })}
         </div>
       </section>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={saveAvailability}
+          disabled={busy}
+          className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
+        >
+          {busy ? 'Saving...' : `Save Availability (${selectedCount})`}
+        </button>
+
+        <button
+          type="button"
+          onClick={clearMonth}
+          disabled={busy}
+          className="rounded-full border border-rose-300 px-6 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+        >
+          Clear Month
+        </button>
+      </div>
     </div>
   );
 }
