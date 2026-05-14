@@ -185,9 +185,12 @@ async function deleteFacility(facilityId: string, facilityName: string) {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="text-xl font-bold tracking-tight text-slate-950">
+                  <Link
+                    href={`/admin/facilities/${facility.id}`}
+                    className="text-xl font-bold tracking-tight text-slate-950 underline-offset-4 hover:underline"
+                  >
                     {facility.name}
-                  </div>
+                  </Link>
 
                   {facility.isActive ? (
                     <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
