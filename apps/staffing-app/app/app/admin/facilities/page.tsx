@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { AppShell } from '@/components/app/app-shell';
 import { apiFetch } from '@/lib/api-client';
 
@@ -42,16 +43,30 @@ export default function AdminFacilitiesPage() {
         ) : null}
 
         {facilities.map((facility) => (
-          <div key={facility.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <Link
+            key={facility.id}
+            href={`/app/admin/facilities/${facility.id}/calendar/index.html`}
+            className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200"
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">
                   {facility.facilityType || 'Facility'}
                 </p>
-                <h2 className="mt-2 text-lg font-bold text-slate-950">{facility.name}</h2>
+
+                <h2 className="mt-2 text-lg font-bold text-slate-950">
+                  {facility.name}
+                </h2>
+
                 <p className="mt-1 text-sm text-slate-600">
-                  {[facility.city, facility.state, facility.zipCode].filter(Boolean).join(', ') || 'Location not listed'}
+                  {[facility.city, facility.state, facility.zipCode]
+                    .filter(Boolean)
+                    .join(', ') || 'Location not listed'}
                 </p>
+
+                <div className="mt-4 inline-flex rounded-xl bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">
+                  View Staffing Calendar
+                </div>
               </div>
 
               <span
@@ -64,7 +79,7 @@ export default function AdminFacilitiesPage() {
                 {facility.isActive ? 'ACTIVE' : 'INACTIVE'}
               </span>
             </div>
-          </div>
+          </Link>
         ))}
 
         {!message && facilities.length === 0 ? (

@@ -8385,6 +8385,124 @@ app.get('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), asyn
   }
 });
 
+
+app.get('/api/admin/facilities/:facilityId/calendar', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const facilityId = String(req.params.facilityId || '');
+    const month = Number(req.query.month || 0);
+    const year = Number(req.query.year || 0);
+
+    if (!facilityId) {
+      return res.status(400).json({ error: 'facilityId is required' });
+    }
+
+    if (!month || !year) {
+      return res.status(400).json({ error: 'month and year are required' });
+    }
+
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+
+    const facility = await prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!facility) {
+      return res.status(404).json({ error: 'Facility not found' });
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        facilityId,
+        date: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
+      include: {
+        requests: {
+          include: {
+            professional: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { date: 'asc' },
+        { shiftType: 'asc' },
+      ],
+    });
+
+    const grouped = shifts.reduce((acc: any[], shift) => {
+      const dateKey = shift.date.toISOString().slice(0, 10);
+
+      let existing = acc.find((d) => d.date === dateKey);
+
+      if (!existing) {
+        existing = {
+          date: dateKey,
+          shifts: [],
+        };
+
+        acc.push(existing);
+      }
+
+      existing.shifts.push({
+        id: shift.id,
+        role: shift.role,
+        shiftType: shift.shiftType,
+        status: shift.status,
+
+        approvedWorkers: shift.requests
+          .filter((r) => r.status === 'APPROVED')
+          .map((r) => ({
+            professionalId: r.professional.id,
+            firstName: r.professional.user.firstName,
+            lastName: r.professional.user.lastName,
+          })),
+
+        pendingWorkers: shift.requests
+          .filter((r) =>
+            ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)
+          )
+          .map((r) => ({
+            professionalId: r.professional.id,
+            firstName: r.professional.user.firstName,
+            lastName: r.professional.user.lastName,
+          })),
+
+        approvedCount: shift.requests.filter(
+          (r) => r.status === 'APPROVED'
+        ).length,
+
+        pendingCount: shift.requests.filter(
+          (r) =>
+            ['REQUESTED', 'UNDER_REVIEW'].includes(r.status)
+        ).length,
+      });
+    return acc;
+    }, []);
+
+    return res.json({
+      data: {
+        facility,
+        calendar: grouped,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/admin/facilities/:facilityId/calendar error:', error);
+    return res.status(500).json({ error: 'Failed to fetch facility calendar' });
+  }
+});
+
+
 app.put('/api/admin/facilities/:facilityId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     const facilityId = String(req.params.facilityId || '');
