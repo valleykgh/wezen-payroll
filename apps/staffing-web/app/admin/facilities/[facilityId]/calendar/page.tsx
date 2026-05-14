@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 type Worker = {
@@ -39,8 +39,11 @@ type CalendarResponse = {
 export default function FacilityCalendarPage({
   params,
 }: {
-  params: { facilityId: string };
+  params: Promise<{ facilityId: string }>;
 }) {
+  const resolved = use(params);
+  const facilityId = resolved.facilityId;
+
   const today = new Date();
 
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -58,7 +61,7 @@ export default function FacilityCalendarPage({
       setMessage('');
 
       const res = await apiFetch<CalendarResponse>(
-        `/api/admin/facilities/${params.facilityId}/calendar?month=${month}&year=${year}`
+        `/api/admin/facilities/${facilityId}/calendar?month=${month}&year=${year}`
       );
 
       setFacilityName(res.data.facility.name);
@@ -89,7 +92,7 @@ export default function FacilityCalendarPage({
     <div className="space-y-8">
       <div className="rounded-[2rem] bg-gradient-to-r from-cyan-50 to-white p-6 border border-slate-200">
         <Link
-          href={`/admin/facilities/${params.facilityId}`}
+          href={`/admin/facilities/${facilityId}`}
           className="text-sm font-semibold text-cyan-700"
         >
           ← Back to Facility
