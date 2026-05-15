@@ -103,6 +103,10 @@ model Employee {
   payrollCorrections PayrollCorrection[]
   earlyPayrollPayments EarlyPayrollPayment[]
   payrollLedgerEntries EmployeePayrollLedger[]
+
+  importedPunches      ImportedPunch[]
+  payrollImportBatches PayrollImportBatch[]
+
   // optional user
   user               User?
   // time entries exist even if user doesn't exist / invite not accepted
@@ -548,4 +552,72 @@ model Holiday {
   appliesToRegularOnly Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+}
+
+
+model PayrollImportBatch {
+  id                 String   @id @default(cuid())
+
+  employeeId         String?
+  employee           Employee? @relation(fields: [employeeId], references: [id])
+
+  sourceSystem       String
+
+  externalEmployeeId String?
+
+  batchDate          DateTime?
+
+  importStartedAt    DateTime @default(now())
+  importCompletedAt  DateTime?
+
+  totalPunches       Int      @default(0)
+
+  status             String   @default("PENDING")
+
+  errorMessage       String?
+
+  rawPayload         Json?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  punches            ImportedPunch[]
+
+  @@index([sourceSystem])
+  @@index([externalEmployeeId])
+  @@index([status])
+}
+
+model ImportedPunch {
+  id                   String   @id @default(cuid())
+
+  payrollImportBatchId String?
+  payrollImportBatch   PayrollImportBatch? @relation(fields: [payrollImportBatchId], references: [id], onDelete: SetNull)
+
+  employeeId           String?
+  employee             Employee? @relation(fields: [employeeId], references: [id])
+
+  externalEmployeeId   String
+
+  sourceSystem         String
+
+  facilityName         String?
+
+  departmentCode       String?
+  costCenterCode       String?
+
+  punchTimestamp       DateTime
+
+  punchType            String
+
+  rawPayload           Json?
+
+  processed            Boolean  @default(false)
+
+  createdAt            DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([externalEmployeeId])
+  @@index([punchTimestamp])
+  @@index([processed])
 }
