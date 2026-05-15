@@ -25,6 +25,9 @@ const connectionString = process.env.DATABASE_URL ||
     'postgresql://postgres:postgres@localhost:5432/wezen_staffing';
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
+async function generateWorkerCode() {
+    return `WZN-${Date.now()}`;
+}
 const prisma = new PrismaClient({ adapter });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1270,8 +1273,10 @@ app.post('/api/auth/register-professional', async (req, res) => {
             return res.status(409).json({ error: 'Email already in use' });
         }
         const passwordHash = await hashPassword(parsed.data.password);
+        const workerCode = await generateWorkerCode();
         const user = await prisma.user.create({
             data: {
+                workerCode,
                 email: parsed.data.email,
                 passwordHash,
                 role: UserRole.PROFESSIONAL,
@@ -8633,6 +8638,55 @@ app.put('/api/admin/settings', requireRole('INTERNAL_ADMIN'), async (req, res) =
     catch (error) {
         console.error('PUT /api/admin/settings error:', error);
         res.status(500).json({ error: 'Failed to update admin settings' });
+    }
+});
+app.post('/api/admin/backfill-worker-codes', requireRole('INTERNAL_ADMIN'), async (_req, res) => {
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                workerCode: null,
+                professional: {
+                    approvedByWezen: true,
+                },
+            },
+            select: {
+                id: true,
+                email: true,
+            },
+            orderBy: {
+                createdAt: 'asc',
+            },
+        });
+        let next = 100001;
+        for (const user of users) {
+            await prisma.user.update({
+                where: {
+                    id: user.id,
+                },
+                data: {
+                    workerCode: `WZN-${next}`,
+                },
+            });
+            next++;
+        }
+        const count = await prisma.user.count({
+            where: {
+                workerCode: {
+                    not: null,
+                },
+            },
+        });
+        res.json({
+            success: true,
+            updated: users.length,
+            totalWithWorkerCodes: count,
+        });
+    }
+    catch (error) {
+        console.error('Backfill worker codes failed:', error);
+        res.status(500).json({
+            error: 'Backfill failed',
+        });
     }
 });
 app.post('/api/admin/change-password', requireRole('INTERNAL_ADMIN'), async (req, res) => {
