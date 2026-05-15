@@ -11,6 +11,7 @@ type AdminWorker = {
   firstName?: string | null;
   lastName?: string | null;
   email: string;
+  workerCode?: string | null;
   city?: string | null;
   state?: string | null;
   onboardingStatus?: string | null;
@@ -165,6 +166,12 @@ export default function AdminWorkersPage() {
                     <div className="mt-3 text-sm font-medium text-slate-700">
                       {worker.role} • {worker.email}
                     </div>
+
+                    {worker.workerCode ? (
+                      <div className="mt-1 text-sm font-semibold text-cyan-700">
+                        Worker ID: {worker.workerCode}
+                      </div>
+                    ) : null}
                     <div className="mt-1 text-sm text-slate-500">
                       {worker.city || 'Unknown city'}
                       {worker.state ? `, ${worker.state}` : ''}

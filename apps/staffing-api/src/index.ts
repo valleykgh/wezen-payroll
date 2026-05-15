@@ -5845,6 +5845,7 @@ app.get('/api/admin/workers', requireRole('INTERNAL_ADMIN'), async (req, res) =>
           firstName: worker.user.firstName,
           lastName: worker.user.lastName,
           email: worker.user.email,
+          workerCode: worker.user.workerCode,
           city: worker.city,
           state: worker.state,
           regularPayRateCents: worker.regularPayRateCents,
@@ -6523,6 +6524,42 @@ if (worker.user.isSystemUser) {
         onboardingStatus: 'APPROVED',
       },
     });
+
+    if (!worker.user.workerCode) {
+      const existingUsers = await prisma.user.findMany({
+        where: {
+          workerCode: {
+            not: null,
+          },
+        },
+        select: {
+          workerCode: true,
+        },
+      });
+
+      let nextWorkerNumber = 100001;
+
+      const numbers = existingUsers
+        .map((item) => {
+          const match = item.workerCode?.match(/WZN-(\d+)/);
+
+          return match ? Number(match[1]) : null;
+        })
+        .filter((value): value is number => value !== null);
+
+      if (numbers.length > 0) {
+        nextWorkerNumber = Math.max(...numbers) + 1;
+      }
+
+      await prisma.user.update({
+        where: {
+          id: worker.user.id,
+        },
+        data: {
+          workerCode: `WZN-${nextWorkerNumber}`,
+        },
+      });
+    }
 
     await createWorkerNotification({
       professionalId,

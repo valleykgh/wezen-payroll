@@ -18,6 +18,7 @@ function formatDateOnly(value?: string | null) {
 
 type WorkerDetail = {
   id: string;
+  workerCode?: string | null;
   role: string;
   city?: string | null;
   state?: string | null;
@@ -620,6 +621,12 @@ const icaSignedStepLabel = isIcaSigned
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Role</div>
                 <div className="mt-1 text-sm font-medium text-slate-900">{worker.role}</div>
+
+                {worker.workerCode ? (
+                  <div className="mt-3 inline-flex items-center rounded-full bg-cyan-50 px-4 py-2 text-sm font-bold text-cyan-800 ring-1 ring-cyan-200">
+                    Worker ID: {worker.workerCode}
+                  </div>
+                ) : null}
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
