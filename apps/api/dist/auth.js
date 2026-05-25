@@ -27,7 +27,7 @@ function setAuthCookie(res, token) {
     res.cookie(COOKIE_NAME, token, {
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
+        sameSite: "lax",
         domain: process.env.COOKIE_DOMAIN || undefined,
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -38,7 +38,7 @@ function clearAuthCookie(res) {
     res.clearCookie(COOKIE_NAME, {
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
+        sameSite: "lax",
         domain: process.env.COOKIE_DOMAIN || undefined,
         path: "/",
     });

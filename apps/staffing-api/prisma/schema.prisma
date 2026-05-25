@@ -121,6 +121,10 @@ model User {
 }
 
 model Facility {
+  integrations            FacilityIntegration[]
+  workerExternalMappings  WorkerExternalMapping[]
+  externalWorkers         FacilityExternalWorker[]
+  timecards               ShiftTimecard[]
   id                       String   @id @default(cuid())
   name                     String
   facilityType             String?
@@ -182,6 +186,10 @@ model FacilityStaff {
 }
 
 model ProfessionalProfile {
+  workerExternalMappings  WorkerExternalMapping[]
+  externalWorkers         FacilityExternalWorker[]
+  timeExports             ShiftTimeExport[]
+  timecards               ShiftTimecard[]
   id                        String        @id @default(cuid())
   userId                    String        @unique
   role                      ClinicianRole
@@ -278,6 +286,8 @@ model WorkerNotification {
 }
 
 model Shift {
+  timeExports ShiftTimeExport[]
+  timecards   ShiftTimecard[]
   id                  String        @id @default(cuid())
   facilityId          String
   role                ClinicianRole
@@ -454,3 +464,163 @@ model AdminAuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
 }
+
+
+enum IntegrationProvider {
+  UKG_READY
+  UKG_DIMENSIONS
+  UKG_PRO
+  KRONOS
+  CSV
+  SFTP
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+model FacilityIntegration {
+  id                String               @id @default(cuid())
+  facilityId        String
+  provider          IntegrationProvider
+  status            IntegrationStatus    @default(INACTIVE)
+
+  externalSystemName String?
+  apiBaseUrl         String?
+  clientId           String?
+  encryptedSecret    String?
+  configJson         Json?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  facility          Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  syncLogs          IntegrationSyncLog[]
+
+  @@index([facilityId])
+}
+
+model IntegrationSyncLog {
+  id                    String   @id @default(cuid())
+
+  facilityIntegrationId String
+  syncType              String
+  status                String
+
+  requestPayload        Json?
+  responsePayload       Json?
+  errorMessage          String?
+
+  createdAt             DateTime @default(now())
+
+  facilityIntegration   FacilityIntegration @relation(fields: [facilityIntegrationId], references: [id], onDelete: Cascade)
+
+  @@index([facilityIntegrationId])
+  @@index([createdAt])
+}
+
+model WorkerExternalMapping {
+  id                    String   @id @default(cuid())
+
+  professionalId        String
+  facilityId            String
+
+  externalEmployeeId    String
+  externalDepartmentId  String?
+  externalCostCenter    String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  professional          ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  facility              Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, facilityId])
+  @@index([externalEmployeeId])
+}
+
+model ShiftTimeExport {
+  id                    String   @id @default(cuid())
+
+  shiftId               String
+  professionalId        String
+
+  exported              Boolean  @default(false)
+  exportedAt            DateTime?
+
+  exportType            String?
+  externalReference     String?
+
+  createdAt             DateTime @default(now())
+
+  professional          ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  shift                 Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([professionalId])
+  @@index([shiftId])
+  @@index([exported])
+}
+
+model ShiftTimecard {
+  id                    String   @id @default(cuid())
+
+  shiftId               String
+  professionalId        String
+  facilityId            String
+
+  clockInAt             DateTime?
+  clockOutAt            DateTime?
+
+  breakMinutes          Int      @default(0)
+
+  regularHours          Float    @default(0)
+  overtimeHours         Float    @default(0)
+  doubletimeHours       Float    @default(0)
+
+  approvedByWorkerAt    DateTime?
+  approvedByFacilityAt  DateTime?
+
+  workerNotes           String?
+  facilityNotes         String?
+
+  status                String   @default("PENDING")
+
+  exportedAt            DateTime?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  shift                 Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  professional          ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  facility              Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, professionalId])
+  @@index([facilityId, status])
+  @@index([professionalId])
+}
+
+model FacilityExternalWorker {
+  id                    String   @id @default(cuid())
+
+  facilityId            String
+  professionalId        String
+
+  externalSystem        String
+  externalWorkerId      String
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  facility              Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  professional          ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, professionalId, externalSystem])
+  @@index([externalWorkerId])
+}
+
+
+
+

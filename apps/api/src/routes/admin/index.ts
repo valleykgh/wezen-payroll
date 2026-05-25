@@ -12,6 +12,7 @@ import utilsRoutes from "./utils";
 import adminUsersRoutes from "./adminUsers";
 import exceptionsRoutes from "./exceptions";
 import systemRoutes from "./system";
+import payrollImportsRoutes from "./payrollImports";
 
 const router = express.Router();
 
@@ -27,5 +28,6 @@ router.use("/", utilsRoutes);
 router.use("/", adminUsersRoutes);
 router.use("/", exceptionsRoutes);
 router.use("/", systemRoutes);
+router.use("/", payrollImportsRoutes);
 
 export default router;

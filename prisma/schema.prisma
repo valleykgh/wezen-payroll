@@ -100,6 +100,7 @@ model Employee {
   zip                String?
   ssnLast4           String?
   payrollAdjustments PayrollAdjustment[]
+  externalMappings EmployeeExternalMapping[]
   payrollCorrections PayrollCorrection[]
   earlyPayrollPayments EarlyPayrollPayment[]
   payrollLedgerEntries EmployeePayrollLedger[]
@@ -245,6 +246,7 @@ model Facility {
   billingContracts FacilityBillingContract[]
   billingRuns      BillingRun[]
   payrollAdjustments PayrollAdjustment[]
+  externalMappings EmployeeExternalMapping[]
 }
 
 model FacilityRate {
@@ -586,6 +588,32 @@ model PayrollImportBatch {
   @@index([sourceSystem])
   @@index([externalEmployeeId])
   @@index([status])
+}
+
+
+
+model EmployeeExternalMapping {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  staffingProfessionalId String?
+
+  externalSystem String
+  externalEmployeeId String
+
+  facilityId String?
+  facility Facility? @relation(fields: [facilityId], references: [id])
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([externalSystem, externalEmployeeId])
+  @@index([employeeId])
+  @@index([staffingProfessionalId])
 }
 
 model ImportedPunch {

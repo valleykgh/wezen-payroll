@@ -22,10 +22,13 @@ console.log("BUILD_ID:", process.env.BUILD_ID || "no-build-id");
  * because that overrides your restricted origin list.
  */
 const allowedOrigins = new Set([
+    "https://wezenstaffing.com",
+    "https://www.wezenstaffing.com",
     "https://payroll.wezenstaffing.com",
     "https://api.payroll.wezenstaffing.com",
     "https://dcvnabxhc4tbc.cloudfront.net",
     "http://localhost:3000",
+    "http://localhost:3005",
     "http://localhost:4001",
 ]);
 app.use((req, res, next) => {
@@ -35,7 +38,7 @@ app.use((req, res, next) => {
         res.header("Access-Control-Allow-Credentials", "true");
     }
     res.header("Vary", "Origin");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With, x-admin-pin");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With, X-Admin-Pin");
     res.header("Access-Control-Expose-Headers", "Content-Type, Authorization");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     if (req.method === "OPTIONS") {
