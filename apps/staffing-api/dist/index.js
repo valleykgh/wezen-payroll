@@ -1273,10 +1273,9 @@ app.post('/api/auth/register-professional', async (req, res) => {
             return res.status(409).json({ error: 'Email already in use' });
         }
         const passwordHash = await hashPassword(parsed.data.password);
-        const workerCode = await generateWorkerCode();
         const user = await prisma.user.create({
             data: {
-                workerCode,
+                workerCode: null,
                 email: parsed.data.email,
                 passwordHash,
                 role: UserRole.PROFESSIONAL,

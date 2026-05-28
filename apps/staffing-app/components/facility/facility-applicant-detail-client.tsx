@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+import { getAuthToken } from '@/lib/auth-client';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { FileViewer } from '@capacitor/file-viewer';
 
 type ApplicantDetail = {
   id: string;
@@ -50,6 +55,7 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
   const [busy, setBusy] = useState(false);
   const [dnrReason, setDnrReason] = useState('');
   const [facilityNotes, setFacilityNotes] = useState('');
+  const [documentAction, setDocumentAction] = useState('');
 
   async function loadDetail() {
     setLoading(true);
@@ -231,6 +237,118 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
     } finally {
       setBusy(false);
     }
+  }
+
+  async function blobToBase64(blob: Blob) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onerror = () => reject(new Error('Failed to read document file.'));
+      reader.onloadend = () => {
+        const result = String(reader.result || '');
+        resolve(result.includes(',') ? result.split(',')[1] : result);
+      };
+
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function safeFileName(name: string) {
+    return (name || 'document')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 120);
+  }
+
+  async function fetchAndSaveAuthenticatedFile(url: string, filename: string, directory = Directory.Cache) {
+    const token = getAuthToken();
+
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Unable to open/download document.');
+    }
+
+    const blob = await res.blob();
+    const base64 = await blobToBase64(blob);
+    const cleanName = safeFileName(filename);
+
+    return Filesystem.writeFile({
+      path: cleanName,
+      data: base64,
+      directory,
+      recursive: true,
+    });
+  }
+
+  async function viewAuthenticatedFile(url: string, filename: string) {
+    const actionKey = `view-${filename}`;
+
+    try {
+      setDocumentAction(actionKey);
+      setMessage('Opening document...');
+      const saved = await fetchAndSaveAuthenticatedFile(url, filename, Directory.Cache);
+
+      await FileViewer.openDocumentFromLocalPath({
+        path: saved.uri,
+      });
+
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to view document');
+    } finally {
+      setDocumentAction('');
+    }
+  }
+
+  async function shareAuthenticatedFile(url: string, filename: string, isZip = false) {
+    const cleanName = safeFileName(filename);
+    const actionKey = isZip ? 'download-all' : `download-${filename}`;
+
+    try {
+      setDocumentAction(actionKey);
+      setMessage(isZip ? 'Preparing ZIP file...' : 'Preparing document...');
+
+      const saved = await fetchAndSaveAuthenticatedFile(
+        url,
+        cleanName,
+        isZip ? Directory.Documents : Directory.Cache
+      );
+
+      setMessage(isZip ? 'Opening ZIP save/share options...' : 'Opening save/share options...');
+
+      await Share.share({
+        title: cleanName,
+        text: isZip ? 'Open or save this ZIP file.' : 'Open or save this document.',
+        url: saved.uri,
+        dialogTitle: isZip ? 'Save or share document ZIP' : 'Open or save document',
+      });
+
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to download document');
+    } finally {
+      setDocumentAction('');
+    }
+  }
+
+  async function downloadAllDocuments() {
+    if (!detail?.professional.id) {
+      setMessage('Worker profile not found.');
+      return;
+    }
+
+    await shareAuthenticatedFile(
+      `${STAFFING_API_BASE_URL}/api/facility/workers/${detail.professional.id}/documents/download-all`,
+      `worker-documents-${detail.professional.id}.zip`,
+      true
+    );
   }
   useEffect(() => {
     if (!message) return;
@@ -454,7 +572,20 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
       </div>
 
       <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <h3 className="text-lg font-bold text-slate-950">Documents</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-bold text-slate-950">Documents</h3>
+
+          {detail.professional.documents.length > 0 ? (
+            <button
+              type="button"
+              onClick={downloadAllDocuments}
+              disabled={documentAction === 'download-all'}
+              className="rounded-full bg-cyan-700 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+            >
+              {documentAction === 'download-all' ? 'Preparing ZIP...' : 'Download All'}
+            </button>
+          ) : null}
+        </div>
 
         <div className="mt-4 grid gap-3">
           {detail.professional.documents.length === 0 ? (
@@ -477,14 +608,35 @@ export function FacilityApplicantDetailClient({ requestId }: { requestId: string
                 </div>
 
                 {doc.fileUrl ? (
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-white px-3 py-2 text-xs font-bold text-cyan-700 ring-1 ring-cyan-200"
-                  >
-                    View
-                  </a>
+                  <div className="grid gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        viewAuthenticatedFile(
+                          `${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`,
+                          doc.name || 'document'
+                        )
+                      }
+                      disabled={documentAction === `view-${doc.name || 'document'}`}
+                      className="rounded-full bg-white px-3 py-2 text-center text-xs font-bold text-cyan-700 ring-1 ring-cyan-200 disabled:opacity-60"
+                    >
+                      {documentAction === `view-${doc.name || 'document'}` ? 'Opening...' : 'View Document'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        shareAuthenticatedFile(
+                          `${STAFFING_API_BASE_URL}/api/documents/${doc.id}/download`,
+                          doc.name || 'document'
+                        )
+                      }
+                      disabled={documentAction === `download-${doc.name || 'document'}`}
+                      className="rounded-full bg-cyan-700 px-3 py-2 text-center text-xs font-bold text-white disabled:opacity-60"
+                    >
+                      {documentAction === `download-${doc.name || 'document'}` ? 'Preparing...' : 'Download'}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             </div>
