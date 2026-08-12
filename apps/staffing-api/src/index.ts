@@ -1807,16 +1807,49 @@ const registerFacilitySchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   inviteCode: z.string().min(1),
+  turnstileToken: z.string().trim().min(1).max(4096),
 });
 
 
-app.post('/api/auth/register-facility', async (req, res) => {
+const facilityRegistrationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many facility registration attempts. Please try again later.',
+  },
+});
+
+app.post(
+  '/api/auth/register-facility',
+  facilityRegistrationRateLimiter,
+  async (req, res) => {
   const parsed = registerFacilitySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
   try {
+    const turnstileResult = await verifyTurnstile(
+      parsed.data.turnstileToken,
+      req.ip,
+      'register_facility'
+    );
+
+    if (!turnstileResult.success) {
+      console.warn('FACILITY SIGNUP BLOCKED turnstile', {
+        ip: req.ip,
+        email: parsed.data.email,
+        hostname: turnstileResult.hostname,
+        errors: turnstileResult['error-codes'],
+      });
+
+      return res.status(403).json({
+        error: 'Verification failed. Please try again.',
+      });
+    }
+
     const invite = await prisma.facilityInvite.findUnique({
       where: {
         inviteCode: parsed.data.inviteCode,
@@ -1928,6 +1961,38 @@ app.post('/api/auth/register-facility', async (req, res) => {
     console.error('POST /api/auth/register-facility error:', error);
     res.status(500).json({ error: 'Failed to register facility' });
   }
+  }
+);
+
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    error: 'Too many login attempts. Please wait and try again.',
+  },
+});
+
+const forgotPasswordRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many password reset requests. Please try again later.',
+  },
+});
+
+const resetPasswordRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many password reset attempts. Please try again later.',
+  },
 });
 
 const loginSchema = z.object({
@@ -2007,7 +2072,10 @@ async function sendPasswordSetupEmail(params: {
   });
 }
 
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post(
+  '/api/auth/forgot-password',
+  forgotPasswordRateLimiter,
+  async (req, res) => {
   const parsed = passwordResetRequestSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -2080,9 +2148,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     console.error('POST /api/auth/forgot-password error:', error);
     return res.status(500).json({ error: 'Failed to request password reset' });
   }
-});
+  }
+);
 
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post(
+  '/api/auth/reset-password',
+  resetPasswordRateLimiter,
+  async (req, res) => {
   const parsed = passwordResetConfirmSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -2123,9 +2195,13 @@ app.post('/api/auth/reset-password', async (req, res) => {
     console.error('POST /api/auth/reset-password error:', error);
     return res.status(500).json({ error: 'Failed to reset password' });
   }
-});
+  }
+);
 
-app.post('/api/auth/login', async (req, res) => {
+app.post(
+  '/api/auth/login',
+  loginRateLimiter,
+  async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -2170,7 +2246,8 @@ app.post('/api/auth/login', async (req, res) => {
     console.error('POST /api/auth/login error:', error);
     res.status(500).json({ error: 'Failed to login' });
   }
-});
+  }
+);
 
 app.post('/api/auth/logout', async (_req, res) => {
   clearAuthCookie(res);

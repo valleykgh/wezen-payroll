@@ -114,6 +114,7 @@ export async function registerFacilityRequest(payload: {
   firstName: string;
   lastName: string;
   inviteCode: string;
+  turnstileToken: string;
 }) {
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/register-facility`, {
     method: 'POST',

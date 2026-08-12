@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { registerFacilityRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
+import { TurnstileWidget } from '@/components/shared/turnstile-widget';
 
 export function FacilitySignupForm() {
   const router = useRouter();
@@ -17,6 +18,8 @@ export function FacilitySignupForm() {
   });
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -28,18 +31,25 @@ export function FacilitySignupForm() {
     setMessage('');
 
     try {
+      if (!turnstileToken) {
+        throw new Error('Please complete the security verification.');
+      }
+
       await registerFacilityRequest({
         email: form.email,
         password: form.password,
         firstName: form.firstName,
         lastName: form.lastName,
         inviteCode: form.inviteCode,
+        turnstileToken,
       });
 
       router.push('/facility/dashboard');
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signup failed');
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
     } finally {
       setSubmitting(false);
     }
@@ -117,9 +127,17 @@ export function FacilitySignupForm() {
       </div>
 
       <div className="mt-6">
+        <div className="mb-6 flex justify-center">
+          <TurnstileWidget
+            action="register_facility"
+            onVerify={setTurnstileToken}
+            resetKey={turnstileResetKey}
+          />
+        </div>
+
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !turnstileToken}
           className="w-full rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? 'Activating account...' : 'Activate Facility Account'}
