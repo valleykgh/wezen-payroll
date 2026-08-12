@@ -94,6 +94,7 @@ export async function registerProfessionalRequest(payload: {
   city?: string;
   state?: string;
   zipCode?: string;
+  turnstileToken: string;
 }) {
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/register-professional`, {
     method: 'POST',

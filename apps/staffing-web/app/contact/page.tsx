@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Navbar } from '@/components/shared/navbar';
 import { Footer } from '@/components/shared/footer';
 import { STAFFING_API_BASE_URL } from '@/lib/api-base';
+import { TurnstileWidget } from '@/components/shared/turnstile-widget';
 
 export default function ContactPage() {
   const [name, setName] = useState('');
@@ -14,6 +15,10 @@ export default function ContactPage() {
   const [body, setBody] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [website, setWebsite] = useState('');
+  const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   async function submitContact(e: React.FormEvent) {
     e.preventDefault();
@@ -21,10 +26,22 @@ export default function ContactPage() {
     setMessage('');
 
     try {
+      if (!turnstileToken) {
+        throw new Error('Please complete the security verification.');
+      }
+
       const res = await fetch(`${STAFFING_API_BASE_URL}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role, message: body }),
+        body: JSON.stringify({
+          name,
+          email,
+          role,
+          message: body,
+          website,
+          formStartedAt,
+          turnstileToken,
+        }),
       });
 
       const text = await res.text();
@@ -34,9 +51,14 @@ export default function ContactPage() {
       setEmail('');
       setRole('');
       setBody('');
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
+      setFormStartedAt(Date.now());
       setMessage('Message sent successfully. Wezen Staffing will contact you soon.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to send message');
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
     } finally {
       setBusy(false);
     }
@@ -97,6 +119,22 @@ export default function ContactPage() {
             ) : null}
 
             <form onSubmit={submitContact} className="mt-6 grid gap-4">
+              <div
+                aria-hidden="true"
+                className="absolute -left-[10000px] h-px w-px overflow-hidden"
+              >
+                <label htmlFor="website">Website</label>
+                <input
+                  id="website"
+                  name="website"
+                  type="text"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
+
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -134,9 +172,17 @@ export default function ContactPage() {
                 className="rounded-2xl border border-slate-300 px-4 py-3 text-sm"
               />
 
+              <div className="flex justify-center py-2">
+                <TurnstileWidget
+                  action="contact"
+                  onVerify={setTurnstileToken}
+                  resetKey={turnstileResetKey}
+                />
+              </div>
+
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || !turnstileToken}
                 className="rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
               >
                 {busy ? 'Sending...' : 'Send Email'}

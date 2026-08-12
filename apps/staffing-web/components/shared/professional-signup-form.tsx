@@ -6,6 +6,7 @@ import { registerProfessionalRequest } from '@/lib/auth-client';
 import { FormField } from '@/components/ui/form-field';
 import { TextInput } from '@/components/ui/text-input';
 import { SelectInput } from '@/components/ui/select-input';
+import { TurnstileWidget } from '@/components/shared/turnstile-widget';
 
 export function ProfessionalSignupForm() {
   const router = useRouter();
@@ -26,6 +27,8 @@ export function ProfessionalSignupForm() {
   });
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -37,6 +40,10 @@ export function ProfessionalSignupForm() {
     setMessage('');
 
     try {
+      if (!turnstileToken) {
+        throw new Error('Please complete the security verification.');
+      }
+
       await registerProfessionalRequest({
         email: form.email,
         password: form.password,
@@ -51,12 +58,15 @@ export function ProfessionalSignupForm() {
         city: form.city || undefined,
         state: form.state || undefined,
         zipCode: form.zipCode || undefined,
+        turnstileToken,
       });
 
       router.push('/worker/documents');
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Signup failed');
+      setTurnstileToken('');
+      setTurnstileResetKey((value) => value + 1);
     } finally {
       setSubmitting(false);
     }
@@ -204,9 +214,17 @@ export function ProfessionalSignupForm() {
         </FormField>
       </div>
 
+      <div className="mt-6 flex justify-center">
+        <TurnstileWidget
+          action="register_professional"
+          onVerify={setTurnstileToken}
+          resetKey={turnstileResetKey}
+        />
+      </div>
+
       <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !turnstileToken}
           className="w-full rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
 	>
           {submitting ? 'Creating account...' : 'Create Professional Account'}

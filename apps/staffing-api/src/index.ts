@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { z } from 'zod';
@@ -1356,6 +1357,8 @@ app.use(
   })
 );
 
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(cookieParser());
 app.use('/uploads', express.static(uploadsDir));
@@ -1366,33 +1369,175 @@ app.get('/health', async (_req, res) => {
 });
 
 const contactMessageSchema = z.object({
-  name: z.string().trim().min(1),
-  email: z.string().trim().email(),
-  role: z.string().trim().optional(),
-  message: z.string().trim().min(5),
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(254),
+  role: z.enum(['Professional', 'Facility', 'General']).optional().or(z.literal('')),
+  message: z.string().trim().min(10).max(5000),
+
+  // Anti-bot fields.
+  website: z.string().max(0).optional().default(''),
+  formStartedAt: z.number().int().positive(),
+  turnstileToken: z.string().trim().min(1).max(4096),
 });
 
-app.post('/api/contact', async (req, res) => {
+const contactRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many contact requests. Please try again later.',
+  },
+});
+
+type TurnstileVerificationResponse = {
+  success: boolean;
+  hostname?: string;
+  action?: string;
+  challenge_ts?: string;
+  'error-codes'?: string[];
+};
+
+async function verifyTurnstile(
+  token: string,
+  remoteIp: string | undefined,
+  expectedAction: string
+) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+
+  if (!secret) {
+    throw new Error('TURNSTILE_SECRET_KEY is not configured');
+  }
+
+  const body = new URLSearchParams();
+  body.set('secret', secret);
+  body.set('response', token);
+
+  if (remoteIp) {
+    body.set('remoteip', remoteIp);
+  }
+
+  const response = await fetch(
+    'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Turnstile Siteverify returned HTTP ${response.status}`
+    );
+  }
+
+  const result =
+    (await response.json()) as TurnstileVerificationResponse;
+
+  if (!result.success) {
+    return result;
+  }
+
+  if (result.action && result.action !== expectedAction) {
+    console.warn('TURNSTILE BLOCKED action mismatch', {
+      expectedAction,
+      receivedAction: result.action,
+      hostname: result.hostname,
+    });
+
+    return {
+      ...result,
+      success: false,
+    };
+  }
+
+  return result;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+app.post('/api/contact', contactRateLimiter, async (req, res) => {
   const parsed = contactMessageSchema.safeParse(req.body);
 
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+    console.warn('CONTACT BLOCKED invalid payload', {
+      ip: req.ip,
+    });
+    return res.status(400).json({ error: 'Invalid contact form submission.' });
+  }
+
+  // Honeypot. Humans never fill this field.
+  if (parsed.data.website) {
+    console.warn('CONTACT BLOCKED honeypot', {
+      ip: req.ip,
+    });
+
+    // Return success so bots do not learn why they were blocked.
+    return res.json({ ok: true });
+  }
+
+  // Humans should not realistically complete the form in under 3 seconds.
+  const elapsedMs = Date.now() - parsed.data.formStartedAt;
+
+  if (elapsedMs < 3000 || elapsedMs > 24 * 60 * 60 * 1000) {
+    console.warn('CONTACT BLOCKED timing', {
+      ip: req.ip,
+      elapsedMs,
+    });
+
+    return res.json({ ok: true });
   }
 
   try {
-    const supportEmail = process.env.SUPPORT_EMAIL || 'support@wezenstaffing.com';
+    const turnstileResult = await verifyTurnstile(
+      parsed.data.turnstileToken,
+      req.ip,
+      'contact'
+    );
+
+    if (!turnstileResult.success) {
+      console.warn('CONTACT BLOCKED turnstile', {
+        ip: req.ip,
+        hostname: turnstileResult.hostname,
+        errors: turnstileResult['error-codes'],
+      });
+
+      return res.status(403).json({
+        error: 'Verification failed. Please try again.',
+      });
+    }
+
+    const supportEmail =
+      process.env.SUPPORT_EMAIL || 'support@wezenstaffing.com';
+
     const roleLabel = parsed.data.role || 'Not specified';
+
+    const safeName = escapeHtml(parsed.data.name);
+    const safeEmail = escapeHtml(parsed.data.email);
+    const safeRole = escapeHtml(roleLabel);
+    const safeMessage = escapeHtml(parsed.data.message)
+      .replace(/\n/g, '<br />');
 
     await sendEmail({
       to: supportEmail,
       subject: `Website contact message from ${parsed.data.name}`,
       html: `
         <h2>New Wezen Staffing contact message</h2>
-        <p><strong>Name:</strong> ${parsed.data.name}</p>
-        <p><strong>Email:</strong> ${parsed.data.email}</p>
-        <p><strong>Role:</strong> ${roleLabel}</p>
+        <p><strong>Name:</strong> ${safeName}</p>
+        <p><strong>Email:</strong> ${safeEmail}</p>
+        <p><strong>Role:</strong> ${safeRole}</p>
         <p><strong>Message:</strong></p>
-        <p>${parsed.data.message.replace(/\n/g, '<br />')}</p>
+        <p>${safeMessage}</p>
       `,
       text: [
         'New Wezen Staffing contact message',
@@ -1404,10 +1549,15 @@ app.post('/api/contact', async (req, res) => {
       ].join('\n'),
     });
 
-    res.json({ ok: true });
+    console.log('CONTACT SENT', {
+      ip: req.ip,
+      email: parsed.data.email,
+    });
+
+    return res.json({ ok: true });
   } catch (error) {
     console.error('POST /api/contact error:', error);
-    res.status(500).json({ error: 'Failed to send contact message' });
+    return res.status(500).json({ error: 'Failed to send contact message' });
   }
 });
 
@@ -1426,6 +1576,7 @@ const registerProfessionalSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+  turnstileToken: z.string().trim().min(1).max(4096),
 });
 
 const createFacilitySchema = z.object({
@@ -1524,13 +1675,45 @@ const updateWorkerPayRatesSchema = z.object({
   doublePayRateCents: z.number().int().nonnegative().nullable().optional(),
 });
 
-app.post('/api/auth/register-professional', async (req, res) => {
+const professionalRegistrationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many registration attempts. Please try again later.',
+  },
+});
+
+app.post(
+  '/api/auth/register-professional',
+  professionalRegistrationRateLimiter,
+  async (req, res) => {
   const parsed = registerProfessionalSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
   try {
+    const turnstileResult = await verifyTurnstile(
+      parsed.data.turnstileToken,
+      req.ip,
+      'register_professional'
+    );
+
+    if (!turnstileResult.success) {
+      console.warn('PROFESSIONAL SIGNUP BLOCKED turnstile', {
+        ip: req.ip,
+        email: parsed.data.email,
+        hostname: turnstileResult.hostname,
+        errors: turnstileResult['error-codes'],
+      });
+
+      return res.status(403).json({
+        error: 'Verification failed. Please try again.',
+      });
+    }
+
     const existing = await prisma.user.findUnique({
       where: { email: parsed.data.email },
     });
@@ -1615,7 +1798,8 @@ app.post('/api/auth/register-professional', async (req, res) => {
     console.error('POST /api/auth/register-professional error:', error);
     res.status(500).json({ error: 'Failed to register professional' });
   }
-});
+  }
+);
 
 const registerFacilitySchema = z.object({
   email: z.email(),
