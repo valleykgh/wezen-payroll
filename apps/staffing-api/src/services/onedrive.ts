@@ -213,3 +213,47 @@ export async function downloadOneDriveFileBuffer(itemId: string) {
 
   return Buffer.from(response.data);
 }
+
+export async function uploadBufferToCandidatePackageFolder(params: {
+  firstName?: string | null;
+  lastName?: string | null;
+  professionalId: string;
+  fileName: string;
+  buffer: Buffer;
+  mimeType?: string;
+}) {
+  const accessToken = await getMicrosoftGraphAccessToken();
+  const rootPrefix = await getDriveRootPathPrefix();
+
+  const displayName =
+    `${params.firstName || ''} ${params.lastName || ''}`.trim() ||
+    params.professionalId;
+
+  const candidateFolder = sanitizeFolderSegment(displayName);
+
+  const folderPath = await ensureFolderByPath(
+    `Candidate Documents - New/${candidateFolder}/Facility Packages`
+  );
+
+  const safeFileName = sanitizeFileName(params.fileName);
+
+  const uploadUrl =
+    `${GRAPH_BASE_URL}${rootPrefix}:/${encodeURIComponent(folderPath)}/${encodeURIComponent(safeFileName)}:/content`
+      .replace(/%2F/g, '/');
+
+  const response = await axios.put(uploadUrl, params.buffer, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': params.mimeType || 'application/zip',
+    },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+
+  return {
+    itemId: response.data.id as string,
+    webUrl: response.data.webUrl as string,
+    folderPath,
+    name: response.data.name as string,
+  };
+}

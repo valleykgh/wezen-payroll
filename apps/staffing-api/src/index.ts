@@ -29,12 +29,12 @@ import {
 } from './auth.js';
 
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
-import { sendEmail } from './services/email.js';
+import { sendEmail, sendEmailWithAttachment } from './services/email.js';
 import { createHash, randomBytes } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren,downloadOneDriveFileBuffer } from './services/onedrive.js';
-import { uploadFileToCandidateFolder } from './services/onedrive.js';
+import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder } from './services/onedrive.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4001);
@@ -8512,6 +8512,7 @@ app.get('/api/admin/facilities', requireRole('INTERNAL_ADMIN'), async (_req: Aut
         state: true,
         zipCode: true,
         isActive: true,
+        contactEmail: true,
       },
     });
 
@@ -10775,6 +10776,321 @@ await archive.finalize();
     return res.status(500).json({ error: 'Failed to download all documents' });
   }
 });
+
+
+const sendWorkerDocumentPackageSchema = z.object({
+  recipientEmail: z.string().trim().email(),
+  facilityId: z.string().trim().optional().nullable(),
+  facilityName: z.string().trim().max(200).optional().nullable(),
+  documentIds: z.array(z.string().min(1)).min(1),
+});
+
+async function createZipBuffer(
+  documents: Array<any>
+): Promise<Buffer> {
+  const { PassThrough } = await import('stream');
+
+  return await new Promise<Buffer>((resolve, reject) => {
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const output = new PassThrough();
+    const chunks: Buffer[] = [];
+
+    output.on('data', (chunk) =>
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    );
+
+    output.on('end', () => resolve(Buffer.concat(chunks)));
+    output.on('error', reject);
+    archive.on('error', reject);
+
+    archive.pipe(output);
+
+    (async () => {
+      try {
+        for (const doc of documents) {
+          if (doc.storageProvider === 'ONEDRIVE' && doc.oneDriveItemId) {
+            const fileBuffer =
+              await downloadOneDriveFileBuffer(doc.oneDriveItemId);
+
+            archive.append(fileBuffer, {
+              name: safeDownloadName(doc),
+            });
+
+            continue;
+          }
+
+          const filePath = getUploadsFilePathFromUrl(doc.fileUrl);
+
+          if (fs.existsSync(filePath)) {
+            archive.file(filePath, {
+              name: safeDownloadName(doc),
+            });
+          }
+        }
+
+        await archive.finalize();
+      } catch (error) {
+        reject(error);
+      }
+    })();
+  });
+}
+
+app.post(
+  '/api/admin/workers/:professionalId/documents/send-package',
+  requireRole('INTERNAL_ADMIN'),
+  async (req: AuthedRequest, res) => {
+    const parsed = sendWorkerDocumentPackageSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.flatten(),
+      });
+    }
+
+    try {
+      const professionalId =
+        String(req.params.professionalId || '');
+
+      const worker =
+        await prisma.professionalProfile.findUnique({
+          where: { id: professionalId },
+          include: {
+            user: true,
+            documents: {
+              orderBy: [{ createdAt: 'desc' }],
+            },
+          },
+        });
+
+      if (!worker) {
+        return res.status(404).json({
+          error: 'Worker not found',
+        });
+      }
+
+      const currentDocuments =
+        getCurrentDocumentsByCategory(worker.documents)
+          .filter(
+            (doc) =>
+              doc.status !== 'EXPIRED' &&
+              !isDocumentExpired(doc) &&
+              !doc.name.includes('-old')
+          );
+
+      const allowedIds =
+        new Set(currentDocuments.map((doc) => doc.id));
+
+      const requestedIds =
+        new Set(parsed.data.documentIds);
+
+      const selectedDocuments =
+        currentDocuments.filter((doc) =>
+          requestedIds.has(doc.id)
+        );
+
+      if (
+        selectedDocuments.length !== requestedIds.size ||
+        selectedDocuments.some((doc) => !allowedIds.has(doc.id))
+      ) {
+        return res.status(400).json({
+          error:
+            'One or more selected documents are not current documents for this worker.',
+        });
+      }
+
+      let facilityName =
+        parsed.data.facilityName?.trim() || null;
+
+      if (parsed.data.facilityId) {
+        const facility =
+          await prisma.facility.findUnique({
+            where: {
+              id: parsed.data.facilityId,
+            },
+            select: {
+              id: true,
+              name: true,
+            },
+          });
+
+        if (!facility) {
+          return res.status(400).json({
+            error: 'Selected facility was not found.',
+          });
+        }
+
+        facilityName =
+          facilityName || facility.name;
+      }
+
+      const fullName =
+        [worker.user.firstName, worker.user.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() ||
+        worker.user.email;
+
+      const safeWorkerFileName =
+        fullName
+          .replace(/[^a-zA-Z0-9_-]+/g, '_')
+          .replace(/^_+|_+$/g, '') ||
+        'Worker';
+
+      const dateLabel =
+        new Date().toISOString().slice(0, 10);
+
+      const zipName =
+        `${safeWorkerFileName}_Documents_${dateLabel}.zip`;
+
+      const zipBuffer =
+        await createZipBuffer(selectedDocuments);
+
+      if (!zipBuffer.length) {
+        return res.status(400).json({
+          error:
+            'The selected documents could not be added to the package.',
+        });
+      }
+
+      const uploaded =
+        await uploadBufferToCandidatePackageFolder({
+          firstName: worker.user.firstName,
+          lastName: worker.user.lastName,
+          professionalId: worker.id,
+          fileName: zipName,
+          buffer: zipBuffer,
+          mimeType: 'application/zip',
+        });
+
+      const destinationLabel =
+        facilityName ||
+        parsed.data.recipientEmail;
+
+      const subject =
+        `${fullName} - Wezen Staffing Documents`;
+
+      const html = `
+        <p>Hello,</p>
+
+        <p>Wezen Staffing is providing the current document package for
+        <strong>${escapeHtml(fullName)}</strong>.</p>
+
+        ${
+          facilityName
+            ? `<p><strong>Facility:</strong> ${escapeHtml(facilityName)}</p>`
+            : ''
+        }
+
+        <p>The documents are included in the attached ZIP package.</p>
+
+        <p>If you need any additional documents or information, please contact Wezen Staffing.</p>
+
+        <p>Thank you,<br />Wezen Staffing</p>
+      `;
+
+      const text = [
+        'Hello,',
+        '',
+        `Wezen Staffing is providing the current document package for ${fullName}.`,
+        facilityName
+          ? `Facility: ${facilityName}`
+          : '',
+        '',
+        'The documents are included in the attached ZIP package.',
+        '',
+        'If you need any additional documents or information, please contact Wezen Staffing.',
+        '',
+        'Thank you,',
+        'Wezen Staffing',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      // Conservative attachment limit.
+      // If we later regularly exceed this, we can add a secure
+      // OneDrive sharing-link delivery mode.
+      // SES v1 SendRawEmail has a 10 MB total message limit AFTER
+      // MIME/base64 encoding. Keep the raw ZIP conservatively below that.
+      const MAX_ATTACHMENT_BYTES =
+        6 * 1024 * 1024;
+
+      if (zipBuffer.length > MAX_ATTACHMENT_BYTES) {
+        return res.status(413).json({
+          error:
+            'This document package is too large to email directly. The ZIP was archived to OneDrive. Please reduce the selected documents or use Download All.',
+          oneDriveWebUrl: uploaded.webUrl,
+        });
+      }
+
+      await sendEmailWithAttachment({
+        to: parsed.data.recipientEmail,
+        subject,
+        html,
+        text,
+        attachment: {
+          fileName: zipName,
+          contentType: 'application/zip',
+          buffer: zipBuffer,
+        },
+      });
+
+      await createAdminAuditLog({
+        actorUserId: req.authUser?.userId,
+        action: 'WORKER_DOCUMENT_PACKAGE_SENT',
+        entityType: 'ProfessionalProfile',
+        entityId: worker.id,
+        summary:
+          `Document package for ${fullName} sent to ${destinationLabel}`,
+        detailsJson: {
+          recipientEmail:
+            parsed.data.recipientEmail,
+          facilityId:
+            parsed.data.facilityId || null,
+          facilityName,
+          documentIds:
+            selectedDocuments.map((doc) => doc.id),
+          documents:
+            selectedDocuments.map((doc) => ({
+              id: doc.id,
+              name: doc.name,
+              category: doc.category,
+            })),
+          zipName,
+          zipSizeBytes: zipBuffer.length,
+          oneDriveItemId: uploaded.itemId,
+          oneDriveWebUrl: uploaded.webUrl,
+          oneDriveFolder: uploaded.folderPath,
+        },
+      });
+
+      return res.json({
+        data: {
+          ok: true,
+          recipientEmail:
+            parsed.data.recipientEmail,
+          facilityName,
+          documentCount:
+            selectedDocuments.length,
+          zipName,
+          zipSizeBytes: zipBuffer.length,
+          oneDriveWebUrl:
+            uploaded.webUrl,
+        },
+      });
+    } catch (error) {
+      console.error(
+        'POST /api/admin/workers/:professionalId/documents/send-package error:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Failed to send worker document package',
+      });
+    }
+  }
+);
 
 app.get('/api/admin/workers/:professionalId/documents/download-all', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {

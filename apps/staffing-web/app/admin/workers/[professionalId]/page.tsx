@@ -16,6 +16,15 @@ function formatDateOnly(value?: string | null) {
   return `${Number(month)}/${Number(day)}/${year}`;
 }
 
+type FacilityOption = {
+  id: string;
+  name: string;
+  city?: string | null;
+  state?: string | null;
+  contactEmail?: string | null;
+  isActive?: boolean;
+};
+
 type WorkerDetail = {
   id: string;
   workerCode?: string | null;
@@ -95,10 +104,19 @@ const [messageSubject, setMessageSubject] = useState('');
 const [messageBody, setMessageBody] = useState('');
 const [uploadMessage, setUploadMessage] = useState('');
 
+const [facilities, setFacilities] = useState<FacilityOption[]>([]);
+const [showSendPackage, setShowSendPackage] = useState(false);
+const [packageFacilityId, setPackageFacilityId] = useState('');
+const [packageFacilityName, setPackageFacilityName] = useState('');
+const [packageRecipientEmail, setPackageRecipientEmail] = useState('');
+const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+const [packageMessage, setPackageMessage] = useState('');
+
 
   async function load(id: string) {
     const res = await apiFetch<{ data: WorkerDetail }>(`/api/admin/workers/${id}`);
     setWorker(res.data);
+    setSelectedDocumentIds(res.data.documents.map((doc) => doc.id));
     setRegularPayRateDollars(
   res.data.regularPayRateCents != null
     ? (res.data.regularPayRateCents / 100).toFixed(2)
@@ -118,6 +136,20 @@ setDoublePayRateDollars(
 );
   }
 
+  async function loadFacilities() {
+    try {
+      const result = await apiFetch<{ data: FacilityOption[] }>(
+        '/api/admin/facilities'
+      );
+
+      setFacilities(
+        (result.data || []).filter((facility) => facility.isActive !== false)
+      );
+    } catch (error) {
+      console.error('Failed to load facilities for document package:', error);
+    }
+  }
+
   const isDefaultAdmin = currentUser?.email?.toLowerCase() === 'admin@wezenstaffing.com';
 
   useEffect(() => {
@@ -126,7 +158,10 @@ setDoublePayRateDollars(
       try {
         const resolved = await params;
         setProfessionalId(resolved.professionalId);
-        await load(resolved.professionalId);
+        await Promise.all([
+          load(resolved.professionalId),
+          loadFacilities(),
+        ]);
         setMessage('');
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Failed to load worker detail');
@@ -388,6 +423,111 @@ async function downloadAllDocuments() {
     setBusy(false);
   }
 }
+  function togglePackageDocument(documentId: string) {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId]
+    );
+  }
+
+  function selectPackageFacility(facilityId: string) {
+    setPackageFacilityId(facilityId);
+
+    if (!facilityId) {
+      return;
+    }
+
+    const facility = facilities.find((item) => item.id === facilityId);
+
+    if (!facility) {
+      return;
+    }
+
+    setPackageFacilityName(facility.name);
+
+    if (facility.contactEmail) {
+      setPackageRecipientEmail(facility.contactEmail);
+    }
+  }
+
+  function openSendPackage() {
+    if (!worker) return;
+
+    setSelectedDocumentIds(worker.documents.map((doc) => doc.id));
+    setPackageFacilityId('');
+    setPackageFacilityName('');
+    setPackageRecipientEmail('');
+    setPackageMessage('');
+    setShowSendPackage(true);
+  }
+
+  async function sendDocumentPackage() {
+    if (!worker) return;
+
+    const recipientEmail = packageRecipientEmail.trim();
+
+    if (!recipientEmail) {
+      setPackageMessage('Recipient email is required.');
+      return;
+    }
+
+    if (selectedDocumentIds.length === 0) {
+      setPackageMessage('Please select at least one document.');
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setPackageMessage('');
+
+      const res = await fetch(
+        `${STAFFING_API_BASE_URL}/api/admin/workers/${worker.id}/documents/send-package`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recipientEmail,
+            facilityId: packageFacilityId || null,
+            facilityName: packageFacilityName.trim() || null,
+            documentIds: selectedDocumentIds,
+          }),
+        }
+      );
+
+      const text = await res.text();
+
+      if (!res.ok) {
+        throw new Error(
+          formatApiErrorText(text, 'Failed to send document package')
+        );
+      }
+
+      const result = text ? JSON.parse(text) : null;
+
+      setPackageMessage(
+        `Document package sent successfully to ${recipientEmail}. ${
+          result?.data?.documentCount
+            ? `${result.data.documentCount} document(s) included.`
+            : ''
+        }`
+      );
+
+      setMessage(`Worker documents sent successfully to ${recipientEmail}.`);
+    } catch (error) {
+      setPackageMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to send document package'
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function resetWorkerPassword() {
     const newPassword = resetPassword.trim();
 
@@ -763,15 +903,194 @@ const icaSignedStepLabel = isIcaSigned
   </label>
 </div>
 
-  <button
-    type="button"
-    onClick={downloadAllDocuments}
-    disabled={busy || worker.documents.length === 0}
-    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-  >
-    Download All Documents
-  </button>
+  <div className="flex flex-wrap gap-3">
+    <button
+      type="button"
+      onClick={downloadAllDocuments}
+      disabled={busy || worker.documents.length === 0}
+      className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Download All Documents
+    </button>
+
+    <button
+      type="button"
+      onClick={openSendPackage}
+      disabled={busy || worker.documents.length === 0}
+      className="inline-flex items-center justify-center rounded-full bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      Send Documents to Facility
+    </button>
+  </div>
 </div>
+
+{showSendPackage ? (
+  <div className="mt-6 rounded-[1.75rem] border border-cyan-200 bg-cyan-50/40 p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h3 className="text-xl font-bold tracking-tight text-slate-950">
+          Send Documents to Facility
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Select a registered facility or enter the facility and recipient email manually.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowSendPackage(false)}
+        className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+      >
+        Close
+      </button>
+    </div>
+
+    {packageMessage ? (
+      <div className="mt-4 rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm font-semibold text-cyan-900">
+        {packageMessage}
+      </div>
+    ) : null}
+
+    <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Registered facility (optional)
+        </label>
+
+        <select
+          value={packageFacilityId}
+          onChange={(e) => selectPackageFacility(e.target.value)}
+          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+        >
+          <option value="">Not registered / enter manually</option>
+
+          {facilities.map((facility) => (
+            <option key={facility.id} value={facility.id}>
+              {facility.name}
+              {facility.city || facility.state
+                ? ` — ${[facility.city, facility.state].filter(Boolean).join(', ')}`
+                : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Facility name
+        </label>
+
+        <input
+          type="text"
+          value={packageFacilityName}
+          onChange={(e) => setPackageFacilityName(e.target.value)}
+          placeholder="Facility name"
+          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+        />
+      </div>
+
+      <div className="md:col-span-2">
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Recipient email *
+        </label>
+
+        <input
+          type="email"
+          value={packageRecipientEmail}
+          onChange={(e) => setPackageRecipientEmail(e.target.value)}
+          placeholder="staffing@facility.com"
+          required
+          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm"
+        />
+
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          You can type any email address here. The facility does not need a Wezen account.
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold text-slate-900">
+            Documents to include
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            Current, non-expired documents are selected by default.
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedDocumentIds(worker.documents.map((doc) => doc.id))
+            }
+            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+          >
+            Select All
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedDocumentIds([])}
+            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {worker.documents.map((doc) => (
+          <label
+            key={doc.id}
+            className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <input
+              type="checkbox"
+              checked={selectedDocumentIds.includes(doc.id)}
+              onChange={() => togglePackageDocument(doc.id)}
+              className="mt-1"
+            />
+
+            <span className="min-w-0">
+              <span className="block font-semibold text-slate-900">
+                {doc.name}
+              </span>
+
+              <span className="mt-1 block text-xs text-slate-500">
+                {doc.category}
+                {doc.expiresAt
+                  ? ` • Expires ${formatDateOnly(doc.expiresAt)}`
+                  : ''}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+
+    <div className="mt-6 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        onClick={sendDocumentPackage}
+        disabled={
+          busy ||
+          !packageRecipientEmail.trim() ||
+          selectedDocumentIds.length === 0
+        }
+        className="rounded-full bg-cyan-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Sending Package...' : 'Send Package'}
+      </button>
+
+      <span className="text-xs text-slate-500">
+        A ZIP copy is also archived in the worker&apos;s OneDrive Facility Packages folder.
+      </span>
+    </div>
+  </div>
+) : null}
 
             <div className="mt-5 space-y-4">
               {worker.documents.length === 0 ? (
