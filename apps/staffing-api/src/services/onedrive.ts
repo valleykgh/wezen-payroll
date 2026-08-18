@@ -217,10 +217,24 @@ export async function downloadOneDriveFileBuffer(itemId: string) {
 export async function deleteOneDriveFolderByPath(folderPath: string) {
   const accessToken = await getMicrosoftGraphAccessToken();
   const rootPrefix = await getDriveRootPathPrefix();
-  const normalized = folderPath.split('/').map(sanitizeFolderSegment).filter(Boolean).join('/');
-  if (!normalized.startsWith('Candidate Documents - New/')) {
+  let decodedPath = folderPath;
+  try {
+    decodedPath = decodeURIComponent(folderPath);
+  } catch {
+    // Keep the stored value when it is not URI encoded.
+  }
+  const parts = decodedPath
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((part) => sanitizeFolderSegment(part))
+    .filter(Boolean);
+  const candidateRootIndex = parts.findIndex(
+    (part) => part.toLocaleLowerCase() === 'candidate documents - new'
+  );
+  if (candidateRootIndex < 0 || candidateRootIndex === parts.length - 1) {
     throw new Error('Refusing to delete a folder outside Candidate Documents - New');
   }
+  const normalized = parts.slice(candidateRootIndex).join('/');
 
   try {
     await axios.delete(

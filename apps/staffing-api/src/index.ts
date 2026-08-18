@@ -7211,7 +7211,14 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
     });
   } catch (error) {
     console.error('DELETE /api/admin/workers/:professionalId error:', error);
-    res.status(500).json({ error: 'Failed to delete worker' });
+    const message = error instanceof Error ? error.message : '';
+    res.status(500).json({
+      error: message.startsWith('Refusing to delete')
+        ? message
+        : message
+          ? `Failed to delete worker: ${message}`
+          : 'Failed to delete worker',
+    });
   }
 });
 
