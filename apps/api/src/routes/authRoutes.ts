@@ -6,6 +6,19 @@ import { requireAuth } from "../middleware/authMiddleware";
 
 export const authRoutes = Router();
 
+async function notifyStaffingActivation(staffingProfessionalId: string | null | undefined) {
+  if (!staffingProfessionalId) return;
+  const secret = String(process.env.PAYROLL_INTEGRATION_SECRET || "");
+  if (!secret) return;
+  const base = String(process.env.STAFFING_API_URL || "https://api.wezenstaffing.com").replace(/\/+$/, "");
+  const response = await fetch(`${base}/api/integrations/payroll/activated`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-integration-secret": secret },
+    body: JSON.stringify({ staffingProfessionalId }),
+  });
+  if (!response.ok) throw new Error(`Staffing activation callback failed (${response.status})`);
+}
+
 /**
  * Employee self-signup:
  * - creates Employee
@@ -136,10 +149,24 @@ authRoutes.post("/login", async (req, res) => {
   });
 });
 
+authRoutes.get("/invite", async (req, res) => {
+  const token = String(req.query.token || "");
+  const invite = await prisma.invite.findUnique({
+    where: { token },
+    select: { expiresAt: true, usedAt: true, employee: { select: { legalName: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, zip: true } } },
+  });
+  if (!invite || invite.usedAt || invite.expiresAt < new Date()) return res.status(400).json({ error: "Invalid or expired invite" });
+  return res.json({ employee: invite.employee, expiresAt: invite.expiresAt });
+});
+
 authRoutes.post("/accept-invite", async (req, res) => {
   try {
-    const { token, password } = req.body || {};
-    if (!token || !password) return res.status(400).json({ error: "token and password required" });
+    const { token, password, addressLine1, addressLine2, city, state, zip, ssnLast4 } = req.body || {};
+    if (!token || !password || String(password).length < 8) return res.status(400).json({ error: "token and password of at least 8 characters are required" });
+    if (!String(addressLine1 || "").trim() || !String(city || "").trim() || !/^[A-Za-z]{2}$/.test(String(state || "").trim()) || !/^\d{5}(-\d{4})?$/.test(String(zip || "").trim())) {
+      return res.status(400).json({ error: "Complete payroll address is required" });
+    }
+    if (!/^\d{4}$/.test(String(ssnLast4 || ""))) return res.status(400).json({ error: "Last four SSN digits are required" });
 
     const invite = await prisma.invite.findUnique({
       where: { token: String(token) },
@@ -149,7 +176,7 @@ authRoutes.post("/accept-invite", async (req, res) => {
         email: true,
         expiresAt: true,
         usedAt: true,
-        employee: { select: { id: true, email: true } },
+        employee: { select: { id: true, email: true, externalMappings: { where: { externalSystem: "WEZEN_STAFFING", active: true }, select: { staffingProfessionalId: true }, take: 1 } } },
       },
     });
 
@@ -165,6 +192,14 @@ authRoutes.post("/accept-invite", async (req, res) => {
     if (!employeeId) return res.status(404).json({ error: "Employee not found" });
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    await prisma.employee.update({
+      where: { id: employeeId },
+      data: {
+        addressLine1: String(addressLine1).trim(), addressLine2: String(addressLine2 || "").trim() || null,
+        city: String(city).trim(), state: String(state).trim().toUpperCase(), zip: String(zip).trim(), ssnLast4: String(ssnLast4),
+      },
+    });
 
     // Create user if missing; otherwise set password
 
@@ -200,6 +235,12 @@ authRoutes.post("/accept-invite", async (req, res) => {
       where: { id: invite.id },
       data: { usedAt: new Date() },
     });
+
+    try {
+      await notifyStaffingActivation(invite.employee?.externalMappings[0]?.staffingProfessionalId);
+    } catch (callbackError) {
+      console.error("Payroll activation staffing callback failed:", callbackError);
+    }
 
     const jwt = signToken({ sub: user.id, role: user.role, employeeId: user.employeeId });
     setAuthCookie(res, jwt);

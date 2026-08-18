@@ -24,7 +24,6 @@ export function ProfessionalSignupForm() {
     city: '',
     state: '',
     zipCode: '',
-    ssnLast4: '',
   });
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +58,6 @@ export function ProfessionalSignupForm() {
         city: form.city || undefined,
         state: form.state || undefined,
         zipCode: form.zipCode || undefined,
-        ssnLast4: form.ssnLast4,
         turnstileToken,
       });
 
@@ -191,16 +189,6 @@ export function ProfessionalSignupForm() {
           />
         </FormField>
 
-        <FormField label="Social Security number — last 4 digits" htmlFor="ssnLast4">
-          <TextInput
-            id="ssnLast4"
-            inputMode="numeric"
-            maxLength={4}
-            value={form.ssnLast4}
-            onChange={(e) => update('ssnLast4', e.target.value.replace(/\D/g, '').slice(0, 4))}
-            required
-          />
-        </FormField>
       </div>
 
       <div className="mt-6">

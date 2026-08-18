@@ -52,17 +52,26 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
       select: { id: true, email: true, legalName: true, preferredName: true, user: { select: { id: true } } },
     });
 
+    const staffingProfessionalId = String(req.body?.staffingProfessionalId || "").trim();
+    if (staffingProfessionalId) {
+      await prisma.employeeExternalMapping.upsert({
+        where: { externalSystem_externalEmployeeId: { externalSystem: "WEZEN_STAFFING", externalEmployeeId: staffingProfessionalId } },
+        update: { employeeId: employee.id, staffingProfessionalId, active: true },
+        create: { employeeId: employee.id, staffingProfessionalId, externalSystem: "WEZEN_STAFFING", externalEmployeeId: staffingProfessionalId, active: true },
+      });
+    }
+
     let invitationSent = false;
     if (!employee.user) {
       let invite = await prisma.invite.findFirst({ where: { employeeId: employee.id, usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } });
       if (!invite) {
         invite = await prisma.invite.create({ data: { employeeId: employee.id, email, token: crypto.randomBytes(32).toString("hex"), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
-        const base = String(process.env.FRONTEND_URL || "https://payroll.wezenstaffing.com").replace(/\/+$/, "");
-        await sendEmployeeInviteEmail({ to: email, employeeName: employee.preferredName || employee.legalName, inviteUrl: `${base}/employee/setup-password?token=${invite.token}` });
-        invitationSent = true;
       }
+      const base = String(process.env.FRONTEND_URL || "https://payroll.wezenstaffing.com").replace(/\/+$/, "");
+      await sendEmployeeInviteEmail({ to: email, employeeName: employee.preferredName || employee.legalName, inviteUrl: `${base}/employee/setup-password?token=${invite.token}` });
+      invitationSent = true;
     }
-    return res.json({ ok: true, employeeId: employee.id, invitationSent, payrollMappingPending: true });
+    return res.json({ ok: true, employeeId: employee.id, invitationSent, activated: Boolean(employee.user), payrollMappingPending: true });
   } catch (error: any) {
     console.error("POST /api/integrations/staffing/employee failed", error);
     if (error?.code === "P2002") return res.status(409).json({ error: "Employee code is already assigned" });

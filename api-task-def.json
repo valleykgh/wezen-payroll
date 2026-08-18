@@ -39,6 +39,10 @@
                     "value": "https://payroll.wezenstaffing.com"
                 },
                 {
+                    "name": "STAFFING_API_URL",
+                    "value": "https://api.wezenstaffing.com"
+                },
+                {
                     "name": "PAYROLL_ONEDRIVE_FOLDER",
                     "value": "Payroll/Payroll Files/2026"
                 },

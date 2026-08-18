@@ -210,6 +210,8 @@ model ProfessionalProfile {
   onboardingStatus          String?       @default("PENDING")
   approvedByWezen           Boolean       @default(false)
   isTestAccount             Boolean       @default(false)
+  payrollActivationSentAt   DateTime?
+  payrollActivatedAt        DateTime?
   latitude                  Float?
   longitude                 Float?
   createdAt                 DateTime      @default(now())
@@ -622,5 +624,4 @@ model FacilityExternalWorker {
   @@unique([facilityId, professionalId, externalSystem])
   @@index([externalWorkerId])
 }
-
 

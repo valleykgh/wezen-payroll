@@ -30,7 +30,7 @@ import {
 
 import { requireAuth, requireRole, type AuthedRequest } from './middleware/auth.js';
 import { sendEmail, sendEmailWithAttachment } from './services/email.js';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveFolderByPath } from './services/onedrive.js';
@@ -1576,7 +1576,6 @@ const registerProfessionalSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
-  ssnLast4: z.string().regex(/^\d{4}$/),
   turnstileToken: z.string().trim().min(1).max(4096),
 });
 
@@ -1742,7 +1741,6 @@ app.post(
             city: parsed.data.city,
             state: parsed.data.state,
             zipCode: parsed.data.zipCode,
-            ssnLast4: parsed.data.ssnLast4,
             onboardingStatus: 'PENDING',
             approvedByWezen: false,
             openShiftAlertsEnabled: parsed.data.openShiftAlertsEnabled ?? false,
@@ -6169,6 +6167,9 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
   });
 }
 
+    const workerEligibility = await getWorkerEligibility(professionalId);
+    const payrollDocumentReasons = workerEligibility.reasons.filter((reason) => reason.toLowerCase().includes('document'));
+
     res.json({
       data: {
         id: worker.id,
@@ -6182,6 +6183,10 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
         onboardingStatus: worker.onboardingStatus,
         approvedByWezen: worker.approvedByWezen,
         isTestAccount: worker.isTestAccount,
+        payrollActivationSentAt: worker.payrollActivationSentAt,
+        payrollActivatedAt: worker.payrollActivatedAt,
+        payrollActivationEligible: worker.approvedByWezen && Boolean(worker.user.workerCode) && payrollDocumentReasons.length === 0,
+        payrollActivationReasons: payrollDocumentReasons,
         isSystemUser: worker.user.isSystemUser,
         firstName: worker.user.firstName,
         lastName: worker.user.lastName,
@@ -6774,7 +6779,6 @@ async function provisionApprovedWorkerInPayroll(professionalId: string) {
       city: worker.city,
       state: worker.state,
       zip: worker.zipCode,
-      ssnLast4: worker.ssnLast4,
       staffingProfessionalId: worker.id,
     }),
   });
@@ -6782,6 +6786,30 @@ async function provisionApprovedWorkerInPayroll(professionalId: string) {
   if (!response.ok) throw new Error(result?.error || `Payroll provisioning failed (${response.status})`);
   return result;
 }
+
+function authorizedPayrollIntegration(req: express.Request) {
+  const expected = Buffer.from(String(process.env.PAYROLL_INTEGRATION_SECRET || ''));
+  const received = Buffer.from(String(req.headers['x-integration-secret'] || ''));
+  return expected.length > 0 && expected.length === received.length && timingSafeEqual(expected, received);
+}
+
+app.post('/api/integrations/payroll/activated', async (req, res) => {
+  if (!authorizedPayrollIntegration(req)) return res.status(401).json({ error: 'Unauthorized integration request' });
+  const professionalId = String(req.body?.staffingProfessionalId || '').trim();
+  if (!professionalId) return res.status(400).json({ error: 'staffingProfessionalId is required' });
+  try {
+    const updated = await prisma.professionalProfile.update({
+      where: { id: professionalId },
+      data: { payrollActivatedAt: new Date() },
+      select: { id: true, payrollActivatedAt: true },
+    });
+    return res.json({ ok: true, data: updated });
+  } catch (error: any) {
+    if (error?.code === 'P2025') return res.status(404).json({ error: 'Professional profile not found' });
+    console.error('POST /api/integrations/payroll/activated error:', error);
+    return res.status(500).json({ error: 'Failed to record payroll activation' });
+  }
+});
 
 app.post('/api/admin/workers/:professionalId/approve', requireRole('INTERNAL_ADMIN'), async (req, res) => {
   try {
@@ -6852,14 +6880,6 @@ if (worker.user.isSystemUser) {
       });
     }
 
-    let payrollProvisioning: any = { ok: false };
-    try {
-      payrollProvisioning = await provisionApprovedWorkerInPayroll(professionalId);
-    } catch (payrollError: any) {
-      console.error('Approved worker payroll provisioning failed:', payrollError);
-      payrollProvisioning = { ok: false, error: payrollError?.message || 'Payroll provisioning failed' };
-    }
-
     await createWorkerNotification({
       professionalId,
       type: 'SHIFT_APPROVED',
@@ -6890,10 +6910,44 @@ if (worker.user.isSystemUser) {
       detailsJson: { workerEmail: worker.user.email },
     });
 
-    res.json({ data: updated, payrollProvisioning });
+    res.json({ data: updated });
   } catch (error) {
     console.error('POST /api/admin/workers/:professionalId/approve error:', error);
     res.status(500).json({ error: 'Failed to approve worker' });
+  }
+});
+
+app.post('/api/admin/workers/:professionalId/payroll-activation', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = String(req.params.professionalId || '');
+    const worker = await prisma.professionalProfile.findUnique({ where: { id: professionalId }, include: { user: true } });
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+    if (!worker.approvedByWezen) return res.status(409).json({ error: 'Approve the worker by Wezen before sending payroll activation' });
+    if (!worker.user.workerCode) return res.status(409).json({ error: 'Assign an employee code before sending payroll activation' });
+    if (worker.user.isSystemUser) return res.status(403).json({ error: 'System users cannot receive payroll activation' });
+    const eligibility = await getWorkerEligibility(professionalId);
+    const documentReasons = eligibility.reasons.filter((reason) => reason.toLowerCase().includes('document'));
+    if (documentReasons.length) return res.status(409).json({ error: `Approve required documents first: ${documentReasons.join('; ')}` });
+
+    const result = await provisionApprovedWorkerInPayroll(professionalId);
+    const updated = await prisma.professionalProfile.update({
+      where: { id: professionalId },
+      data: {
+        payrollActivationSentAt: result.invitationSent ? new Date() : worker.payrollActivationSentAt,
+        payrollActivatedAt: result.activated ? new Date() : worker.payrollActivatedAt,
+      },
+      select: { payrollActivationSentAt: true, payrollActivatedAt: true },
+    });
+    await createAdminAuditLog({
+      actorUserId: req.authUser?.userId,
+      action: result.activated ? 'PAYROLL_ACTIVATION_CONFIRMED' : 'PAYROLL_ACTIVATION_SENT', entityType: 'ProfessionalProfile', entityId: professionalId,
+      summary: result.activated ? `Confirmed payroll activation for ${worker.user.email}` : `Sent payroll activation to ${worker.user.email}`,
+      detailsJson: { email: worker.user.email, employeeCode: worker.user.workerCode, invitationSent: result.invitationSent, activated: result.activated },
+    });
+    return res.json({ data: updated, payrollProvisioning: result });
+  } catch (error: any) {
+    console.error('POST /api/admin/workers/:professionalId/payroll-activation error:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to send payroll activation' });
   }
 });
 

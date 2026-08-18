@@ -42,6 +42,10 @@ type WorkerDetail = {
   approvedByWezen: boolean;
   isSystemUser?: boolean;
   isTestAccount?: boolean;
+  payrollActivationSentAt?: string | null;
+  payrollActivatedAt?: string | null;
+  payrollActivationEligible?: boolean;
+  payrollActivationReasons?: string[];
   firstName?: string | null;
   lastName?: string | null;
   email: string;
@@ -271,18 +275,34 @@ async function uploadAdminDocument() {
 
       const text = await res.text();
       if (!res.ok) throw new Error(formatApiErrorText(text, `Failed to ${action} worker`));
-      const result = text ? JSON.parse(text) : null;
-
       await load(professionalId);
       setMessage(
         action === 'approve'
-          ? result?.payrollProvisioning?.ok
-            ? 'Worker approved. Payroll account provisioned and activation email prepared.'
-            : `Worker approved, but payroll provisioning needs attention: ${result?.payrollProvisioning?.error || 'unknown error'}`
+          ? 'Worker approved by Wezen. Payroll activation can now be sent separately.'
           : 'Worker moved back to under review.'
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to update worker');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendPayrollActivation() {
+    try {
+      const action = worker?.payrollActivationSentAt ? 'Resend' : 'Send';
+      if (!window.confirm(`${action} the payroll activation link to ${worker?.email}?`)) return;
+      setBusy(true);
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/payroll-activation`, {
+        method: 'POST', credentials: 'include',
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to send payroll activation'));
+      const result = text ? JSON.parse(text) : null;
+      await load(professionalId);
+      setMessage(result?.payrollProvisioning?.activated ? 'Payroll account is already activated.' : 'Payroll activation link sent successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to send payroll activation');
     } finally {
       setBusy(false);
     }
@@ -1290,6 +1310,14 @@ const icaSignedStepLabel = isIcaSigned
         Approve by Wezen
       </button>
 
+      <button
+        onClick={sendPayrollActivation}
+        disabled={busy || !worker.payrollActivationEligible || Boolean(worker.payrollActivatedAt)}
+        className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${worker.payrollActivationEligible && !worker.payrollActivatedAt ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'border border-slate-300 bg-slate-100 text-slate-500'}`}
+      >
+        {worker.payrollActivatedAt ? 'Payroll Account Activated' : worker.payrollActivationSentAt ? 'Resend Payroll Activation Link' : 'Send Payroll Activation Link'}
+      </button>
+
       {isDefaultAdmin ? (
         <button
           onClick={() => updateWorkerApproval('unapprove')}
@@ -1299,6 +1327,17 @@ const icaSignedStepLabel = isIcaSigned
           Mark Under Review
         </button>
       ) : null}
+    </div>
+    <div className="mt-3 text-sm text-slate-600">
+      {worker.payrollActivatedAt
+        ? `Payroll activated ${new Date(worker.payrollActivatedAt).toLocaleString()}`
+        : worker.payrollActivationSentAt
+          ? `Activation last sent ${new Date(worker.payrollActivationSentAt).toLocaleString()}`
+          : worker.payrollActivationEligible
+            ? 'Ready to send payroll activation.'
+            : worker.approvedByWezen && worker.payrollActivationReasons?.length
+              ? `Complete document approval first: ${worker.payrollActivationReasons.join('; ')}`
+              : 'Approve by Wezen to enable payroll activation.'}
     </div>
 
     {isDefaultAdmin ? (
