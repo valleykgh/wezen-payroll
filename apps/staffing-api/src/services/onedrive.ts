@@ -231,10 +231,15 @@ export async function deleteOneDriveFolderByPath(folderPath: string) {
   const candidateRootIndex = parts.findIndex(
     (part) => part.toLocaleLowerCase() === 'candidate documents - new'
   );
-  if (candidateRootIndex < 0 || candidateRootIndex === parts.length - 1) {
+  if (candidateRootIndex < 0 && parts.length !== 1) {
     throw new Error('Refusing to delete a folder outside Candidate Documents - New');
   }
-  const normalized = parts.slice(candidateRootIndex).join('/');
+  if (candidateRootIndex === parts.length - 1) {
+    throw new Error('Refusing to delete the Candidate Documents - New root folder');
+  }
+  const normalized = candidateRootIndex >= 0
+    ? parts.slice(candidateRootIndex).join('/')
+    : `Candidate Documents - New/${parts[0]}`;
 
   try {
     await axios.delete(
