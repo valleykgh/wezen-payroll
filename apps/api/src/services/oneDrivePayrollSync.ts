@@ -102,22 +102,27 @@ export async function syncOneDrivePayroll() {
 
 let syncRunning = false;
 
+export function queueOneDrivePayrollSync() {
+  if (syncRunning) return false;
+  syncRunning = true;
+  void syncOneDrivePayroll()
+    .then((result) => {
+      console.log("OneDrive payroll synchronization complete", { filesFound: result.filesFound, importedPeriods: result.importedPeriods, warnings: result.warnings.length });
+    })
+    .catch((error) => {
+      console.error("OneDrive payroll synchronization failed", error);
+    })
+    .finally(() => {
+      syncRunning = false;
+    });
+  return true;
+}
+
 export function startOneDrivePayrollScheduler() {
   if (!process.env.MS_TENANT_ID || !process.env.MS_CLIENT_ID || !process.env.MS_CLIENT_SECRET || !process.env.MS_ONEDRIVE_USER) return;
   const configured = Number(process.env.PAYROLL_SYNC_INTERVAL_MINUTES || 1440);
   const intervalMs = Math.max(5, Number.isFinite(configured) ? configured : 1440) * 60_000;
-  const run = async () => {
-    if (syncRunning) return;
-    syncRunning = true;
-    try {
-      const result = await syncOneDrivePayroll();
-      console.log("OneDrive payroll synchronization complete", { filesFound: result.filesFound, importedPeriods: result.importedPeriods, warnings: result.warnings.length });
-    } catch (error) {
-      console.error("OneDrive payroll synchronization failed", error);
-    } finally {
-      syncRunning = false;
-    }
-  };
+  const run = () => queueOneDrivePayrollSync();
   const initial = setTimeout(run, 30_000);
   initial.unref();
   const timer = setInterval(run, intervalMs);

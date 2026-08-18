@@ -68,8 +68,7 @@ export default function PaystubGeneratorPage() {
       const response = await fetch(`${apiBase()}/api/admin/paystub-generator/sync-onedrive`, { method: "POST", credentials: "include" });
       if (!response.ok) throw new Error(await errorMessage(response));
       const data = await response.json();
-      setSyncResult(`Synced ${data.filesFound} workbook(s); ${data.importedPeriods} employee pay period(s) are available.`);
-      setWarnings(data.warnings || []);
+      setSyncResult(data.started ? "OneDrive synchronization started. It will continue securely in the background; check again in a few minutes." : data.message);
     } catch (err: any) { setError(err?.message || "OneDrive sync failed"); }
     finally { setBusy(""); }
   }

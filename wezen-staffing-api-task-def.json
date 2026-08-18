@@ -102,6 +102,10 @@
     {
       "name": "PAYROLL_INTEGRATION_SECRET",
       "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/shared/PAYROLL_INTEGRATION_SECRET"
+    },
+    {
+      "name": "TURNSTILE_SECRET_KEY",
+      "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen/staffing/turnstile-secret-key-c4gNiC"
     }
       ],
       "logConfiguration": {

@@ -12,6 +12,7 @@ ECR_REPO="wezen-staffing-web"
 
 STAFFING_API_URL="https://api.wezenstaffing.com"
 PAYROLL_PORTAL_URL="https://payroll.wezenstaffing.com"
+TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-0x4AAAAAAENoEFj8z9tNetBn}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_DEF_FILE="$SCRIPT_DIR/wezen-staffing-web-task-def.json"
@@ -49,8 +50,9 @@ echo "2) Building and pushing staffing-web image for linux/amd64..."
 docker buildx build \
   --platform linux/amd64 \
   -f docker/staffing-web.Dockerfile \
-  --build-arg NEXT_PUBLIC_STAFFING_API_URL=https://api.wezenstaffing.com \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.wezenstaffing.com \
   --build-arg NEXT_PUBLIC_PAYROLL_PORTAL_URL=https://payroll.wezenstaffing.com \
+  --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" \
   -t "$IMAGE_URI" \
   --push \
   .
