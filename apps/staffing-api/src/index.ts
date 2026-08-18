@@ -33,7 +33,7 @@ import { sendEmail, sendEmailWithAttachment } from './services/email.js';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
-import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveFolderByPath } from './services/onedrive.js';
+import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveFolderByPath, deleteCandidateFoldersByDocumentItemIds } from './services/onedrive.js';
 import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder } from './services/onedrive.js';
 
 const app = express();
@@ -7160,6 +7160,7 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
     }
 
     const oneDriveFolders = [...new Set(worker.documents.map((document) => document.oneDriveFolder).filter((value): value is string => Boolean(value)))];
+    const oneDriveItemIds = worker.documents.map((document) => document.oneDriveItemId).filter((value): value is string => Boolean(value));
     for (const folder of oneDriveFolders) {
       const usedByAnotherWorker = await prisma.professionalDocument.count({
         where: { oneDriveFolder: folder, professionalId: { not: professionalId } },
@@ -7167,7 +7168,16 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
       if (usedByAnotherWorker > 0) {
         return res.status(409).json({ error: `OneDrive folder is shared with another worker and was not deleted: ${folder}` });
       }
-      await deleteOneDriveFolderByPath(folder);
+    }
+    if (oneDriveItemIds.length) {
+      const protectedDocuments = await prisma.professionalDocument.findMany({
+        where: { professionalId: { not: professionalId }, oneDriveItemId: { not: null } },
+        select: { oneDriveItemId: true },
+      });
+      const protectedItemIds = protectedDocuments.map((document) => document.oneDriveItemId).filter((value): value is string => Boolean(value));
+      await deleteCandidateFoldersByDocumentItemIds(oneDriveItemIds, protectedItemIds);
+    } else {
+      for (const folder of oneDriveFolders) await deleteOneDriveFolderByPath(folder);
     }
 
     await prisma.professionalDocument.deleteMany({
