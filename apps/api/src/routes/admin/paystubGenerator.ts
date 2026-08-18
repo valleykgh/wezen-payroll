@@ -9,6 +9,7 @@ import {
 } from "../../services/paystubGenerator";
 import { generateUploadedPaystubPdf } from "../../services/uploadedPaystubPdf";
 import { sendPaystubEmail } from "../../lib/email";
+import { syncOneDrivePayroll } from "../../services/oneDrivePayrollSync";
 
 const router = express.Router();
 const upload = multer({
@@ -20,6 +21,17 @@ const upload = multer({
 });
 
 router.use(requireAuth, requireRole("SUPER_ADMIN", "PAYROLL_ADMIN", "HR_ADMIN"));
+
+router.post("/paystub-generator/sync-onedrive", async (_req, res) => {
+  try {
+    const result = await syncOneDrivePayroll();
+    res.setHeader("Cache-Control", "no-store, private");
+    return res.json(result);
+  } catch (error: any) {
+    console.error("POST /api/admin/paystub-generator/sync-onedrive failed", error);
+    return res.status(500).json({ error: error?.message || "Failed to synchronize OneDrive payroll" });
+  }
+});
 
 function uploadedFiles(req: express.Request) {
   return ((req.files as Express.Multer.File[]) || []).map((file) => ({

@@ -29,4 +29,4 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/ukg-migration.sql ./ukg-migration.sql
 EXPOSE 4001
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npm run migrate:deploy && node dist/index.js"]

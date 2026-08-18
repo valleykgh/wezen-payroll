@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1033.0",

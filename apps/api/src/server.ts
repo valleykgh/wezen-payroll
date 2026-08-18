@@ -9,6 +9,8 @@ import { employeeRoutes } from "./routes/employeeRoutes";
 import  adminInviteRoutes  from "./routes/adminInviteRoutes";
 import adminRoutes from "./routes/admin";
 import acceptInviteRoutes from "./routes/acceptInviteRoutes";
+import { startOneDrivePayrollScheduler } from "./services/oneDrivePayrollSync";
+import { staffingIntegrationRoutes } from "./routes/staffingIntegration";
 // import { adminRoutes } from "./routes/adminRoutes"; // uncomment if you have it
 
 dotenv.config();
@@ -92,6 +94,7 @@ app.get("/api/health", (req, res) => {
  * Mount under /api so /health is never protected by mistake.
  */
 app.use("/api/auth", authRoutes);
+app.use("/api/integrations", staffingIntegrationRoutes);
 app.use("/api", meRoutes);
 app.use("/api", employeeRoutes);
 app.use("/api/admin", adminRoutes);
@@ -107,4 +110,7 @@ app.use((req, res) => {
 });
 
 const port = Number(process.env.PORT || 4001);
-app.listen(port, "0.0.0.0", () => console.log(`API running on port ${port}`));
+app.listen(port, "0.0.0.0", () => {
+  console.log(`API running on port ${port}`);
+  startOneDrivePayrollScheduler();
+});

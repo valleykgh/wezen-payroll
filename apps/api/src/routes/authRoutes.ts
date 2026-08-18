@@ -42,15 +42,6 @@ authRoutes.post("/register", async (req, res) => {
   setAuthCookie(res, token);
 
   res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      employeeId: user.employeeId,
-    },
-    mustChangePassword: user.mustChangePassword,
-  });
-  res.json({
     token,
     user: { id: user.id, email: user.email, role: user.role, employeeId: user.employeeId },
     mustChangePassword: user.mustChangePassword,

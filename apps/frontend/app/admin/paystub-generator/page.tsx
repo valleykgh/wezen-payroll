@@ -60,6 +60,19 @@ export default function PaystubGeneratorPage() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [syncResult, setSyncResult] = useState("");
+
+  async function syncOneDrive() {
+    setBusy("sync"); setError(""); setSyncResult("");
+    try {
+      const response = await fetch(`${apiBase()}/api/admin/paystub-generator/sync-onedrive`, { method: "POST", credentials: "include" });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const data = await response.json();
+      setSyncResult(`Synced ${data.filesFound} workbook(s); ${data.importedPeriods} employee pay period(s) are available.`);
+      setWarnings(data.warnings || []);
+    } catch (err: any) { setError(err?.message || "OneDrive sync failed"); }
+    finally { setBusy(""); }
+  }
 
   const formData = useMemo(() => {
     const form = new FormData();
@@ -164,6 +177,14 @@ export default function PaystubGeneratorPage() {
 
   return (
     <div className="space-y-6">
+      <section className="rounded-2xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-slate-950">Employee self-service source</h2>
+        <p className="mt-2 text-sm text-slate-600">Import the configured private OneDrive payroll folder after employee codes and exact Excel names are mapped under Employees.</p>
+        <button type="button" onClick={syncOneDrive} disabled={Boolean(busy)} className="mt-4 rounded-xl bg-cyan-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
+          {busy === "sync" ? "Synchronizing…" : "Sync payroll files from OneDrive"}
+        </button>
+        {syncResult ? <p className="mt-3 text-sm font-semibold text-green-700">{syncResult}</p> : null}
+      </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Admin tool</p>
         <h2 className="mt-2 text-2xl font-bold text-slate-950">Paystub Generator</h2>

@@ -46,6 +46,8 @@ router.get("/employees", async (req, res) => {
         state: true,
         zip: true,
         ssnLast4: true,
+        employeeCode: true,
+        payrollSourceName: true,
         createdAt: true,
         updatedAt: true,
         user: {
@@ -213,6 +215,8 @@ router.patch("/employees/:id", async (req, res) => {
     if (req.body.state !== undefined) data.state = req.body.state || null;
     if (req.body.zip !== undefined) data.zip = req.body.zip ? String(req.body.zip).replace(/\D/g, "") : null;
     if (req.body.ssnLast4 !== undefined) data.ssnLast4 = req.body.ssnLast4 ? String(req.body.ssnLast4).replace(/\D/g, "") : null;
+    if (req.body.employeeCode !== undefined) data.employeeCode = String(req.body.employeeCode || "").trim() || null;
+    if (req.body.payrollSourceName !== undefined) data.payrollSourceName = String(req.body.payrollSourceName || "").trim() || null;
 
     const employee = await prisma.employee.update({
       where: { id },
@@ -232,6 +236,8 @@ router.patch("/employees/:id", async (req, res) => {
         state: true,
         zip: true,
         ssnLast4: true,
+        employeeCode: true,
+        payrollSourceName: true,
         createdAt: true,
         updatedAt: true,
       },

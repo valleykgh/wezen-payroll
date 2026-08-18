@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001";
 type BreakRow = { startTime: string; endTime: string; minutes: number };
@@ -337,6 +338,14 @@ if (!sessionReady) return;
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Employee — Time & Pay</h1>
+
+      <div style={{ marginTop: 12, padding: 16, border: "1px solid #a5f3fc", borderRadius: 12, background: "#ecfeff" }}>
+        <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>Paystubs from Excel payroll</h2>
+        <p style={{ margin: "0 0 12px", color: "#475569" }}>Choose a week, month, or custom range, then download or email your paystubs.</p>
+        <Link href="/employee/paystubs" style={{ display: "inline-block", padding: "10px 16px", borderRadius: 10, background: "#0891b2", color: "white", fontWeight: 700, textDecoration: "none" }}>
+          Generate Paystub
+        </Link>
+      </div>
 
       <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
 

@@ -1576,6 +1576,7 @@ const registerProfessionalSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+  ssnLast4: z.string().regex(/^\d{4}$/),
   turnstileToken: z.string().trim().min(1).max(4096),
 });
 
@@ -1741,6 +1742,7 @@ app.post(
             city: parsed.data.city,
             state: parsed.data.state,
             zipCode: parsed.data.zipCode,
+            ssnLast4: parsed.data.ssnLast4,
             onboardingStatus: 'PENDING',
             approvedByWezen: false,
             openShiftAlertsEnabled: parsed.data.openShiftAlertsEnabled ?? false,
@@ -6752,6 +6754,34 @@ app.post('/api/admin/documents/:documentId/reject', requireRole('INTERNAL_ADMIN'
   }
 });
 
+async function provisionApprovedWorkerInPayroll(professionalId: string) {
+  const apiUrl = String(process.env.PAYROLL_API_URL || 'https://api.payroll.wezenstaffing.com').replace(/\/+$/, '');
+  const secret = String(process.env.PAYROLL_INTEGRATION_SECRET || '');
+  if (!secret) throw new Error('PAYROLL_INTEGRATION_SECRET is not configured');
+  const worker = await prisma.professionalProfile.findUnique({ where: { id: professionalId }, include: { user: true } });
+  if (!worker || !worker.user.workerCode) throw new Error('Approved worker or employee code is missing');
+  const response = await fetch(`${apiUrl}/api/integrations/staffing/employee`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-integration-secret': secret },
+    body: JSON.stringify({
+      email: worker.user.email,
+      legalName: [worker.user.firstName, worker.user.lastName].filter(Boolean).join(' ').trim(),
+      employeeCode: worker.user.workerCode,
+      title: worker.role,
+      addressLine1: worker.addressLine1,
+      addressLine2: worker.addressLine2,
+      city: worker.city,
+      state: worker.state,
+      zip: worker.zipCode,
+      ssnLast4: worker.ssnLast4,
+      staffingProfessionalId: worker.id,
+    }),
+  });
+  const result: any = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(result?.error || `Payroll provisioning failed (${response.status})`);
+  return result;
+}
+
 app.post('/api/admin/workers/:professionalId/approve', requireRole('INTERNAL_ADMIN'), async (req, res) => {
   try {
     const professionalId = String(req.params.professionalId || '');
@@ -6821,6 +6851,14 @@ if (worker.user.isSystemUser) {
       });
     }
 
+    let payrollProvisioning: any = { ok: false };
+    try {
+      payrollProvisioning = await provisionApprovedWorkerInPayroll(professionalId);
+    } catch (payrollError: any) {
+      console.error('Approved worker payroll provisioning failed:', payrollError);
+      payrollProvisioning = { ok: false, error: payrollError?.message || 'Payroll provisioning failed' };
+    }
+
     await createWorkerNotification({
       professionalId,
       type: 'SHIFT_APPROVED',
@@ -6851,7 +6889,7 @@ if (worker.user.isSystemUser) {
       detailsJson: { workerEmail: worker.user.email },
     });
 
-    res.json({ data: updated });
+    res.json({ data: updated, payrollProvisioning });
   } catch (error) {
     console.error('POST /api/admin/workers/:professionalId/approve error:', error);
     res.status(500).json({ error: 'Failed to approve worker' });

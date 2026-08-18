@@ -57,9 +57,13 @@
           "name": "APNS_BUNDLE_ID",
           "value": "com.wezenstaffing.app"
         },
-        {
-          "name": "APNS_ENV",
-          "value": "sandbox"
+    {
+      "name": "APNS_ENV",
+      "value": "sandbox"
+    },
+    {
+      "name": "PAYROLL_API_URL",
+      "value": "https://api.payroll.wezenstaffing.com"
         }
       ],
       "secrets": [
@@ -91,10 +95,14 @@
           "name": "REMINDER_JOB_TOKEN",
           "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/REMINDER_JOB_TOKEN"
         },
-        {
-          "name": "APNS_PRIVATE_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen/staffing-api/apns-private-key-KL9mRj"
-        }
+    {
+      "name": "APNS_PRIVATE_KEY",
+      "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen/staffing-api/apns-private-key-KL9mRj"
+    },
+    {
+      "name": "PAYROLL_INTEGRATION_SECRET",
+      "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/shared/PAYROLL_INTEGRATION_SECRET"
+    }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

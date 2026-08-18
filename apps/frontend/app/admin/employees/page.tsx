@@ -22,6 +22,8 @@ type Employee = {
 
   createdAt?: string;
   updatedAt?: string;
+  employeeCode?: string | null;
+  payrollSourceName?: string | null;
 
   user?: {
     id: string;
@@ -56,6 +58,8 @@ export default function AdminEmployeesPage() {
   city: "",
   state: "",
   zip: "",
+  employeeCode: "",
+  payrollSourceName: "",
 });
 
   async function loadEmployees() {
@@ -76,7 +80,9 @@ addressLine1: emp.addressLine1 || "",
 addressLine2: emp.addressLine2 || "",
 city: emp.city || "",
 state: emp.state || "",
-zip: emp.zip || "",
+      zip: emp.zip || "",
+      employeeCode: emp.employeeCode || "",
+      payrollSourceName: emp.payrollSourceName || emp.legalName || "",
     });
   }
 
@@ -93,6 +99,8 @@ zip: emp.zip || "",
   city: "",
   state: "",
   zip: "",
+  employeeCode: "",
+  payrollSourceName: "",
 });  
 }
 
@@ -114,7 +122,9 @@ zip: emp.zip || "",
 	  addressLine2: form.addressLine2,
 	  city: form.city,
 	  state: form.state,
-	  zip: form.zip, 
+	  zip: form.zip,
+          employeeCode: form.employeeCode,
+          payrollSourceName: form.payrollSourceName,
        }),
       });
 
@@ -479,6 +489,18 @@ async function sendInvite(employeeId: string) {
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 }}
 />
+<input
+  value={form.employeeCode}
+  onChange={(e) => setForm((p) => ({ ...p, employeeCode: e.target.value }))}
+  placeholder="Employee code (for example WZN-101)"
+  style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 14 }}
+/>
+<input
+  value={form.payrollSourceName}
+  onChange={(e) => setForm((p) => ({ ...p, payrollSourceName: e.target.value }))}
+  placeholder="Exact name in payroll Excel Column A"
+  style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 14 }}
+/>
                         </div>
                       ) : (
                         <div>
@@ -486,6 +508,10 @@ async function sendInvite(employeeId: string) {
 			  {emp.preferredName ? (
                           <div style={{ fontSize: 12, color: "#64748b" }}>Preferred: {emp.preferredName}</div>
 			  ) : null}
+                          <div style={{ fontSize: 12, color: emp.payrollSourceName ? "#166534" : "#b45309", marginTop: 4 }}>
+                            {emp.payrollSourceName ? `Payroll: ${emp.payrollSourceName}` : "Payroll mapping pending"}
+                          </div>
+                          {emp.employeeCode ? <div style={{ fontSize: 12, color: "#64748b" }}>Code: {emp.employeeCode}</div> : null}
                         </div>
                       )}
                     </td>

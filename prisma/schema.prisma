@@ -99,6 +99,10 @@ model Employee {
   state              String?
   zip                String?
   ssnLast4           String?
+  employeeCode       String?             @unique
+  payrollSourceName  String?             @unique
+  importedPaystubs   ImportedPaystubPeriod[]
+  paystubAccessLogs  PaystubAccessLog[]
   payrollAdjustments PayrollAdjustment[]
   externalMappings EmployeeExternalMapping[]
   payrollCorrections PayrollCorrection[]
@@ -119,6 +123,51 @@ model Employee {
   payrollRunEntrySnapshots PayrollRunEntrySnapshot[]
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
+}
+
+model PayrollSourceFile {
+  id           String   @id @default(cuid())
+  driveItemId  String   @unique
+  name         String
+  eTag         String?
+  webUrl       String?
+  lastModified DateTime?
+  syncedAt     DateTime @default(now())
+  periods      ImportedPaystubPeriod[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ImportedPaystubPeriod {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  sourceFileId String
+  sourceFile   PayrollSourceFile @relation(fields: [sourceFileId], references: [id], onDelete: Cascade)
+  periodStart  DateTime
+  periodEnd    DateTime
+  payDate      DateTime
+  record       Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, sourceFileId, periodEnd])
+  @@index([employeeId, periodEnd])
+}
+
+model PaystubAccessLog {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  action     String
+  fromDate   DateTime?
+  toDate     DateTime?
+  periodCount Int     @default(0)
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, createdAt])
 }
 
 model TimeEntry {

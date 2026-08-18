@@ -2,6 +2,9 @@ import { Router } from "express";
 import { prisma } from "../prisma";
 import { generatePaystubPdf } from "../services/paystubPdf";
 import { requireAuth } from "../middleware/authMiddleware";
+import { generateUploadedPaystubPdf } from "../services/uploadedPaystubPdf";
+import { sendPaystubEmail } from "../lib/email";
+import { PaystubRecord } from "../services/paystubGenerator";
 
 export const employeeRoutes = Router();
 
@@ -52,6 +55,103 @@ const COMPANY_INFO = {
   state: "CA",
   zip: "94550",
 };
+
+function importedRecord(value: any): PaystubRecord {
+  return {
+    ...value,
+    periodStart: new Date(value.periodStart),
+    periodEnd: new Date(value.periodEnd),
+    payDate: new Date(value.payDate),
+  };
+}
+
+function importedRange(query: any) {
+  const from = String(query.from || "");
+  const to = String(query.to || "");
+  if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to))) return null;
+  return {
+    ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+    ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}),
+  };
+}
+
+async function importedContext(employeeId: string, query: any) {
+  const range = importedRange(query);
+  if (!range) throw Object.assign(new Error("Dates must use YYYY-MM-DD"), { status: 400 });
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { legalName: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, zip: true, ssnLast4: true, employeeCode: true, payrollSourceName: true },
+  });
+  if (!employee) throw Object.assign(new Error("Employee not found"), { status: 404 });
+  if (!employee.payrollSourceName) throw Object.assign(new Error("Your payroll file mapping is awaiting administrator approval"), { status: 409 });
+  const periods = await prisma.importedPaystubPeriod.findMany({
+    where: { employeeId, ...(Object.keys(range).length ? { periodEnd: range } : {}) },
+    orderBy: { periodEnd: "desc" },
+    select: { id: true, periodStart: true, periodEnd: true, payDate: true, record: true },
+  });
+  return { employee, periods, records: periods.map((period) => importedRecord(period.record)) };
+}
+
+employeeRoutes.get("/employee/imported-paystubs", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employee account is linked" });
+    const { employee, periods } = await importedContext(employeeId, req.query);
+    res.setHeader("Cache-Control", "no-store, private");
+    return res.json({
+      employee: { legalName: employee.legalName, employeeCode: employee.employeeCode, mapped: Boolean(employee.payrollSourceName) },
+      periods: periods.map(({ id, periodStart, periodEnd, payDate }) => ({ id, periodStart, periodEnd, payDate })),
+    });
+  } catch (error: any) {
+    return res.status(error?.status || 500).json({ error: error?.message || "Failed to load paystubs" });
+  }
+});
+
+employeeRoutes.get("/employee/imported-paystubs/pdf", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employee account is linked" });
+    const { employee, records } = await importedContext(employeeId, req.query);
+    if (!records.length) return res.status(404).json({ error: "No paystubs are available for that date range" });
+    if (!employee.addressLine1 || !employee.ssnLast4 || !employee.employeeCode) return res.status(409).json({ error: "Complete your address and ask payroll to assign your employee code" });
+    const pdf = await generateUploadedPaystubPdf(employee.legalName, {
+      addressLine1: employee.addressLine1,
+      addressLine2: [employee.addressLine2, [employee.city, employee.state].filter(Boolean).join(", "), employee.zip].filter(Boolean).join(" "),
+      ssnLast4: employee.ssnLast4,
+      employeeId: employee.employeeCode,
+    }, records);
+    await prisma.paystubAccessLog.create({ data: { employeeId, action: "DOWNLOAD", periodCount: records.length, ipAddress: req.ip || null, fromDate: records[records.length - 1]?.periodStart, toDate: records[0]?.periodEnd } });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="wezen-paystubs-${new Date().toISOString().slice(0, 10)}.pdf"`);
+    res.setHeader("Cache-Control", "no-store, private");
+    return res.send(pdf);
+  } catch (error: any) {
+    return res.status(error?.status || 500).json({ error: error?.message || "Failed to generate paystubs" });
+  }
+});
+
+employeeRoutes.post("/employee/imported-paystubs/email", async (req, res) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) return res.status(400).json({ error: "No employee account is linked" });
+    const { employee, records } = await importedContext(employeeId, req.body || {});
+    if (!records.length) return res.status(404).json({ error: "No paystubs are available for that date range" });
+    if (!employee.addressLine1 || !employee.ssnLast4 || !employee.employeeCode) return res.status(409).json({ error: "Complete your address and ask payroll to assign your employee code" });
+    const pdf = await generateUploadedPaystubPdf(employee.legalName, {
+      addressLine1: employee.addressLine1,
+      addressLine2: [employee.addressLine2, [employee.city, employee.state].filter(Boolean).join(", "), employee.zip].filter(Boolean).join(" "),
+      ssnLast4: employee.ssnLast4,
+      employeeId: employee.employeeCode,
+    }, records);
+    const year = records[0].periodEnd.getUTCFullYear();
+    const fileName = `wezen-paystubs-${year}.pdf`;
+    await sendPaystubEmail({ to: employee.email, employeeName: employee.legalName, year, fileName, pdf });
+    await prisma.paystubAccessLog.create({ data: { employeeId, action: "EMAIL", periodCount: records.length, ipAddress: req.ip || null, fromDate: records[records.length - 1]?.periodStart, toDate: records[0]?.periodEnd } });
+    return res.json({ ok: true, email: employee.email, payPeriods: records.length });
+  } catch (error: any) {
+    return res.status(error?.status || 500).json({ error: error?.message || "Failed to email paystubs" });
+  }
+});
 
 async function computeLoanDeductionCentsForPeriod(employeeId: string, from?: string, to?: string) {
   // only count loans that still have outstanding > 0

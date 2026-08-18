@@ -34,9 +34,17 @@
     	  "name": "SES_FROM_EMAIL",
    	  "value": "noreply@wezenstaffing.com"
  	 },
-	{
-	  "name": "FRONTEND_URL",
- 	  "value": "https://payroll.wezenstaffing.com"
+                {
+                    "name": "FRONTEND_URL",
+                    "value": "https://payroll.wezenstaffing.com"
+                },
+                {
+                    "name": "PAYROLL_ONEDRIVE_FOLDER",
+                    "value": "Payroll/Payroll Files/2026"
+                },
+                {
+                    "name": "PAYROLL_SYNC_INTERVAL_MINUTES",
+                    "value": "1440"
 	},
         {
           "name": "ADMIN_OVERRIDE_PIN",
@@ -48,10 +56,30 @@
     "name": "DATABASE_URL",
     "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-database-url-cUrxz0"
   },
-  {
-    "name": "JWT_SECRET",
-    "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-jwt-secret-CRPeTC"
-  }
+                {
+                    "name": "JWT_SECRET",
+                    "valueFrom": "arn:aws:secretsmanager:us-west-1:211125653940:secret:wezen-payroll-jwt-secret-CRPeTC"
+                },
+                {
+                    "name": "MS_TENANT_ID",
+                    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_TENANT_ID"
+                },
+                {
+                    "name": "MS_CLIENT_ID",
+                    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_CLIENT_ID"
+                },
+                {
+                    "name": "MS_CLIENT_SECRET",
+                    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_CLIENT_SECRET"
+                },
+                {
+                    "name": "MS_ONEDRIVE_USER",
+                    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/staffing/MS_ONEDRIVE_USER"
+                },
+                {
+                    "name": "PAYROLL_INTEGRATION_SECRET",
+                    "valueFrom": "arn:aws:ssm:us-west-1:211125653940:parameter/wezen/shared/PAYROLL_INTEGRATION_SECRET"
+                }
 ]
       ,
       "environmentFiles": [],

@@ -198,6 +198,7 @@ model ProfessionalProfile {
   city                      String?
   state                     String?
   zipCode                   String?
+  ssnLast4                  String?
   maxDistanceMiles          Int?          @default(25)
   openShiftAlertsEnabled    Boolean       @default(false)
   openShiftAlertRadiusMiles Int?          @default(50)
@@ -620,7 +621,6 @@ model FacilityExternalWorker {
   @@unique([facilityId, professionalId, externalSystem])
   @@index([externalWorkerId])
 }
-
 
 
 

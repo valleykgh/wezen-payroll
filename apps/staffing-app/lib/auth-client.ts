@@ -160,6 +160,7 @@ export async function registerProfessionalRequest(payload: {
   city?: string;
   state?: string;
   zipCode?: string;
+  ssnLast4: string;
 }) {
   const res = await fetch(`${STAFFING_API_BASE_URL}/api/auth/register-professional`, {
     method: 'POST',

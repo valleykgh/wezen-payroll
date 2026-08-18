@@ -270,11 +270,14 @@ async function uploadAdminDocument() {
 
       const text = await res.text();
       if (!res.ok) throw new Error(formatApiErrorText(text, `Failed to ${action} worker`));
+      const result = text ? JSON.parse(text) : null;
 
       await load(professionalId);
       setMessage(
         action === 'approve'
-          ? 'Worker approved by Wezen.'
+          ? result?.payrollProvisioning?.ok
+            ? 'Worker approved. Payroll account provisioned and activation email prepared.'
+            : `Worker approved, but payroll provisioning needs attention: ${result?.payrollProvisioning?.error || 'unknown error'}`
           : 'Worker moved back to under review.'
       );
     } catch (error) {
