@@ -33,7 +33,7 @@ import { sendEmail, sendEmailWithAttachment } from './services/email.js';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
-import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveFolderByPath, deleteCandidateFoldersByDocumentItemIds } from './services/onedrive.js';
+import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveDocumentItems } from './services/onedrive.js';
 import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder } from './services/onedrive.js';
 
 const app = express();
@@ -7169,15 +7169,18 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
         return res.status(409).json({ error: `OneDrive folder is shared with another worker and was not deleted: ${folder}` });
       }
     }
+    let deletedOneDriveDocumentCount = 0;
     if (oneDriveItemIds.length) {
       const protectedDocuments = await prisma.professionalDocument.findMany({
         where: { professionalId: { not: professionalId }, oneDriveItemId: { not: null } },
         select: { oneDriveItemId: true },
       });
       const protectedItemIds = protectedDocuments.map((document) => document.oneDriveItemId).filter((value): value is string => Boolean(value));
-      await deleteCandidateFoldersByDocumentItemIds(oneDriveItemIds, protectedItemIds);
-    } else {
-      for (const folder of oneDriveFolders) await deleteOneDriveFolderByPath(folder);
+      deletedOneDriveDocumentCount = await deleteOneDriveDocumentItems(oneDriveItemIds, protectedItemIds);
+    } else if (oneDriveFolders.length) {
+      return res.status(409).json({
+        error: 'This legacy account has OneDrive folder references but no document item IDs, so its files cannot be deleted safely.',
+      });
     }
 
     await prisma.professionalDocument.deleteMany({
@@ -7208,7 +7211,7 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
       actorUserId: req.authUser?.userId,
       action: 'WORKER_DELETED', entityType: 'ProfessionalProfile', entityId: professionalId,
       summary: `Deleted ${worker.isTestAccount ? 'test ' : ''}worker ${worker.user.email}`,
-      detailsJson: { email: worker.user.email, isTestAccount: worker.isTestAccount, oneDriveFolders },
+      detailsJson: { email: worker.user.email, isTestAccount: worker.isTestAccount, oneDriveFolders, deletedOneDriveDocumentCount },
     });
 
     res.json({
@@ -7216,7 +7219,8 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
         deletedProfessionalId: professionalId,
         deletedUserId: worker.userId,
         email: worker.user.email,
-        deletedOneDriveFolders: oneDriveFolders,
+        deletedOneDriveDocumentCount,
+        retainedOneDriveFolders: oneDriveFolders,
       },
     });
   } catch (error) {

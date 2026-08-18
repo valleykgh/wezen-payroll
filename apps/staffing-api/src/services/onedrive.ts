@@ -253,70 +253,29 @@ export async function deleteOneDriveFolderByPath(folderPath: string) {
   }
 }
 
-export async function deleteCandidateFoldersByDocumentItemIds(itemIds: string[], protectedItemIds: string[] = []) {
+export async function deleteOneDriveDocumentItems(itemIds: string[], protectedItemIds: string[] = []) {
   const accessToken = await getMicrosoftGraphAccessToken();
   const userPrincipalName = getRequiredEnv('MS_ONEDRIVE_USER');
-  const itemCache = new Map<string, any>();
-
-  const getItem = async (itemId: string) => {
-    if (itemCache.has(itemId)) return itemCache.get(itemId);
-    try {
-      const response = await axios.get(
-        `${GRAPH_BASE_URL}/users/${encodeURIComponent(userPrincipalName)}/drive/items/${encodeURIComponent(itemId)}?$select=id,name,parentReference,folder,file`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      itemCache.set(itemId, response.data);
-      return response.data;
-    } catch (error: any) {
-      if (error?.response?.status === 404) return null;
-      throw error;
-    }
-  };
-
-  const candidateFolderIdForDocument = async (documentItemId: string) => {
-    const documentItem = await getItem(documentItemId);
-    let childId = String(documentItem?.parentReference?.id || '');
-    for (let depth = 0; childId && depth < 10; depth += 1) {
-      const child = await getItem(childId);
-      const parentId = String(child?.parentReference?.id || '');
-      if (!child || !parentId) break;
-      const parent = await getItem(parentId);
-      if (String(parent?.name || '').trim().toLocaleLowerCase() === 'candidate documents - new') {
-        return childId;
-      }
-      childId = parentId;
-    }
-    throw new Error('Refusing to delete a document folder not contained in Candidate Documents - New');
-  };
-
-  const resolveParentIds = async (ids: string[]) => {
-    const resolved = new Set<string>();
-    for (const itemId of [...new Set(ids.filter(Boolean))]) {
-      const item = await getItem(itemId);
-      if (!item) continue;
-      resolved.add(await candidateFolderIdForDocument(itemId));
-    }
-    return resolved;
-  };
-
-  const parentIds = await resolveParentIds(itemIds);
-  const protectedParentIds = await resolveParentIds(protectedItemIds);
-  const sharedParentId = [...parentIds].find((parentId) => protectedParentIds.has(parentId));
-  if (sharedParentId) {
-    throw new Error('Refusing to delete a OneDrive folder referenced by another worker');
+  const targetIds = [...new Set(itemIds.filter(Boolean))];
+  const protectedIds = new Set(protectedItemIds.filter(Boolean));
+  const sharedItemId = targetIds.find((itemId) => protectedIds.has(itemId));
+  if (sharedItemId) {
+    throw new Error('Refusing to delete a OneDrive document referenced by another worker');
   }
 
-  for (const parentId of parentIds) {
+  let deletedCount = 0;
+  for (const itemId of targetIds) {
     try {
       await axios.delete(
-        `${GRAPH_BASE_URL}/users/${encodeURIComponent(userPrincipalName)}/drive/items/${encodeURIComponent(parentId)}`,
+        `${GRAPH_BASE_URL}/users/${encodeURIComponent(userPrincipalName)}/drive/items/${encodeURIComponent(itemId)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      deletedCount += 1;
     } catch (error: any) {
       if (error?.response?.status !== 404) throw error;
     }
   }
-  return parentIds.size;
+  return deletedCount;
 }
 
 export async function uploadBufferToCandidatePackageFolder(params: {
