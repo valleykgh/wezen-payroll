@@ -8,7 +8,7 @@ async function main() {
   // ✅ Pick a role that exists in your enum.
   // If you're not sure, run:
   // grep -n "enum UserRole" -n prisma/schema.prisma -A20
-  const ADMIN_ROLE = "ADMIN" as any;
+  const ADMIN_ROLE = "SUPER_ADMIN" as const;
   const passwordHash = await bcrypt.hash("Admin123!", 10);
   // Admin user
   const admin = await prisma.user.upsert({
@@ -18,7 +18,7 @@ async function main() {
       email: "admin@wezenstaffing.com",
       role: ADMIN_ROLE,
       passwordHash,
-    } as any,
+    },
   });
   // Facility (no organizationId)
   const facility = await prisma.facility.upsert({

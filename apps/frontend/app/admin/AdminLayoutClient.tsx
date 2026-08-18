@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { apiBase } from "../lib/api";
 
 const primaryNav = [
   { href: "/admin", label: "Dashboard" },
@@ -11,6 +12,7 @@ const primaryNav = [
   { href: "/admin/missed-time", label: "Exceptions" },
   { href: "/admin/pay-period-summary", label: "Pay Summary" },
   { href: "/admin/payroll-runs", label: "Payroll Runs" },
+  { href: "/admin/paystub-generator", label: "Paystub Generator" },
   { href: "/admin/payroll-adjustments", label: "Adjustments" },
 ];
 
@@ -44,10 +46,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 async function handleLogout() {
   try {
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:4000";
-
-    await fetch(`${apiBase}/api/auth/logout`, {
+    await fetch(`${apiBase()}/api/auth/logout`, {
       method: "POST",
       credentials: "include",
     });

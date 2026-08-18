@@ -80,3 +80,82 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function encodeHeader(value: string) {
+  return Buffer.from(value, "utf8").toString("base64");
+}
+
+function wrapBase64(value: string) {
+  return value.match(/.{1,76}/g)?.join("\r\n") || value;
+}
+
+export async function sendPaystubEmail(args: {
+  to: string;
+  employeeName: string;
+  year: number;
+  fileName: string;
+  pdf: Buffer;
+}) {
+  if (!fromEmail) throw new Error("SES_FROM_EMAIL is not configured");
+
+  const boundary = `wezen-paystub-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const alternativeBoundary = `${boundary}-alternative`;
+  const subject = `Your ${args.year} Wezen Staffing paystubs`;
+  const safeName = escapeHtml(args.employeeName || "there");
+  const text = [
+    `Hello ${args.employeeName || "there"},`,
+    "",
+    `Attached are your ${args.year} Wezen Staffing paystubs.`,
+    "",
+    "This document contains private payroll information. Please keep it secure.",
+  ].join("\r\n");
+  const html = [
+    '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">',
+    `<p>Hello ${safeName},</p>`,
+    `<p>Attached are your ${args.year} Wezen Staffing paystubs.</p>`,
+    '<p style="color:#475569">This document contains private payroll information. Please keep it secure.</p>',
+    "</div>",
+  ].join("");
+
+  const raw = [
+    `From: ${fromEmail}`,
+    `To: ${args.to}`,
+    `Subject: =?UTF-8?B?${encodeHeader(subject)}?=`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`,
+    "",
+    `--${alternativeBoundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+    "",
+    `--${alternativeBoundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html,
+    "",
+    `--${alternativeBoundary}--`,
+    "",
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${args.fileName}"`,
+    `Content-Disposition: attachment; filename="${args.fileName}"`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(args.pdf.toString("base64")),
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+
+  return ses.send(
+    new SendEmailCommand({
+      FromEmailAddress: fromEmail,
+      Destination: { ToAddresses: [args.to] },
+      Content: { Raw: { Data: Buffer.from(raw) } },
+    }),
+  );
+}

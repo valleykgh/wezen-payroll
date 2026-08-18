@@ -1,4 +1,8 @@
-function apiBase(): string {
+export function apiBase(): string {
+  // In local development, keep browser requests same-origin and let the
+  // Next.js rewrite proxy /api to the Express server on port 4000.
+  if (process.env.NODE_ENV === "development") return "";
+
   const base = process.env.NEXT_PUBLIC_API_URL;
   if (!base) return "http://localhost:4000";
   return base.replace(/\/+$/, "");

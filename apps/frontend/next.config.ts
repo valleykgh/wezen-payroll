@@ -1,10 +1,15 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
-  reactCompiler: true,
-  turbopack: {
-    root: path.resolve(__dirname),
+  async rewrites() {
+    if (process.env.NODE_ENV !== "development") return [];
+
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${process.env.API_PROXY_TARGET || "http://localhost:4000"}/api/:path*`,
+      },
+    ];
   },
 };
 

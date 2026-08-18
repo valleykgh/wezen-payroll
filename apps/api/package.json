@@ -12,9 +12,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "migrate:deploy": "prisma migrate deploy --schema ../../prisma/schema.prisma",
-    "seed": "prisma db seed --schema ../../prisma/schema.prisma",
+    "seed": "node --import tsx ../../prisma/seed.ts",
     "start:prod": "npm run start",
-    "repair:bad-payroll-run": "node dist/scripts/repairBadPayrollRun.js"
+    "repair:bad-payroll-run": "node dist/scripts/repairBadPayrollRun.js",
+    "test:paystub-generator": "node --import tsx --test src/services/paystubGenerator.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1006.0",

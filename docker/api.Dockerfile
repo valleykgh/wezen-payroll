@@ -23,5 +23,7 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY prisma ./prisma
 COPY apps/api/payroll-ukg-imports.sql /app/payroll-ukg-imports.sql
 COPY apps/api/scripts ./scripts
+COPY tools/payroll-toolkit/wezen-payroll-toolkit/templates/Wezen_Payroll_Toolkit_Starter.xlsm /app/assets/Wezen_Payroll_Toolkit_Starter.xlsm
+COPY apps/staffing-web/public/icons/icon-512.png /app/assets/wezen-logo.png
 
 CMD ["npm", "run", "start:prod"]

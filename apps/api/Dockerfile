@@ -13,6 +13,8 @@ RUN npm install
 # Copy source after install for better layer caching
 WORKDIR /app
 COPY apps/api ./apps/api
+COPY tools/payroll-toolkit/wezen-payroll-toolkit/templates/Wezen_Payroll_Toolkit_Starter.xlsm ./apps/api/assets/Wezen_Payroll_Toolkit_Starter.xlsm
+COPY apps/staffing-web/public/icons/icon-512.png ./apps/api/assets/wezen-logo.png
 
 # Build
 WORKDIR /app/apps/api

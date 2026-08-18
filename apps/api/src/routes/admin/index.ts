@@ -13,6 +13,7 @@ import adminUsersRoutes from "./adminUsers";
 import exceptionsRoutes from "./exceptions";
 import systemRoutes from "./system";
 import payrollImportsRoutes from "./payrollImports";
+import paystubGeneratorRoutes from "./paystubGenerator";
 
 const router = express.Router();
 
@@ -29,5 +30,6 @@ router.use("/", adminUsersRoutes);
 router.use("/", exceptionsRoutes);
 router.use("/", systemRoutes);
 router.use("/", payrollImportsRoutes);
+router.use("/", paystubGeneratorRoutes);
 
 export default router;
