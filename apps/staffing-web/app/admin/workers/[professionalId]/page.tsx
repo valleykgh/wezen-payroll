@@ -41,6 +41,7 @@ type WorkerDetail = {
   onboardingStatus?: string | null;
   approvedByWezen: boolean;
   isSystemUser?: boolean;
+  isTestAccount?: boolean;
   firstName?: string | null;
   lastName?: string | null;
   email: string;
@@ -618,7 +619,7 @@ async function downloadAllDocuments() {
   async function deleteWorker() {
     try {
       const confirmed = window.confirm(
-        'Are you sure you want to permanently delete this worker? This should only be used for test or duplicate accounts.'
+        `Permanently delete this ${worker?.isTestAccount ? 'TEST ' : ''}worker, all related history, and the candidate's OneDrive documents? This cannot be undone.`
       );
 
       if (!confirmed) return;
@@ -640,6 +641,30 @@ async function downloadAllDocuments() {
       window.location.href = '/admin/workers';
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to delete worker');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setTestAccount(isTestAccount: boolean) {
+    try {
+      const confirmed = window.confirm(
+        isTestAccount
+          ? 'Mark this worker as a TEST account? This enables permanent deletion even when shift history exists.'
+          : 'Remove TEST account status?'
+      );
+      if (!confirmed) return;
+      setBusy(true);
+      const res = await fetch(`${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/test-account`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isTestAccount }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to update test account status'));
+      await load(professionalId);
+      setMessage(isTestAccount ? 'Worker marked as a test account.' : 'Test account status removed.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update test account status');
     } finally {
       setBusy(false);
     }
@@ -1292,6 +1317,13 @@ const icaSignedStepLabel = isIcaSigned
 
         <div className="mt-4 flex flex-wrap gap-3">
           <button
+            onClick={() => setTestAccount(!worker.isTestAccount)}
+            disabled={busy || worker.isSystemUser}
+            className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100 disabled:opacity-60"
+          >
+            {worker.isTestAccount ? 'Remove Test Account Flag' : 'Mark as Test Account'}
+          </button>
+          <button
             onClick={rejectWorker}
             disabled={busy}
             className="inline-flex items-center justify-center rounded-full bg-rose-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
@@ -1301,12 +1333,15 @@ const icaSignedStepLabel = isIcaSigned
 
           <button
             onClick={deleteWorker}
-            disabled={busy}
+            disabled={busy || (worker.requests.length > 0 && !worker.isTestAccount)}
             className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-white px-5 py-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:opacity-60"
           >
-            Delete Worker
+            {worker.isTestAccount ? 'Delete Test Account' : 'Delete Worker'}
           </button>
         </div>
+        {worker.requests.length > 0 && !worker.isTestAccount ? (
+          <p className="mt-3 text-sm text-amber-700">This account has shift history. Mark it as a Test account to enable the deletion override.</p>
+        ) : null}
       </>
     ) : null}
   </>

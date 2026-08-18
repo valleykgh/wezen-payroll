@@ -56,6 +56,29 @@ async function download(itemId: string, token: string) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+export type OneDrivePayrollSyncStatus = {
+  state: "idle" | "running" | "completed" | "failed";
+  startedAt: string | null;
+  completedAt: string | null;
+  filesFound: number;
+  filesProcessed: number;
+  mappedEmployees: number;
+  importedPeriods: number;
+  currentFile: string | null;
+  warnings: string[];
+  error: string | null;
+};
+
+let syncStatus: OneDrivePayrollSyncStatus = {
+  state: "idle", startedAt: null, completedAt: null, filesFound: 0,
+  filesProcessed: 0, mappedEmployees: 0, importedPeriods: 0,
+  currentFile: null, warnings: [], error: null,
+};
+
+export function getOneDrivePayrollSyncStatus(): OneDrivePayrollSyncStatus {
+  return { ...syncStatus, warnings: [...syncStatus.warnings] };
+}
+
 export async function syncOneDrivePayroll() {
   const token = await graphToken();
   const files = await listPayrollFiles(token);
@@ -66,8 +89,10 @@ export async function syncOneDrivePayroll() {
   const mapping = new Map(employees.map((employee) => [employee.payrollSourceName!.trim().toLocaleLowerCase(), employee.id]));
   let importedPeriods = 0;
   const warnings: string[] = [];
+  syncStatus = { ...syncStatus, filesFound: files.length, mappedEmployees: mapping.size };
 
   for (const item of files) {
+    syncStatus = { ...syncStatus, currentFile: item.name };
     try {
       const buffer = await download(item.id, token);
       const parsed = await parsePayrollWorkbooks([{ originalname: item.name, buffer }]);
@@ -95,6 +120,13 @@ export async function syncOneDrivePayroll() {
       }
     } catch (error: any) {
       warnings.push(`${item.name}: ${error?.message || "sync failed"}`);
+    } finally {
+      syncStatus = {
+        ...syncStatus,
+        filesProcessed: syncStatus.filesProcessed + 1,
+        importedPeriods,
+        warnings: [...warnings],
+      };
     }
   }
   return { filesFound: files.length, mappedEmployees: mapping.size, importedPeriods, warnings };
@@ -105,11 +137,24 @@ let syncRunning = false;
 export function queueOneDrivePayrollSync() {
   if (syncRunning) return false;
   syncRunning = true;
+  syncStatus = {
+    state: "running", startedAt: new Date().toISOString(), completedAt: null,
+    filesFound: 0, filesProcessed: 0, mappedEmployees: 0, importedPeriods: 0,
+    currentFile: null, warnings: [], error: null,
+  };
   void syncOneDrivePayroll()
     .then((result) => {
+      syncStatus = {
+        ...syncStatus, state: "completed", completedAt: new Date().toISOString(),
+        currentFile: null, ...result, warnings: [...result.warnings],
+      };
       console.log("OneDrive payroll synchronization complete", { filesFound: result.filesFound, importedPeriods: result.importedPeriods, warnings: result.warnings.length });
     })
     .catch((error) => {
+      syncStatus = {
+        ...syncStatus, state: "failed", completedAt: new Date().toISOString(),
+        currentFile: null, error: error instanceof Error ? error.message : "Synchronization failed",
+      };
       console.error("OneDrive payroll synchronization failed", error);
     })
     .finally(() => {

@@ -209,6 +209,7 @@ model ProfessionalProfile {
   bio                       String?
   onboardingStatus          String?       @default("PENDING")
   approvedByWezen           Boolean       @default(false)
+  isTestAccount             Boolean       @default(false)
   latitude                  Float?
   longitude                 Float?
   createdAt                 DateTime      @default(now())
@@ -621,6 +622,5 @@ model FacilityExternalWorker {
   @@unique([facilityId, professionalId, externalSystem])
   @@index([externalWorkerId])
 }
-
 
 

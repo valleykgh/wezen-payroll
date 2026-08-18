@@ -214,6 +214,26 @@ export async function downloadOneDriveFileBuffer(itemId: string) {
   return Buffer.from(response.data);
 }
 
+export async function deleteOneDriveFolderByPath(folderPath: string) {
+  const accessToken = await getMicrosoftGraphAccessToken();
+  const rootPrefix = await getDriveRootPathPrefix();
+  const normalized = folderPath.split('/').map(sanitizeFolderSegment).filter(Boolean).join('/');
+  if (!normalized.startsWith('Candidate Documents - New/')) {
+    throw new Error('Refusing to delete a folder outside Candidate Documents - New');
+  }
+
+  try {
+    await axios.delete(
+      `${GRAPH_BASE_URL}${rootPrefix}:/${encodeURIComponent(normalized)}`.replace(/%2F/g, '/'),
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return true;
+  } catch (error: any) {
+    if (error?.response?.status === 404) return false;
+    throw error;
+  }
+}
+
 export async function uploadBufferToCandidatePackageFolder(params: {
   firstName?: string | null;
   lastName?: string | null;

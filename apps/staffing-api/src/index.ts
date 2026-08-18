@@ -33,7 +33,7 @@ import { sendEmail, sendEmailWithAttachment } from './services/email.js';
 import { createHash, randomBytes } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
-import { getOneDriveInfo, listOneDriveRootChildren,downloadOneDriveFileBuffer } from './services/onedrive.js';
+import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveFolderByPath } from './services/onedrive.js';
 import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder } from './services/onedrive.js';
 
 const app = express();
@@ -6181,6 +6181,7 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
         bio: worker.bio,
         onboardingStatus: worker.onboardingStatus,
         approvedByWezen: worker.approvedByWezen,
+        isTestAccount: worker.isTestAccount,
         isSystemUser: worker.user.isSystemUser,
         firstName: worker.user.firstName,
         lastName: worker.user.lastName,
@@ -7042,6 +7043,33 @@ app.post('/api/admin/workers/:professionalId/reject', requireRole('INTERNAL_ADMI
   }
 });
 
+app.put('/api/admin/workers/:professionalId/test-account', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
+  try {
+    if (!(await requireDefaultInternalAdmin(req, res))) return;
+    const professionalId = String(req.params.professionalId || '');
+    const isTestAccount = req.body?.isTestAccount;
+    if (typeof isTestAccount !== 'boolean') {
+      return res.status(400).json({ error: 'isTestAccount must be true or false' });
+    }
+    const worker = await prisma.professionalProfile.findUnique({ where: { id: professionalId }, include: { user: true } });
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+    if (worker.user.isSystemUser) return res.status(403).json({ error: 'System users cannot be marked as test accounts' });
+
+    const updated = await prisma.professionalProfile.update({ where: { id: professionalId }, data: { isTestAccount } });
+    await createAdminAuditLog({
+      actorUserId: req.authUser?.userId,
+      action: isTestAccount ? 'WORKER_MARKED_TEST' : 'WORKER_UNMARKED_TEST',
+      entityType: 'ProfessionalProfile', entityId: professionalId,
+      summary: `${worker.user.email} ${isTestAccount ? 'marked as' : 'removed from'} test account status`,
+      detailsJson: { email: worker.user.email, isTestAccount },
+    });
+    return res.json({ data: { id: updated.id, isTestAccount: updated.isTestAccount } });
+  } catch (error) {
+    console.error('PUT /api/admin/workers/:professionalId/test-account error:', error);
+    return res.status(500).json({ error: 'Failed to update test account status' });
+  }
+});
+
 app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), async (req: AuthedRequest, res) => {
   try {
     if (!(await requireDefaultInternalAdmin(req, res))) return;
@@ -7071,10 +7099,21 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
     error: 'Core internal admin account cannot be deleted',
   });
 }
-    if (worker.requests.length > 0) {
+    if (worker.requests.length > 0 && !worker.isTestAccount) {
       return res.status(400).json({
-        error: 'Cannot delete a worker that has shift request history. Remove only test/empty accounts.',
+        error: 'This worker has shift history. Mark it as a Test account before using the deletion override.',
       });
+    }
+
+    const oneDriveFolders = [...new Set(worker.documents.map((document) => document.oneDriveFolder).filter((value): value is string => Boolean(value)))];
+    for (const folder of oneDriveFolders) {
+      const usedByAnotherWorker = await prisma.professionalDocument.count({
+        where: { oneDriveFolder: folder, professionalId: { not: professionalId } },
+      });
+      if (usedByAnotherWorker > 0) {
+        return res.status(409).json({ error: `OneDrive folder is shared with another worker and was not deleted: ${folder}` });
+      }
+      await deleteOneDriveFolderByPath(folder);
     }
 
     await prisma.professionalDocument.deleteMany({
@@ -7101,11 +7140,19 @@ app.delete('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), 
       where: { id: worker.userId },
     });
 
+    await createAdminAuditLog({
+      actorUserId: req.authUser?.userId,
+      action: 'WORKER_DELETED', entityType: 'ProfessionalProfile', entityId: professionalId,
+      summary: `Deleted ${worker.isTestAccount ? 'test ' : ''}worker ${worker.user.email}`,
+      detailsJson: { email: worker.user.email, isTestAccount: worker.isTestAccount, oneDriveFolders },
+    });
+
     res.json({
       data: {
         deletedProfessionalId: professionalId,
         deletedUserId: worker.userId,
         email: worker.user.email,
+        deletedOneDriveFolders: oneDriveFolders,
       },
     });
   } catch (error) {

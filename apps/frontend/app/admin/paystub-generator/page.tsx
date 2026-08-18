@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type RecordRow = {
   sourceFile: string;
@@ -27,6 +27,19 @@ type Summary = {
   previousPayments: number;
   actualPayments: number;
   totalPaid: number;
+};
+
+type SyncStatus = {
+  state: "idle" | "running" | "completed" | "failed";
+  startedAt: string | null;
+  completedAt: string | null;
+  filesFound: number;
+  filesProcessed: number;
+  mappedEmployees: number;
+  importedPeriods: number;
+  currentFile: string | null;
+  warnings: string[];
+  error: string | null;
 };
 
 // Large multipart payroll uploads go directly to Express. Sending them through
@@ -61,6 +74,23 @@ export default function PaystubGeneratorPage() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [syncResult, setSyncResult] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+
+  async function refreshSyncStatus() {
+    const response = await fetch(`${apiBase()}/api/admin/paystub-generator/sync-onedrive/status`, { credentials: "include", cache: "no-store" });
+    if (!response.ok) throw new Error(await errorMessage(response));
+    setSyncStatus(await response.json());
+  }
+
+  useEffect(() => {
+    void refreshSyncStatus().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (syncStatus?.state !== "running") return;
+    const timer = window.setInterval(() => void refreshSyncStatus().catch(() => undefined), 3000);
+    return () => window.clearInterval(timer);
+  }, [syncStatus?.state]);
 
   async function syncOneDrive() {
     setBusy("sync"); setError(""); setSyncResult("");
@@ -68,7 +98,8 @@ export default function PaystubGeneratorPage() {
       const response = await fetch(`${apiBase()}/api/admin/paystub-generator/sync-onedrive`, { method: "POST", credentials: "include" });
       if (!response.ok) throw new Error(await errorMessage(response));
       const data = await response.json();
-      setSyncResult(data.started ? "OneDrive synchronization started. It will continue securely in the background; check again in a few minutes." : data.message);
+      setSyncResult(data.message);
+      await refreshSyncStatus();
     } catch (err: any) { setError(err?.message || "OneDrive sync failed"); }
     finally { setBusy(""); }
   }
@@ -183,6 +214,22 @@ export default function PaystubGeneratorPage() {
           {busy === "sync" ? "Synchronizing…" : "Sync payroll files from OneDrive"}
         </button>
         {syncResult ? <p className="mt-3 text-sm font-semibold text-green-700">{syncResult}</p> : null}
+        {syncStatus && syncStatus.state !== "idle" ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className={syncStatus.state === "failed" ? "text-red-700" : syncStatus.state === "completed" ? "text-green-700" : "text-cyan-700"}>
+                {syncStatus.state === "running" ? "Synchronization in progress" : syncStatus.state === "completed" ? "Synchronization completed" : "Synchronization failed"}
+              </strong>
+              <button type="button" onClick={() => void refreshSyncStatus()} className="font-semibold text-cyan-700 underline">Refresh status</button>
+            </div>
+            <p className="mt-2">Files processed: {syncStatus.filesProcessed}{syncStatus.filesFound ? ` of ${syncStatus.filesFound}` : ""}</p>
+            <p>Pay periods imported: {syncStatus.importedPeriods} · Employees mapped: {syncStatus.mappedEmployees}</p>
+            {syncStatus.currentFile ? <p className="truncate">Current file: {syncStatus.currentFile}</p> : null}
+            {syncStatus.completedAt ? <p>Finished: {new Date(syncStatus.completedAt).toLocaleString()}</p> : null}
+            {syncStatus.error ? <p className="mt-2 text-red-700">{syncStatus.error}</p> : null}
+            {syncStatus.warnings.length ? <p className="mt-2 text-amber-700">Warnings: {syncStatus.warnings.length}</p> : null}
+          </div>
+        ) : null}
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Admin tool</p>
