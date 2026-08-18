@@ -49,8 +49,22 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
         zip: String(req.body?.zip || "").replace(/\D/g, "") || null,
         ssnLast4: ssnLast4 || null,
       },
-      select: { id: true, email: true, legalName: true, preferredName: true, user: { select: { id: true } } },
+      select: { id: true, email: true, legalName: true, preferredName: true, user: { select: { id: true, employeeId: true } } },
     });
+
+    // A legacy user with the same email may exist without being related to
+    // this employee yet, so look it up independently of Employee.user.
+    const payrollUser = employee.user ?? await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, employeeId: true },
+    });
+
+    if (payrollUser && payrollUser.employeeId !== employee.id) {
+      await prisma.user.update({
+        where: { id: payrollUser.id },
+        data: { employeeId: employee.id, role: "EMPLOYEE", active: true },
+      });
+    }
 
     const staffingProfessionalId = String(req.body?.staffingProfessionalId || "").trim();
     if (staffingProfessionalId) {
@@ -62,7 +76,7 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
     }
 
     let invitationSent = false;
-    if (!employee.user) {
+    if (!payrollUser) {
       let invite = await prisma.invite.findFirst({ where: { employeeId: employee.id, usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } });
       if (!invite) {
         invite = await prisma.invite.create({ data: { employeeId: employee.id, email, token: crypto.randomBytes(32).toString("hex"), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
@@ -71,7 +85,7 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
       await sendEmployeeInviteEmail({ to: email, employeeName: employee.preferredName || employee.legalName, inviteUrl: `${base}/employee/setup-password?token=${invite.token}` });
       invitationSent = true;
     }
-    return res.json({ ok: true, employeeId: employee.id, invitationSent, activated: Boolean(employee.user), payrollMappingPending: true });
+    return res.json({ ok: true, employeeId: employee.id, invitationSent, activated: Boolean(payrollUser), payrollMappingPending: true });
   } catch (error: any) {
     console.error("POST /api/integrations/staffing/employee failed", error);
     if (error?.code === "P2002") return res.status(409).json({ error: "Employee code is already assigned" });

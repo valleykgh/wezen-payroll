@@ -193,7 +193,7 @@ async function computeLoanDeductionCentsForPeriod(employeeId: string, from?: str
 employeeRoutes.get("/employee/time-entries", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const { from, to } = req.query as { from?: string; to?: string };
 
@@ -235,7 +235,7 @@ employeeRoutes.get("/employee/time-entries", async (req, res) => {
 employeeRoutes.get("/employee/pay-summary", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const { from, to } = req.query as { from?: string; to?: string };
 
@@ -403,7 +403,7 @@ return res.json({
 employeeRoutes.get("/employee/profile", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -433,7 +433,7 @@ employeeRoutes.get("/employee/profile", async (req, res) => {
 employeeRoutes.get("/employee/paystub", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const { from, to } = req.query as { from?: string; to?: string };
     if (!from || !to) {
@@ -617,7 +617,7 @@ const payableHours =
 employeeRoutes.get("/employee/paystub/pdf", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const { from, to } = req.query as { from?: string; to?: string };
     if (!from || !to) {
@@ -797,7 +797,7 @@ employeeRoutes.get("/employee/paystub/pdf", async (req, res) => {
 employeeRoutes.patch("/employee/profile", async (req, res) => {
   try {
     const employeeId = req.user!.employeeId;
-    if (!employeeId) return res.status(400).json({ error: "No employeeId on user" });
+    if (!employeeId) return res.status(409).json({ error: "Your payroll account setup is not complete. If you just activated it, please sign out and sign in again. Otherwise, contact Wezen Staffing." });
 
     const employee = await prisma.employee.update({
       where: { id: employeeId },

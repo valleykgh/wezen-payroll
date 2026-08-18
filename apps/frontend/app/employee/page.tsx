@@ -120,6 +120,11 @@ async function apiFetch(path: string, init?: RequestInit) {
   });
 
   if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || "Request failed");
+    }
     const text = await res.text().catch(() => "");
     throw new Error(text || "Request failed");
   }
