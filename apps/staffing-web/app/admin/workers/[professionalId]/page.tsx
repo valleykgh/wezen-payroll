@@ -60,6 +60,7 @@ type WorkerDetail = {
     fileUrl: string;
     createdAt: string;
     storageProvider?: string | null;
+    facilityShareable?: boolean;
   }>;
   agreements: Array<{
     id: string;
@@ -477,7 +478,7 @@ async function downloadAllDocuments() {
   function openSendPackage() {
     if (!worker) return;
 
-    setSelectedDocumentIds(worker.documents.map((doc) => doc.id));
+    setSelectedDocumentIds(worker.documents.filter((doc) => doc.facilityShareable !== false).map((doc) => doc.id));
     setPackageFacilityId('');
     setPackageFacilityName('');
     setPackageRecipientEmail('');
@@ -1072,7 +1073,7 @@ const icaSignedStepLabel = isIcaSigned
           <button
             type="button"
             onClick={() =>
-              setSelectedDocumentIds(worker.documents.map((doc) => doc.id))
+              setSelectedDocumentIds(worker.documents.filter((doc) => doc.facilityShareable !== false).map((doc) => doc.id))
             }
             className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
           >
@@ -1090,7 +1091,7 @@ const icaSignedStepLabel = isIcaSigned
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {worker.documents.map((doc) => (
+        {worker.documents.filter((doc) => doc.facilityShareable !== false).map((doc) => (
           <label
             key={doc.id}
             className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4"

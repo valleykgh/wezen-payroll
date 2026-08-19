@@ -729,6 +729,34 @@ function getCurrentDocumentsByCategory<T extends {
   return Array.from(byCategory.values());
 }
 
+function isSensitiveIdentityDocument(document: { category: unknown; name?: string | null }) {
+  const category = String(document.category || '').toUpperCase();
+  const name = String(document.name || '');
+  return category === 'SSN' || /(^|[^a-z])ssn([^a-z]|$)|social\s*security/i.test(name);
+}
+
+function getAdminVisibleDocuments<T extends {
+  name?: string | null;
+  status: string;
+  expiresAt?: Date | string | null;
+  createdAt: Date | string;
+}>(documents: T[]) {
+  return documents
+    .filter((document) => document.status !== 'EXPIRED' && !isDocumentExpired(document) && !(document.name || '').includes('-old'))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function getFacilityShareableDocuments<T extends {
+  category: unknown;
+  name?: string | null;
+  status: string;
+  expiresAt?: Date | string | null;
+  createdAt: Date | string;
+}>(documents: T[]) {
+  return getCurrentDocumentsByCategory(documents.filter((document) => !isSensitiveIdentityDocument(document)))
+    .filter((document) => document.status !== 'EXPIRED' && !isDocumentExpired(document) && !(document.name || '').includes('-old'));
+}
+
 
 async function isDefaultInternalAdmin(userId?: string | null) {
   if (!userId) return false;
@@ -1249,6 +1277,9 @@ async function canUserAccessDocument(userId: string, role: string, documentId: s
   }
 
   if (role === 'FACILITY_ADMIN') {
+    if (isSensitiveIdentityDocument(document)) {
+      return { ok: false as const, error: 'Sensitive identity documents are not available to facilities', document: null };
+    }
     const facilityId = await getFacilityIdForUser(userId);
 
     if (!facilityId) {
@@ -1263,6 +1294,10 @@ async function canUserAccessDocument(userId: string, role: string, documentId: s
       return { ok: false as const, error: 'Forbidden', document: null };
     }
 
+    return { ok: true as const, document };
+  }
+
+  if (role === 'PROFESSIONAL' && document.professional.userId === userId) {
     return { ok: true as const, document };
   }
 
@@ -5370,9 +5405,9 @@ app.put('/api/worker/notification-settings', requireRole('PROFESSIONAL'), async 
   }
 });
 
-app.get('/api/worker/documents', async (req, res) => {
+app.get('/api/worker/documents', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
   try {
-    const professionalId = String(req.query.professionalId || '');
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
 
     if (!professionalId) {
       return res.status(400).json({ error: 'professionalId is required' });
@@ -5980,7 +6015,7 @@ app.get('/api/facility/applicants/:requestId', requireRole('FACILITY_ADMIN', 'FA
 	  request.professional.facilityDnrs.find(
 	    (item) => item.facilityId === request.shift.facilityId
 	  )?.reason ?? null,
-          documents: getCurrentDocumentsByCategory(request.professional.documents).map((doc) => ({
+          documents: getFacilityShareableDocuments(request.professional.documents).map((doc) => ({
             id: doc.id,
             name: doc.name,
             category: doc.category,
@@ -6040,7 +6075,7 @@ app.get('/api/facility/applicants/:requestId/documents', requireRole('FACILITY_A
     }
 
     res.json({
-      data: getCurrentDocumentsByCategory(requestRecord.professional.documents).map((doc) => ({
+      data: getFacilityShareableDocuments(requestRecord.professional.documents).map((doc) => ({
         id: doc.id,
         name: doc.name,
         category: doc.category,
@@ -6226,8 +6261,7 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
         lastName: worker.user.lastName,
         email: worker.user.email,
         phone: worker.user.phone,
-        documents: getCurrentDocumentsByCategory(worker.documents)
-          .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+        documents: getAdminVisibleDocuments(worker.documents)
           .map((doc) => ({
           id: doc.id,
           name: doc.name,
@@ -6237,6 +6271,7 @@ app.get('/api/admin/workers/:professionalId', requireRole('INTERNAL_ADMIN'), asy
           notes: doc.notes,
           fileUrl: doc.fileUrl,
           createdAt: doc.createdAt,
+          facilityShareable: !isSensitiveIdentityDocument(doc),
         })),
         agreements: worker.agreements.map((agreement) => ({
           id: agreement.id,
@@ -10143,8 +10178,7 @@ app.get('/api/facility/workers/:professionalId', requireRole('FACILITY_ADMIN'), 
         role: worker.role,
         city: worker.city,
         state: worker.state,
-        documents: getCurrentDocumentsByCategory(worker.documents)
-          .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'))
+        documents: getFacilityShareableDocuments(worker.documents)
           .map((doc) => ({
             id: doc.id,
             name: doc.name,
@@ -10202,8 +10236,7 @@ app.get('/api/facility/compliance', requireRole('FACILITY_ADMIN'), async (req: A
         severity: 'HIGH' | 'MEDIUM';
       }> = [];
 
-      const currentDocs = getCurrentDocumentsByCategory(worker.documents)
-        .filter((d) => !String(d.name || '').includes('-old'));
+      const currentDocs = getFacilityShareableDocuments(worker.documents);
 
       const pendingDocs = currentDocs.filter((d) => d.status === 'PENDING');
       const rejectedDocs = currentDocs.filter((d) => d.status === 'REJECTED');
@@ -10942,8 +10975,7 @@ app.get('/api/facility/workers/:workerId/documents/download-all', requireRole('F
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const downloadableDocuments = getCurrentDocumentsByCategory(worker.documents)
-      .filter((doc) => doc.status !== 'EXPIRED' && !isDocumentExpired(doc) && !doc.name.includes('-old'));
+    const downloadableDocuments = getFacilityShareableDocuments(worker.documents);
 
     if (!downloadableDocuments.length) {
       return res.status(404).json({ error: 'No documents found' });
@@ -11096,14 +11128,7 @@ app.post(
         });
       }
 
-      const currentDocuments =
-        getCurrentDocumentsByCategory(worker.documents)
-          .filter(
-            (doc) =>
-              doc.status !== 'EXPIRED' &&
-              !isDocumentExpired(doc) &&
-              !doc.name.includes('-old')
-          );
+      const currentDocuments = getFacilityShareableDocuments(worker.documents);
 
       const allowedIds =
         new Set(currentDocuments.map((doc) => doc.id));

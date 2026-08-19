@@ -123,6 +123,7 @@ export function DocumentUploadForm({ professionalId, onUploaded }: Props) {
             <option value="CPR">CPR / BLS</option>
             <option value="PHYSICAL">Physical Report</option>
             <option value="TB_REPORT">TB Report</option>
+            <option value="SSN">Social Security document</option>
             <option value="ID">State ID</option>
             <option value="VACCINATION">Vaccination Record</option>
             <option value="OTHER">Other</option>

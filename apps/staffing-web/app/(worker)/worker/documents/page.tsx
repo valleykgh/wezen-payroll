@@ -36,7 +36,7 @@ const REQUIRED_DOCUMENTS_BY_ROLE: Record<WorkerRole, RequiredDocumentItem[]> = {
     { key: 'cpr', label: 'CPR', category: 'CPR', uploadCategory: 'CPR' },
     { key: 'physical', label: 'Physical Report', category: 'PHYSICAL', uploadCategory: 'PHYSICAL' },
     { key: 'tb', label: 'TB Report', category: 'TB_REPORT', uploadCategory: 'TB_REPORT' },
-    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'OTHER', manualOnly: true },
+    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'SSN', manualOnly: true },
     { key: 'id', label: 'State ID', category: 'ID', uploadCategory: 'ID' },
     { key: 'vaccination', label: 'Vaccination Record', category: 'VACCINATION', uploadCategory: 'VACCINATION' },
     { key: 'inservice', label: 'In-Service Certifications', category: 'INSERVICE', uploadCategory: 'OTHER', manualOnly: true },
@@ -46,7 +46,7 @@ const REQUIRED_DOCUMENTS_BY_ROLE: Record<WorkerRole, RequiredDocumentItem[]> = {
     { key: 'cpr', label: 'CPR', category: 'CPR', uploadCategory: 'CPR' },
     { key: 'physical', label: 'Physical Report', category: 'PHYSICAL', uploadCategory: 'PHYSICAL' },
     { key: 'tb', label: 'TB Report', category: 'TB_REPORT', uploadCategory: 'TB_REPORT' },
-    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'OTHER', manualOnly: true },
+    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'SSN', manualOnly: true },
     { key: 'id', label: 'State ID', category: 'ID', uploadCategory: 'ID' },
     { key: 'vaccination', label: 'Vaccination Record', category: 'VACCINATION', uploadCategory: 'VACCINATION' },
     { key: 'inservice', label: 'In-Service Certifications', category: 'INSERVICE', uploadCategory: 'OTHER', manualOnly: true },
@@ -56,7 +56,7 @@ const REQUIRED_DOCUMENTS_BY_ROLE: Record<WorkerRole, RequiredDocumentItem[]> = {
     { key: 'cpr', label: 'CPR', category: 'CPR', uploadCategory: 'CPR' },
     { key: 'physical', label: 'Physical Report', category: 'PHYSICAL', uploadCategory: 'PHYSICAL' },
     { key: 'tb', label: 'TB Report', category: 'TB_REPORT', uploadCategory: 'TB_REPORT' },
-    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'OTHER', manualOnly: true },
+    { key: 'ssn', label: 'SSN', category: 'SSN', uploadCategory: 'SSN', manualOnly: true },
     { key: 'id', label: 'State ID', category: 'ID', uploadCategory: 'ID' },
     { key: 'vaccination', label: 'Vaccination Record', category: 'VACCINATION', uploadCategory: 'VACCINATION' },
     { key: 'inservice', label: 'In-Service Certifications', category: 'INSERVICE', uploadCategory: 'OTHER', manualOnly: true },
@@ -131,7 +131,10 @@ export default function WorkerDocumentsPage() {
   const checklist = useMemo(() => {
     return requiredDocuments.map((item) => {
       const matchingDocs = documents.filter((doc) => {
-        if (item.category === 'SSN' || item.category === 'INSERVICE') {
+        if (item.category === 'SSN') {
+          return doc.category === 'SSN' || (doc.category === 'OTHER' && /(^|[^a-z])ssn([^a-z]|$)|social\s*security/i.test(doc.name));
+        }
+        if (item.category === 'INSERVICE') {
           return (
             doc.category === 'OTHER' &&
             doc.name.toLowerCase().includes(item.label.toLowerCase())
