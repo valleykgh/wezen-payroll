@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { STAFFING_API_BASE_URL } from '@/lib/api-base';
 
 type AdminWorker = {
   id: string;
@@ -32,6 +33,8 @@ export default function AdminWorkersPage() {
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   async function loadWorkers() {
     try {
@@ -52,10 +55,63 @@ export default function AdminWorkersPage() {
       );
 
       setWorkers(res.data);
+      setSelectedWorkerIds((current) => current.filter((id) => res.data.some((worker) => worker.id === id)));
       setMessage('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load workers');
     }
+  }
+
+  function toggleWorker(workerId: string) {
+    setSelectedWorkerIds((current) =>
+      current.includes(workerId)
+        ? current.filter((id) => id !== workerId)
+        : [...current, workerId]
+    );
+  }
+
+  async function deleteSelectedWorkers() {
+    const selectedWorkers = workers.filter((worker) => selectedWorkerIds.includes(worker.id));
+    if (selectedWorkers.length === 0) return;
+
+    const confirmation = window.prompt(
+      `Permanently delete ${selectedWorkers.length} selected worker account${selectedWorkers.length === 1 ? '' : 's'}, related records, and candidate OneDrive documents? This cannot be undone. Type DELETE to continue.`
+    );
+    if (confirmation !== 'DELETE') return;
+
+    setDeleting(true);
+    setMessage('');
+    const deletedIds: string[] = [];
+    const failures: string[] = [];
+
+    for (const worker of selectedWorkers) {
+      const workerName = [worker.firstName, worker.lastName].filter(Boolean).join(' ') || worker.email;
+      try {
+        const response = await fetch(`${STAFFING_API_BASE_URL}/api/admin/workers/${worker.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          let reason = text || 'Deletion failed';
+          try { reason = JSON.parse(text)?.error || reason; } catch {}
+          failures.push(`${workerName}: ${reason}`);
+        } else {
+          deletedIds.push(worker.id);
+        }
+      } catch (error) {
+        failures.push(`${workerName}: ${error instanceof Error ? error.message : 'Deletion failed'}`);
+      }
+    }
+
+    setWorkers((current) => current.filter((worker) => !deletedIds.includes(worker.id)));
+    setSelectedWorkerIds((current) => current.filter((id) => !deletedIds.includes(id)));
+    setMessage(
+      failures.length
+        ? `Deleted ${deletedIds.length} worker account${deletedIds.length === 1 ? '' : 's'}. Could not delete ${failures.length}: ${failures.join(' | ')}`
+        : `Deleted ${deletedIds.length} worker account${deletedIds.length === 1 ? '' : 's'} successfully.`
+    );
+    setDeleting(false);
   }
 
   useEffect(() => {
@@ -133,6 +189,42 @@ export default function AdminWorkersPage() {
         </div>
       ) : null}
 
+      {message && workers.length > 0 ? (
+        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4 text-sm font-medium text-cyan-900">
+          {message}
+        </div>
+      ) : null}
+
+      {workers.length > 0 ? (
+        <div className="sticky top-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-5 py-4 shadow-lg backdrop-blur">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-bold text-slate-900">
+              {selectedWorkerIds.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedWorkerIds(workers.map((worker) => worker.id))}
+              className="text-sm font-semibold text-cyan-700 hover:text-cyan-900"
+            >
+              Select all visible
+            </button>
+            {selectedWorkerIds.length > 0 ? (
+              <button type="button" onClick={() => setSelectedWorkerIds([])} className="text-sm font-semibold text-slate-600 hover:text-slate-900">
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={deleteSelectedWorkers}
+            disabled={deleting || selectedWorkerIds.length === 0}
+            className="rounded-full bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {deleting ? 'Deleting selected workers...' : `Delete Selected Workers${selectedWorkerIds.length ? ` (${selectedWorkerIds.length})` : ''}`}
+          </button>
+        </div>
+      ) : null}
+
       {workers.length > 0 ? (
         <div className="space-y-5">
           {workers.map((worker) => {
@@ -143,8 +235,30 @@ export default function AdminWorkersPage() {
             return (
               <div
                 key={worker.id}
-                className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                role="checkbox"
+                aria-checked={selectedWorkerIds.includes(worker.id)}
+                tabIndex={0}
+                onClick={() => toggleWorker(worker.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggleWorker(worker.id);
+                  }
+                }}
+                className={`relative cursor-pointer rounded-[1.75rem] border bg-white p-6 pl-16 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                  selectedWorkerIds.includes(worker.id)
+                    ? 'border-cyan-500 ring-2 ring-cyan-200'
+                    : 'border-slate-200'
+                }`}
               >
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${fullName}`}
+                  checked={selectedWorkerIds.includes(worker.id)}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={() => toggleWorker(worker.id)}
+                  className="absolute left-6 top-7 h-5 w-5 accent-cyan-600"
+                />
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-3">
@@ -219,6 +333,7 @@ export default function AdminWorkersPage() {
                   <div className="w-full lg:w-64 space-y-3">
                     <Link
                       href={`/admin/workers/${worker.id}`}
+                      onClick={(event) => event.stopPropagation()}
                       className="inline-flex w-full items-center justify-center rounded-full bg-cyan-600 px-5 py-3 text-sm font-semibold text-white no-underline shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700"
                     >
                       Review Worker
@@ -226,6 +341,7 @@ export default function AdminWorkersPage() {
 
                     <Link
                       href={`/admin/workers/${worker.id}/availability`}
+                      onClick={(event) => event.stopPropagation()}
                       className="inline-flex w-full items-center justify-center rounded-full border border-cyan-600 bg-white px-5 py-3 text-sm font-semibold text-cyan-700 no-underline transition hover:bg-cyan-50"
                     >
                       View Availability Calendar
