@@ -321,3 +321,27 @@ export async function uploadBufferToCandidatePackageFolder(params: {
     name: response.data.name as string,
   };
 }
+
+export async function uploadBufferToCandidateAgreementFolder(params: {
+  firstName?: string | null;
+  lastName?: string | null;
+  professionalId: string;
+  fileName: string;
+  buffer: Buffer;
+  mimeType?: string;
+}) {
+  const accessToken = await getMicrosoftGraphAccessToken();
+  const rootPrefix = await getDriveRootPathPrefix();
+  const displayName = `${params.firstName || ''} ${params.lastName || ''}`.trim() || params.professionalId;
+  const folderPath = await ensureFolderByPath(
+    `Candidate Documents - New/${sanitizeFolderSegment(displayName)}/Agreements`
+  );
+  const safeFileName = sanitizeFileName(params.fileName);
+  const uploadUrl = `${GRAPH_BASE_URL}${rootPrefix}:/${encodeURIComponent(folderPath)}/${encodeURIComponent(safeFileName)}:/content`.replace(/%2F/g, '/');
+  const response = await axios.put(uploadUrl, params.buffer, {
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': params.mimeType || 'application/pdf' },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+  return { itemId: response.data.id as string, webUrl: response.data.webUrl as string, folderPath, name: response.data.name as string };
+}

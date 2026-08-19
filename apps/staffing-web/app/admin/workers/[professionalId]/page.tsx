@@ -412,33 +412,12 @@ async function markIcaSent() {
 
     const text = await res.text();
     if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to mark ICA as sent'));
+    const result = text ? JSON.parse(text) : null;
 
     await load(professionalId);
-    setMessage('ICA marked as sent. Worker has been notified to complete Adobe eSign.');
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : 'Failed to update ICA status');
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function markIcaSigned() {
-  try {
-    setBusy(true);
-
-    const res = await fetch(
-      `${STAFFING_API_BASE_URL}/api/admin/workers/${professionalId}/ica-signed`,
-      {
-        method: 'POST',
-        credentials: 'include',
-      }
-    );
-
-    const text = await res.text();
-    if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to mark ICA as signed'));
-
-    await load(professionalId);
-    setMessage('ICA has been marked as signed. If all documents are approved and the worker is approved by Wezen, shift requests can proceed.');
+    setMessage(result?.emailWarning
+      ? `ICA issued successfully, but the email needs attention: ${result.emailWarning}`
+      : 'ICA issued successfully. The worker was emailed a secure portal link to review and sign it.');
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Failed to update ICA status');
   } finally {
@@ -1515,23 +1494,23 @@ const icaSignedStepLabel = isIcaSigned
     ICA workflow
   </h2>
   <p className="mt-2 text-sm text-slate-600">
-    Send the ICA through Adobe eSign, then confirm once the signed agreement has been received.
+    Issue the role-specific ICA with the saved pay rates. The worker reviews and signs it securely in the Wezen portal.
   </p>
 
 {isIcaSigned ? (
   <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-    ICA has been marked as signed.
+    ICA was electronically signed by the worker. The completed PDF and audit record are stored securely.
     {worker.approvedByWezen
       ? ' Worker is eligible to proceed if all required documents are approved.'
       : ' Worker is still pending final Wezen approval before shift requests are allowed.'}
   </div>
 ) : isIcaSent ? (
   <div className="mt-4 rounded-2xl bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-700">
-    ICA has been marked as sent. Waiting for signed agreement confirmation.
+    ICA has been issued. Waiting for the worker to sign it in the portal.
   </div>
 ) : (
   <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
-    Step 1 pending — Send ICA. Step 2 locked — Send ICA first.
+    Ready to issue after the worker is approved, all documents are approved, and all ICA pay rates are saved.
   </div>
 )}
 
@@ -1546,23 +1525,8 @@ const icaSignedStepLabel = isIcaSigned
         : 'inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:opacity-60'
     }
   >
-    {busy ? 'Working...' : isIcaSent ? 'ICA Sent ✓' : 'Mark ICA Sent'}
+    {busy ? 'Working...' : isIcaSent ? 'ICA Issued ✓' : 'Issue ICA for Signature'}
   </button>
-
-<button
-  type="button"
-  onClick={markIcaSigned}
-  disabled={busy || isIcaSigned || !isIcaSent}
-  className={
-    isIcaSigned
-      ? 'inline-flex items-center justify-center rounded-full bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 shadow-sm'
-      : !isIcaSent
-        ? 'inline-flex items-center justify-center rounded-full bg-slate-200 px-5 py-3 text-sm font-semibold text-slate-500 cursor-not-allowed'
-        : 'inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60'
-  }
->
-  {busy ? 'Working...' : isIcaSigned ? 'ICA Signed ✓' : 'Mark ICA Signed'}
-</button>
 </div>
 </section>
 

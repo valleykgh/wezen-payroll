@@ -34,7 +34,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, importPKCS8 } from 'jose';
 import archiver from 'archiver';
 import { getOneDriveInfo, listOneDriveRootChildren, downloadOneDriveFileBuffer, deleteOneDriveDocumentItems } from './services/onedrive.js';
-import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder } from './services/onedrive.js';
+import { uploadFileToCandidateFolder, uploadBufferToCandidatePackageFolder, uploadBufferToCandidateAgreementFolder } from './services/onedrive.js';
+import { createSignedIca, createUnsignedIca, ICA_CONSENT_TEXT, ICA_TEMPLATE_VERSION, sha256 } from './services/icaAgreement.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4001);
@@ -1359,7 +1360,7 @@ app.use(
 
 app.set('trust proxy', 1);
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 app.use('/uploads', express.static(uploadsDir));
 app.use(cookieParser());
@@ -5437,6 +5438,14 @@ app.get('/api/worker/agreements', requireRole('PROFESSIONAL'), async (req: Authe
         signedAt: agreement.signedAt,
         signerName: agreement.signerName,
         signerEmail: agreement.signerEmail,
+        sentAt: agreement.sentAt,
+        roleSnapshot: agreement.roleSnapshot,
+        templateVersion: agreement.templateVersion,
+        regularPayRateCents: agreement.regularPayRateCents,
+        overtimePayRateCents: agreement.overtimePayRateCents,
+        doublePayRateCents: agreement.doublePayRateCents,
+        consentText: agreement.status === 'SENT' ? ICA_CONSENT_TEXT : null,
+        downloadAvailable: agreement.status === 'SIGNED' && Boolean(agreement.signedDocumentItemId),
         createdAt: agreement.createdAt,
       })),
     });
@@ -5446,10 +5455,27 @@ app.get('/api/worker/agreements', requireRole('PROFESSIONAL'), async (req: Authe
   }
 });
 
+app.get('/api/worker/agreements/:agreementId/download', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
+  try {
+    const professionalId = await getProfessionalProfileIdForUser(req.authUser!.userId);
+    const agreement = await prisma.professionalAgreement.findFirst({ where: { id: String(req.params.agreementId), professionalId: professionalId || '', status: 'SIGNED' } });
+    if (!agreement?.signedDocumentItemId) return res.status(404).json({ error: 'Signed agreement is not available.' });
+    const buffer = await downloadOneDriveFileBuffer(agreement.signedDocumentItemId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${agreement.signedDocumentName || 'Wezen-signed-ICA.pdf'}"`);
+    return res.send(buffer);
+  } catch (error) {
+    console.error('GET /api/worker/agreements/:agreementId/download error:', error);
+    return res.status(500).json({ error: 'Failed to download signed agreement.' });
+  }
+});
+
 const signAgreementSchema = z.object({
   agreementType: z.enum(['ICA']),
-  signerName: z.string().min(1),
+  signerName: z.string().trim().min(2).max(120),
   signerEmail: z.email(),
+  signatureDataUrl: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(1_500_000),
+  consentAccepted: z.literal(true),
 });
 
 app.post('/api/worker/agreements/sign', requireRole('PROFESSIONAL'), async (req: AuthedRequest, res) => {
@@ -5467,45 +5493,48 @@ app.post('/api/worker/agreements/sign', requireRole('PROFESSIONAL'), async (req:
       return res.status(404).json({ error: 'Professional profile not found' });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        firstName: true,
-        lastName: true,
-        email: true,
-      },
+    const profile = await prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      include: { user: true, agreements: true },
     });
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!profile) return res.status(404).json({ error: 'Professional profile not found' });
+    const agreement = profile.agreements.find((item) => item.agreementType === parsed.data.agreementType);
+    if (!agreement || agreement.status !== 'SENT' || !agreement.sentAt || !agreement.roleSnapshot ||
+        agreement.regularPayRateCents == null || agreement.overtimePayRateCents == null || agreement.doublePayRateCents == null ||
+        !agreement.unsignedDocumentHash) {
+      return res.status(409).json({ error: 'Your ICA is not ready for signature. Please contact Wezen Staffing.' });
     }
-
-    const signerName =
-      `${user.firstName || ''} ${user.lastName || ''}`.trim() || parsed.data.signerName;
-
-    const signerEmail = user.email || parsed.data.signerEmail;
-
-    const agreement = await prisma.professionalAgreement.upsert({
-      where: {
-        professionalId_agreementType: {
-          professionalId,
-          agreementType: parsed.data.agreementType,
-        },
-      },
-      update: {
-        status: 'SIGNED',
-        signedAt: new Date(),
-        signerName,
-        signerEmail,
-      },
-      create: {
-        professionalId,
-        agreementType: parsed.data.agreementType,
-        status: 'SIGNED',
-        signedAt: new Date(),
-        signerName,
-        signerEmail,
-      },
+    const signerName = parsed.data.signerName;
+    const signerEmail = profile.user.email;
+    if (signerEmail.toLowerCase() !== parsed.data.signerEmail.toLowerCase()) {
+      return res.status(400).json({ error: 'The signer email must match your authenticated account.' });
+    }
+    const snapshot = {
+      agreementId: agreement.id,
+      role: agreement.roleSnapshot as 'CNA' | 'LVN' | 'RN',
+      workerName: `${profile.user.firstName || ''} ${profile.user.lastName || ''}`.trim(),
+      workerEmail: profile.user.email,
+      address: [profile.addressLine1, profile.addressLine2, profile.city, profile.state, profile.zipCode].filter(Boolean).join(', '),
+      regularPayRateCents: agreement.regularPayRateCents,
+      overtimePayRateCents: agreement.overtimePayRateCents,
+      doublePayRateCents: agreement.doublePayRateCents,
+      sentAt: agreement.sentAt,
+    };
+    const unsignedPdf = await createUnsignedIca(snapshot);
+    if (sha256(unsignedPdf) !== agreement.unsignedDocumentHash) {
+      return res.status(409).json({ error: 'The issued ICA could not be verified. Please ask Wezen Staffing to reissue it.' });
+    }
+    const signedAt = new Date();
+    const signerIp = req.ip || req.socket.remoteAddress || '';
+    const signerUserAgent = String(req.get('user-agent') || '');
+    const signedPdf = await createSignedIca({ unsignedPdf, snapshot, signerName, signerEmail, signatureDataUrl: parsed.data.signatureDataUrl, signedAt, ipAddress: signerIp, userAgent: signerUserAgent });
+    const fileName = `Wezen-ICA-${snapshot.role}-${snapshot.workerName.replace(/[^a-z0-9]+/gi, '-')}-${signedAt.toISOString().slice(0, 10)}.pdf`;
+    const stored = await uploadBufferToCandidateAgreementFolder({ firstName: profile.user.firstName, lastName: profile.user.lastName, professionalId, fileName, buffer: signedPdf, mimeType: 'application/pdf' });
+    const updatedAgreement = await prisma.professionalAgreement.update({
+      where: { id: agreement.id },
+      data: { status: 'SIGNED', signedAt, signerName, signerEmail, consentText: ICA_CONSENT_TEXT, signatureMethod: 'DRAWN', signerIp, signerUserAgent,
+        signedDocumentItemId: stored.itemId, signedDocumentWebUrl: stored.webUrl, signedDocumentName: stored.name, signedDocumentHash: sha256(signedPdf),
+        auditTrailJson: { issuedAt: agreement.sentAt.toISOString(), signedAt: signedAt.toISOString(), signerIp, signerUserAgent, authenticatedUserId: userId } },
     });
 
     await prisma.professionalProfile.update({
@@ -5544,14 +5573,16 @@ if (hasDocuments) {
 
     res.json({
       data: {
-        id: agreement.id,
-        agreementType: agreement.agreementType,
-        status: agreement.status,
-        signedAt: agreement.signedAt,
-        signerName: agreement.signerName,
-        signerEmail: agreement.signerEmail,
+        id: updatedAgreement.id,
+        agreementType: updatedAgreement.agreementType,
+        status: updatedAgreement.status,
+        signedAt: updatedAgreement.signedAt,
+        signerName: updatedAgreement.signerName,
+        signerEmail: updatedAgreement.signerEmail,
+        downloadAvailable: true,
       },
     });
+    sendEmailWithAttachment({ to: signerEmail, subject: 'Your signed Wezen Staffing ICA', html: '<p>Your Independent Contractor Agreement is complete. A copy is attached for your records.</p>', text: 'Your Independent Contractor Agreement is complete. A copy is attached.', attachment: { fileName: stored.name, contentType: 'application/pdf', buffer: signedPdf } }).catch((emailError) => console.error('Signed ICA email failed:', emailError));
   } catch (error) {
     console.error('POST /api/worker/agreements/sign error:', error);
     res.status(500).json({ error: 'Failed to sign agreement' });
@@ -6421,29 +6452,39 @@ app.post('/api/admin/workers/:professionalId/ica-sent', requireRole('INTERNAL_AD
         createdAt: 'desc',
       },
     });
-
-    if (!agreement) {
-      agreement = await prisma.professionalAgreement.create({
-        data: {
-          professionalId,
-          agreementType: 'ICA',
-          status: 'SENT',
-        },
-      });
-	} else if (agreement.status === 'NOT_STARTED') {
-      agreement = await prisma.professionalAgreement.update({
-        where: { id: agreement.id },
-        data: {
-          status: 'SENT',
-        },
-      });
+    const profile = await prisma.professionalProfile.findUnique({ where: { id: professionalId }, include: { user: true, documents: true } });
+    if (!profile) return res.status(404).json({ error: 'Professional profile not found' });
+    if (!profile.approvedByWezen) return res.status(409).json({ error: 'Approve the professional by Wezen before sending the ICA.' });
+    if ([profile.regularPayRateCents, profile.overtimePayRateCents, profile.doublePayRateCents].some((rate) => rate == null)) {
+      return res.status(409).json({ error: 'Save all three ICA pay rates before sending the agreement.' });
     }
+    const currentDocuments = getCurrentDocumentsByCategory(profile.documents);
+    if (currentDocuments.length === 0 || currentDocuments.some((document) => document.status !== 'APPROVED')) {
+      return res.status(409).json({ error: 'Approve the professional documents before sending the ICA.' });
+    }
+    if (!agreement) agreement = await prisma.professionalAgreement.create({ data: { professionalId, agreementType: 'ICA' } });
+    if (agreement.status === 'SIGNED') return res.status(409).json({ error: 'This professional has already signed the ICA.' });
+    const sentAt = new Date();
+    const snapshot = {
+      agreementId: agreement.id,
+      role: profile.role,
+      workerName: `${profile.user.firstName || ''} ${profile.user.lastName || ''}`.trim(),
+      workerEmail: profile.user.email,
+      address: [profile.addressLine1, profile.addressLine2, profile.city, profile.state, profile.zipCode].filter(Boolean).join(', '),
+      regularPayRateCents: profile.regularPayRateCents!, overtimePayRateCents: profile.overtimePayRateCents!, doublePayRateCents: profile.doublePayRateCents!, sentAt,
+    };
+    const unsignedPdf = await createUnsignedIca(snapshot);
+    agreement = await prisma.professionalAgreement.update({ where: { id: agreement.id }, data: {
+      status: 'SENT', sentAt, sentByUserId: req.authUser!.userId, roleSnapshot: profile.role, templateVersion: ICA_TEMPLATE_VERSION,
+      unsignedDocumentHash: sha256(unsignedPdf), regularPayRateCents: profile.regularPayRateCents, overtimePayRateCents: profile.overtimePayRateCents,
+      doublePayRateCents: profile.doublePayRateCents, signedAt: null, signerName: null, signerEmail: null,
+    } });
 
     await createWorkerNotification({
       professionalId,
       type: 'GENERAL',
       title: 'ICA sent for signature',
-      message: 'Your Independent Contractor Agreement has been sent by Wezen Staffing via Adobe eSign. Please complete it from your email before requesting shifts.',
+      message: 'Your Independent Contractor Agreement is ready. Review and sign it securely in your Wezen professional portal.',
     });
 
     await createAdminAuditLog({
@@ -6451,11 +6492,20 @@ app.post('/api/admin/workers/:professionalId/ica-sent', requireRole('INTERNAL_AD
       action: 'ICA_MARKED_SENT',
       entityType: 'ProfessionalProfile',
       entityId: professionalId,
-      summary: 'Admin marked worker ICA as sent',
-      detailsJson: { agreementId: agreement.id, status: agreement.status },
+      summary: 'Admin issued worker ICA for native electronic signature',
+      detailsJson: { agreementId: agreement.id, status: agreement.status, role: profile.role, unsignedDocumentHash: agreement.unsignedDocumentHash },
     });
 
-    res.json({ data: agreement });
+    const webBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    let emailWarning: string | null = null;
+    try {
+      await sendEmail({ to: profile.user.email, subject: 'Your Wezen Staffing ICA is ready to sign', html: `<p>Hello ${profile.user.firstName || ''},</p><p>Your Independent Contractor Agreement is ready. Review and sign it securely in your Wezen portal.</p><p><a href="${webBaseUrl}/worker/agreements">Review and sign ICA</a></p>`, text: `Your Independent Contractor Agreement is ready: ${webBaseUrl}/worker/agreements` });
+    } catch (emailError: any) {
+      emailWarning = emailError?.message || 'The ICA was issued, but the email could not be sent.';
+      console.error('ICA issued but notification email failed:', emailError);
+    }
+
+    res.json({ data: agreement, emailWarning });
   } catch (error) {
     console.error('POST /api/admin/workers/:professionalId/ica-sent error:', error);
     res.status(500).json({ error: 'Failed to mark ICA as sent' });
