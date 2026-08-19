@@ -19,6 +19,7 @@ type Employee = {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  ssnLast4?: string | null;
 
   createdAt?: string;
   updatedAt?: string;
@@ -58,6 +59,7 @@ export default function AdminEmployeesPage() {
   city: "",
   state: "",
   zip: "",
+  ssnLast4: "",
   employeeCode: "",
   payrollSourceName: "",
 });
@@ -81,6 +83,7 @@ addressLine2: emp.addressLine2 || "",
 city: emp.city || "",
 state: emp.state || "",
       zip: emp.zip || "",
+      ssnLast4: emp.ssnLast4 || "",
       employeeCode: emp.employeeCode || "",
       payrollSourceName: emp.payrollSourceName || emp.legalName || "",
     });
@@ -99,6 +102,7 @@ state: emp.state || "",
   city: "",
   state: "",
   zip: "",
+  ssnLast4: "",
   employeeCode: "",
   payrollSourceName: "",
 });  
@@ -109,6 +113,10 @@ state: emp.state || "",
       setErr("");
       setOk("");
       setLoading(true);
+
+      if (form.ssnLast4 && !/^\d{4}$/.test(form.ssnLast4)) {
+        throw new Error("SSN Last 4 must contain exactly four digits.");
+      }
 
       await apiFetch(`/api/admin/employees/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -123,6 +131,7 @@ state: emp.state || "",
 	  city: form.city,
 	  state: form.state,
 	  zip: form.zip,
+          ssnLast4: form.ssnLast4,
           employeeCode: form.employeeCode,
           payrollSourceName: form.payrollSourceName,
        }),
@@ -489,6 +498,20 @@ async function sendInvite(employeeId: string) {
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 }}
 />
+<label style={{ display: "grid", gap: 5, fontSize: 12, color: "#475569", textAlign: "left" }}>
+  SSN (Last 4)
+  <input
+    type="password"
+    inputMode="numeric"
+    autoComplete="off"
+    maxLength={4}
+    value={form.ssnLast4}
+    onChange={(e) => setForm((p) => ({ ...p, ssnLast4: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
+    placeholder="4 digits"
+    aria-label="SSN Last 4"
+    style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 14 }}
+  />
+</label>
 <input
   value={form.employeeCode}
   onChange={(e) => setForm((p) => ({ ...p, employeeCode: e.target.value }))}
