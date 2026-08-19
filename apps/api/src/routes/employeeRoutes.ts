@@ -80,7 +80,7 @@ async function importedContext(employeeId: string, query: any) {
   if (!range) throw Object.assign(new Error("Dates must use YYYY-MM-DD"), { status: 400 });
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
-    select: { legalName: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, zip: true, ssnLast4: true, employeeCode: true, payrollSourceName: true },
+    select: { legalName: true, email: true, addressLine1: true, addressLine2: true, city: true, state: true, zip: true, ssnLast4: true, employeeCode: true, payrollSourceName: true, hourlyRateCents: true },
   });
   if (!employee) throw Object.assign(new Error("Employee not found"), { status: 404 });
   if (!employee.payrollSourceName) throw Object.assign(new Error("Your payroll file mapping is awaiting administrator approval"), { status: 409 });
@@ -114,12 +114,14 @@ employeeRoutes.get("/employee/imported-paystubs/pdf", async (req, res) => {
     const { employee, records } = await importedContext(employeeId, req.query);
     if (!records.length) return res.status(404).json({ error: "No paystubs are available for that date range" });
     if (!employee.addressLine1 || !employee.ssnLast4 || !employee.employeeCode) return res.status(409).json({ error: "Complete your address and ask payroll to assign your employee code" });
+    if (employee.hourlyRateCents <= 0) return res.status(409).json({ error: "Your hourly pay rate has not been configured. Please contact Wezen Staffing." });
+    const regularRate = employee.hourlyRateCents / 100;
     const pdf = await generateUploadedPaystubPdf(employee.legalName, {
       addressLine1: employee.addressLine1,
       addressLine2: [employee.addressLine2, [employee.city, employee.state].filter(Boolean).join(", "), employee.zip].filter(Boolean).join(" "),
       ssnLast4: employee.ssnLast4,
       employeeId: employee.employeeCode,
-    }, records);
+    }, records, { regular: regularRate, overtime: regularRate * 1.5, doubleTime: regularRate * 2, holiday: regularRate * 1.5 });
     await prisma.paystubAccessLog.create({ data: { employeeId, action: "DOWNLOAD", periodCount: records.length, ipAddress: req.ip || null, fromDate: records[records.length - 1]?.periodStart, toDate: records[0]?.periodEnd } });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="wezen-paystubs-${new Date().toISOString().slice(0, 10)}.pdf"`);
@@ -137,12 +139,14 @@ employeeRoutes.post("/employee/imported-paystubs/email", async (req, res) => {
     const { employee, records } = await importedContext(employeeId, req.body || {});
     if (!records.length) return res.status(404).json({ error: "No paystubs are available for that date range" });
     if (!employee.addressLine1 || !employee.ssnLast4 || !employee.employeeCode) return res.status(409).json({ error: "Complete your address and ask payroll to assign your employee code" });
+    if (employee.hourlyRateCents <= 0) return res.status(409).json({ error: "Your hourly pay rate has not been configured. Please contact Wezen Staffing." });
+    const regularRate = employee.hourlyRateCents / 100;
     const pdf = await generateUploadedPaystubPdf(employee.legalName, {
       addressLine1: employee.addressLine1,
       addressLine2: [employee.addressLine2, [employee.city, employee.state].filter(Boolean).join(", "), employee.zip].filter(Boolean).join(" "),
       ssnLast4: employee.ssnLast4,
       employeeId: employee.employeeCode,
-    }, records);
+    }, records, { regular: regularRate, overtime: regularRate * 1.5, doubleTime: regularRate * 2, holiday: regularRate * 1.5 });
     const year = records[0].periodEnd.getUTCFullYear();
     const fileName = `wezen-paystubs-${year}.pdf`;
     await sendPaystubEmail({ to: employee.email, employeeName: employee.legalName, year, fileName, pdf });

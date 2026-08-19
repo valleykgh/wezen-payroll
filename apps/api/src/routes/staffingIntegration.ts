@@ -18,16 +18,19 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
     const legalName = String(req.body?.legalName || "").trim();
     const employeeCode = String(req.body?.employeeCode || "").trim();
     const ssnLast4 = String(req.body?.ssnLast4 || "").replace(/\D/g, "");
+    const hourlyRateCents = Number(req.body?.hourlyRateCents ?? 0);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !legalName || !employeeCode) {
       return res.status(400).json({ error: "email, legalName, and employeeCode are required" });
     }
     if (ssnLast4 && !/^\d{4}$/.test(ssnLast4)) return res.status(400).json({ error: "ssnLast4 must contain four digits" });
+    if (!Number.isInteger(hourlyRateCents) || hourlyRateCents < 0) return res.status(400).json({ error: "hourlyRateCents must be a nonnegative integer" });
 
     const employee = await prisma.employee.upsert({
       where: { email },
       update: {
         legalName,
         employeeCode,
+        hourlyRateCents,
         active: true,
         addressLine1: String(req.body?.addressLine1 || "").trim() || null,
         addressLine2: String(req.body?.addressLine2 || "").trim() || null,
@@ -40,6 +43,7 @@ staffingIntegrationRoutes.post("/staffing/employee", async (req, res) => {
         email,
         legalName,
         employeeCode,
+        hourlyRateCents,
         active: true,
         title: ["CNA", "LVN", "RN"].includes(String(req.body?.title || "").toUpperCase()) ? String(req.body.title).toUpperCase() as any : "CNA",
         addressLine1: String(req.body?.addressLine1 || "").trim() || null,

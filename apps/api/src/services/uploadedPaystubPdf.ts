@@ -3,6 +3,13 @@ import fs from "fs";
 import path from "path";
 import { CandidateDetails, PAY_RATES, PaystubRecord } from "./paystubGenerator";
 
+export type PaystubRates = {
+  regular: number;
+  overtime: number;
+  doubleTime: number;
+  holiday: number;
+};
+
 const INK = "#111827";
 const MUTED = "#475569";
 const BAND = "#F1F0EA";
@@ -46,7 +53,7 @@ function labelValue(doc: PDFKit.PDFDocument, label: string, value: string, x: nu
   doc.font("Helvetica").fontSize(9).text(value, x + labelWidth + 8, y + 5, { width: valueWidth });
 }
 
-function drawPaystub(doc: PDFKit.PDFDocument, employee: string, candidate: CandidateDetails, record: PaystubRecord) {
+function drawPaystub(doc: PDFKit.PDFDocument, employee: string, candidate: CandidateDetails, record: PaystubRecord, rates: PaystubRates) {
   const logo = logoPath();
   if (logo) doc.image(logo, 482, 24, { fit: [82, 82], align: "center", valign: "center" });
   doc.fillColor(INK).font("Helvetica-Bold").fontSize(12).text("Wezen Staffing", 40, 36);
@@ -70,10 +77,10 @@ function drawPaystub(doc: PDFKit.PDFDocument, employee: string, candidate: Candi
   doc.text("HOURS", columns.hours, 382, { width: 60, align: "right" });
   doc.text("CURRENT", columns.amount, 382, { width: 74, align: "right" });
   const earnings = [
-    ["REGULAR", PAY_RATES.regular, record.regularHours],
-    ["OVERTIME", PAY_RATES.overtime, record.overtimeHours],
-    ["DOUBLE", PAY_RATES.doubleTime, record.doubleTimeHours],
-    ["HOLIDAY", PAY_RATES.holiday, record.holidayHours],
+    ["REGULAR", rates.regular, record.regularHours],
+    ["OVERTIME", rates.overtime, record.overtimeHours],
+    ["DOUBLE", rates.doubleTime, record.doubleTimeHours],
+    ["HOLIDAY", rates.holiday, record.holidayHours],
   ] as const;
   doc.font("Helvetica").fontSize(9).fillColor(INK);
   earnings.forEach(([label, rate, worked], index) => {
@@ -105,16 +112,26 @@ function drawPaystub(doc: PDFKit.PDFDocument, employee: string, candidate: Candi
   doc.text(`Pay period ${date(record.periodStart)} - ${date(record.periodEnd)}`, 382, 736, { width: 190, align: "right" });
 }
 
-export function generateUploadedPaystubPdf(employee: string, candidate: CandidateDetails, records: PaystubRecord[]) {
+export function generateUploadedPaystubPdf(employee: string, candidate: CandidateDetails, records: PaystubRecord[], rates: PaystubRates = PAY_RATES) {
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: false, info: { Title: `${employee} Paystubs` } });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    records.forEach((record) => {
+    records.forEach((sourceRecord) => {
+      const record = {
+        ...sourceRecord,
+        calculatedEarnings: Math.round((
+          sourceRecord.regularHours * rates.regular +
+          sourceRecord.overtimeHours * rates.overtime +
+          sourceRecord.doubleTimeHours * rates.doubleTime +
+          sourceRecord.holidayHours * rates.holiday +
+          Number.EPSILON
+        ) * 100) / 100,
+      };
       doc.addPage();
-      drawPaystub(doc, employee, candidate, record);
+      drawPaystub(doc, employee, candidate, record, rates);
     });
     doc.end();
   });
