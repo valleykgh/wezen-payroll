@@ -100,6 +100,7 @@ export default function AdminWorkerDetailPage({
   const [regularPayRateDollars, setRegularPayRateDollars] = useState('');
   const [overtimePayRateDollars, setOvertimePayRateDollars] = useState('');
   const [doublePayRateDollars, setDoublePayRateDollars] = useState('');
+  const [editingPayRates, setEditingPayRates] = useState(false);
 const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null);
 const [adminUploadCategory, setAdminUploadCategory] = useState('BACKGROUND_CHECK');
 const [adminUploadName, setAdminUploadName] = useState('');
@@ -139,6 +140,7 @@ setDoublePayRateDollars(
     ? (res.data.doublePayRateCents / 100).toFixed(2)
     : ''
 );
+    setEditingPayRates(false);
   }
 
   async function loadFacilities() {
@@ -372,14 +374,28 @@ async function savePayRates() {
 
     const text = await res.text();
     if (!res.ok) throw new Error(formatApiErrorText(text, 'Failed to save pay rates'));
+    const result = text ? JSON.parse(text) : null;
 
     await load(professionalId);
-    setMessage('Worker pay rates saved successfully.');
+    setMessage(
+      result?.payrollSyncWarning
+        ? `Worker pay rates saved, but payroll synchronization needs attention: ${result.payrollSyncWarning}`
+        : result?.payrollSynchronized
+          ? 'Worker pay rates saved and synchronized to payroll successfully.'
+          : 'Worker pay rates saved successfully.'
+    );
   } catch (error) {
     setMessage(error instanceof Error ? error.message : 'Failed to save pay rates');
   } finally {
     setBusy(false);
   }
+}
+
+function cancelPayRateEdit() {
+  setRegularPayRateDollars(worker?.regularPayRateCents != null ? (worker.regularPayRateCents / 100).toFixed(2) : '');
+  setOvertimePayRateDollars(worker?.overtimePayRateCents != null ? (worker.overtimePayRateCents / 100).toFixed(2) : '');
+  setDoublePayRateDollars(worker?.doublePayRateCents != null ? (worker.doublePayRateCents / 100).toFixed(2) : '');
+  setEditingPayRates(false);
 }
 
 async function markIcaSent() {
@@ -712,6 +728,7 @@ const hasSavedPayRates =
   worker.regularPayRateCents != null ||
   worker.overtimePayRateCents != null ||
   worker.doublePayRateCents != null;
+const canEditPayRates = !hasSavedPayRates || editingPayRates;
 
 const payRatesStepLabel = hasSavedPayRates
   ? 'Step 0 complete ✓ Pay rates saved'
@@ -1410,6 +1427,7 @@ const icaSignedStepLabel = isIcaSigned
         min="0"
         step="0.01"
         value={regularPayRateDollars}
+        disabled={!canEditPayRates}
         onChange={(e) => setRegularPayRateDollars(e.target.value)}
         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
       />
@@ -1424,6 +1442,7 @@ const icaSignedStepLabel = isIcaSigned
         min="0"
         step="0.01"
         value={overtimePayRateDollars}
+        disabled={!canEditPayRates}
         onChange={(e) => setOvertimePayRateDollars(e.target.value)}
         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
       />
@@ -1438,6 +1457,7 @@ const icaSignedStepLabel = isIcaSigned
         min="0"
         step="0.01"
         value={doublePayRateDollars}
+        disabled={!canEditPayRates}
         onChange={(e) => setDoublePayRateDollars(e.target.value)}
         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
       />
@@ -1451,18 +1471,37 @@ const icaSignedStepLabel = isIcaSigned
 ) : null}
 
   <div className="mt-6">
-  <button
-  type="button"
-  onClick={savePayRates}
-  disabled={busy || hasSavedPayRates}
-  className={
-    hasSavedPayRates
-      ? 'inline-flex items-center justify-center rounded-full bg-emerald-50 px-6 py-3 text-sm font-semibold text-emerald-700 shadow-sm'
-      : 'inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60'
-  }
->
-  {busy ? 'Saving...' : hasSavedPayRates ? 'ICA Pay Rates Saved ✓' : 'Save ICA Pay Rates'}
-</button>
+  <div className="flex flex-wrap gap-3">
+    {hasSavedPayRates && !editingPayRates ? (
+      <button
+        type="button"
+        onClick={() => setEditingPayRates(true)}
+        disabled={busy}
+        className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
+      >
+        Edit Pay Rates
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={savePayRates}
+        disabled={busy}
+        className="inline-flex items-center justify-center rounded-full bg-cyan-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Saving...' : hasSavedPayRates ? 'Save Rate Changes' : 'Save ICA Pay Rates'}
+      </button>
+    )}
+    {hasSavedPayRates && editingPayRates ? (
+      <button
+        type="button"
+        onClick={cancelPayRateEdit}
+        disabled={busy}
+        className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+      >
+        Cancel
+      </button>
+    ) : null}
+  </div>
 <div className="mt-4 space-y-1 text-xs text-slate-500">
   <div>{payRatesStepLabel}</div>
   <div>{icaSentStepLabel}</div>

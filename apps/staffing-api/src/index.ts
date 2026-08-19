@@ -6328,10 +6328,23 @@ app.put('/api/admin/workers/:professionalId/pay-rates', requireRole('INTERNAL_AD
         regularPayRateCents: true,
         overtimePayRateCents: true,
         doublePayRateCents: true,
+        payrollActivatedAt: true,
       },
     });
 
-    res.json({ data: updated });
+    let payrollSynchronized = false;
+    let payrollSyncWarning: string | null = null;
+    if (updated.payrollActivatedAt) {
+      try {
+        await provisionApprovedWorkerInPayroll(professionalId);
+        payrollSynchronized = true;
+      } catch (error: any) {
+        payrollSyncWarning = error?.message || 'Payroll synchronization failed';
+        console.error('Worker pay rates saved but payroll synchronization failed:', error);
+      }
+    }
+
+    res.json({ data: updated, payrollSynchronized, payrollSyncWarning });
   } catch (error) {
     console.error('PUT /api/admin/workers/:professionalId/pay-rates error:', error);
     res.status(500).json({ error: 'Failed to update worker pay rates' });
